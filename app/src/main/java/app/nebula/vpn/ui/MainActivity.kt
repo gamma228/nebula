@@ -188,10 +188,17 @@ class MainActivity : ComponentActivity() {
                                             ),
                                             RoutingRule(
                                                 id = UUID.randomUUID().toString(),
-                                                type = RuleType.RULE_SET,
-                                                value = "geoip-ru",
+                                                type = RuleType.DOMAIN_SUFFIX,
+                                                value = "su",
                                                 action = RuleAction.DIRECT,
                                                 priority = 1
+                                            ),
+                                            RoutingRule(
+                                                id = UUID.randomUUID().toString(),
+                                                type = RuleType.DOMAIN_SUFFIX,
+                                                value = "xn--p1ai",
+                                                action = RuleAction.DIRECT,
+                                                priority = 2
                                             )
                                         )
                                     )

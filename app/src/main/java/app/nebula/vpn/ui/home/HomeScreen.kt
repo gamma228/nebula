@@ -66,6 +66,7 @@ fun HomeScreen(
 
     val isConnected = connectionState is ConnectionState.Connected
     val isConnecting = connectionState is ConnectionState.Connecting
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
@@ -157,7 +158,20 @@ fun HomeScreen(
                         ),
                         shape = CircleShape
                     )
-                    .clickable { viewModel.toggleConnection() }
+                    .clickable {
+                        if (isConnected || isConnecting) {
+                            viewModel.toggleConnection()
+                        } else {
+                            val activity = context as? app.nebula.vpn.ui.MainActivity
+                            if (activity != null) {
+                                activity.requestVpnPermissionAndExecute {
+                                    viewModel.toggleConnection()
+                                }
+                            } else {
+                                viewModel.toggleConnection()
+                            }
+                        }
+                    }
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(

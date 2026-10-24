@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -37,10 +39,20 @@ android {
 
     signingConfigs {
         create("release") {
+            val localProperties = Properties()
+            val localPropertiesFile = rootProject.file("local.properties")
+            if (localPropertiesFile.exists()) {
+                localPropertiesFile.inputStream().use { localProperties.load(it) }
+            }
+
             val keyStorePath = System.getenv("NEBULA_RELEASE_KEYSTORE")
+                ?: localProperties.getProperty("nebula.release.keystore")
             val keyStorePassword = System.getenv("NEBULA_RELEASE_STORE_PASSWORD")
+                ?: localProperties.getProperty("nebula.release.store_password")
             val keyAliasName = System.getenv("NEBULA_RELEASE_KEY_ALIAS")
+                ?: localProperties.getProperty("nebula.release.key_alias")
             val keyPassword = System.getenv("NEBULA_RELEASE_KEY_PASSWORD")
+                ?: localProperties.getProperty("nebula.release.key_password")
 
             if (!keyStorePath.isNullOrBlank() && file(keyStorePath).exists()) {
                 storeFile = file(keyStorePath)

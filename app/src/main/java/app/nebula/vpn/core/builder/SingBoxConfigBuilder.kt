@@ -169,6 +169,25 @@ object SingBoxConfigBuilder {
                 put("auto_detect_interface", true)
                 put("final", if (config.killSwitchEnabled && activeTag != "direct") activeTag else activeTag)
 
+                val referencedRuleSets = config.customRules
+                    .filter { it.isEnabled && it.type == RuleType.RULE_SET }
+                    .map { it.value }
+                    .distinct()
+
+                if (referencedRuleSets.isNotEmpty()) {
+                    putJsonArray("rule_set") {
+                        for (rs in referencedRuleSets) {
+                            add(buildJsonObject {
+                                put("tag", rs)
+                                put("type", "remote")
+                                put("format", "binary")
+                                put("url", "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/$rs.srs")
+                                put("download_detour", "direct")
+                            })
+                        }
+                    }
+                }
+
                 putJsonArray("rules") {
                     // Protocol sniffing
                     add(buildJsonObject {

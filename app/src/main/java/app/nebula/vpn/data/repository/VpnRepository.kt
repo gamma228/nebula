@@ -24,6 +24,7 @@ class VpnRepository @Inject constructor(
     val trafficStats: StateFlow<TrafficStats> = _trafficStats.asStateFlow()
 
     fun updateState(state: ConnectionState) {
+        android.util.Log.i("VpnRepository", "updateState -> $state")
         _connectionState.value = state
     }
 

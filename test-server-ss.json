@@ -1,0 +1,21 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "ss-in",
+      "listen": "0.0.0.0",
+      "listen_port": 8388,
+      "method": "aes-128-gcm",
+      "password": "testpassword123"
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ]
+}

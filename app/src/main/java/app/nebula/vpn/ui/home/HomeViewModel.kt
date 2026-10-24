@@ -54,6 +54,7 @@ class HomeViewModel @Inject constructor(
 
     fun toggleConnection() {
         val state = connectionState.value
+        android.util.Log.i("HomeViewModel", "toggleConnection called, current state = $state")
         if (state is ConnectionState.Connected || state is ConnectionState.Connecting) {
             vpnRepository.stopVpn()
         } else {

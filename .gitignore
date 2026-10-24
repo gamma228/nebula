@@ -11,3 +11,7 @@
 *.aab
 app/build/
 *.hprof
+*.jks
+*.keystore
+keystore/
+.kotlin/

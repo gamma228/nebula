@@ -48,6 +48,8 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tunInterface: ParcelFileDescriptor? = null
+    private var cachedRoutingMode: app.nebula.vpn.core.model.AppRoutingMode = app.nebula.vpn.core.model.AppRoutingMode.GLOBAL
+    private var cachedTargetPackages: Set<String> = emptySet()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -83,6 +85,9 @@ class ProxyVpnService : VpnService(), TunProvider {
                 val fakeDns = settingsRepository.fakeDnsEnabled.first()
                 val killSwitch = settingsRepository.killSwitchEnabled.first()
 
+                cachedRoutingMode = routingMode
+                cachedTargetPackages = targetPackages
+
                 val configJson = SingBoxConfigBuilder.build(
                     SingBoxConfigBuilder.BuildConfig(
                         activeProfile = activeProfile,
@@ -95,6 +100,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                         killSwitchEnabled = killSwitch
                     )
                 )
+                android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile?.name}, config length=${configJson.length}")
 
                 // Hand-off: start core with this as TunProvider
                 proxyCore.start(configJson, this@ProxyVpnService)
@@ -128,6 +134,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                 }
 
             } catch (e: Exception) {
+                android.util.Log.e("ProxyVpnService", "startVpnTunnel error: ${e.message}", e)
                 vpnRepository.updateState(ConnectionState.Error(e.message ?: "Failed to start VPN"))
                 stopVpnTunnel()
             }
@@ -223,26 +230,29 @@ class ProxyVpnService : VpnService(), TunProvider {
             builder.addDnsServer("172.19.0.2")
         }
 
-        // Apply Split Tunneling
-        serviceScope.launch {
-            val mode = settingsRepository.routingMode.first()
-            val packages = settingsRepository.targetPackages.first()
-            SplitTunnelApplier.apply(
-                builder = builder,
-                packageManager = packageManager,
-                ownPackageName = packageName,
-                mode = mode,
-                targetPackages = packages
-            )
-        }
+        // Apply Split Tunneling synchronously before establish()
+        SplitTunnelApplier.apply(
+            builder = builder,
+            packageManager = packageManager,
+            ownPackageName = packageName,
+            mode = cachedRoutingMode,
+            targetPackages = cachedTargetPackages
+        )
 
-        val pfd = builder.establish() ?: throw IllegalStateException("VpnService.Builder.establish() returned null")
+        val pfd = builder.establish()
+        if (pfd == null) {
+            android.util.Log.e("ProxyVpnService", "VpnService.Builder.establish() returned null! (Is VPN prepared?)")
+            throw IllegalStateException("VpnService.Builder.establish() returned null")
+        }
+        android.util.Log.i("ProxyVpnService", "TUN established successfully, native fd=${pfd.fd}")
         tunInterface = pfd
         return pfd.detachFd()
     }
 
     override fun protect(fd: Int): Boolean {
-        return super.protect(fd)
+        val res = super.protect(fd)
+        android.util.Log.d("ProxyVpnService", "Protected socket fd=$fd: $res")
+        return res
     }
 
     override fun onRevoke() {

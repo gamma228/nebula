@@ -78,8 +78,9 @@ class LibboxCore(
         }
     }
 
-    override suspend fun start(configJson: String, tunProvider: TunProvider) = withContext(Dispatchers.IO) {
+    override suspend fun start(configJson: String, tunProvider: TunProvider): Unit = withContext(Dispatchers.IO) {
         try {
+            android.util.Log.i("LibboxCore", "Starting LibboxCommandServer...")
             _state.value = ConnectionState.Connecting
             activeTunProvider = tunProvider
 
@@ -90,19 +91,24 @@ class LibboxCore(
             commandServer = server
             server.start()
 
+            android.util.Log.i("LibboxCore", "CommandServer started, calling startOrReloadService with config length: ${configJson.length}")
             val overrideOptions = OverrideOptions()
             server.startOrReloadService(configJson, overrideOptions)
 
             initCommandClient()
 
             _state.value = ConnectionState.Connected(profileName = "Active Proxy")
+            android.util.Log.i("LibboxCore", "LibboxCore connected successfully!")
         } catch (e: Exception) {
+            android.util.Log.e("LibboxCore", "Failed to start LibboxCore: ${e.message}", e)
             _state.value = ConnectionState.Error(e.message ?: "Failed to start sing-box core")
             stop()
+            throw e
         }
+        Unit
     }
 
-    override suspend fun stop() = withContext(Dispatchers.IO) {
+    override suspend fun stop(): Unit = withContext(Dispatchers.IO) {
         try {
             _state.value = ConnectionState.Disconnecting
             commandClient?.disconnect()
@@ -118,6 +124,7 @@ class LibboxCore(
         } catch (e: Exception) {
             _state.value = ConnectionState.Disconnected
         }
+        Unit
     }
 
     override suspend fun urlTest(groupTag: String): Unit = withContext(Dispatchers.IO) {
