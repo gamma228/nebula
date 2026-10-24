@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nebula</string>
+    <string name="nav_home">Головна</string>
+    <string name="nav_servers">Сервери</string>
+    <string name="nav_routing">Маршрутизація</string>
+    <string name="nav_doctor">Лікар</string>
+    <string name="nav_tools">Інструменти</string>
+    <string name="nav_settings">Налаштування</string>
+    <string name="nav_appearance">Зовнішній вигляд</string>
+
+    <string name="state_disconnected">Вимкнено</string>
+    <string name="state_connecting">Підключення…</string>
+    <string name="state_connected">Підключено</string>
+    <string name="state_disconnecting">Відключення…</string>
+    <string name="state_error">Помилка: %1$s</string>
+    <string name="action_connect">Підключити</string>
+    <string name="action_disconnect">Відключити</string>
+
+    <string name="speed_upload">Віддача: %1$s/с</string>
+    <string name="speed_download">Завантаження: %1$s/с</string>
+    <string name="total_upload">Відправлено: %1$s</string>
+    <string name="total_download">Отримано: %1$s</string>
+    <string name="ping_ms">%1$d мс</string>
+    <string name="ping_testing">Перевірка…</string>
+    <string name="ping_timeout">Таймаут</string>
+
+    <string name="profiles_title">Проксі-профілі</string>
+    <string name="add_profile">Додати профіль</string>
+    <string name="import_clipboard">Імпорт з буфера обміну</string>
+    <string name="scan_qr">Сканувати QR-код</string>
+    <string name="import_file">Імпорт із файлу</string>
+    <string name="subscription_update">Оновити підписки</string>
+    <string name="subscription_expire">Дійсний до: %1$s</string>
+    <string name="subscription_traffic">Використано: %1$s з %2$s</string>
+    <string name="auto_select_fastest">Авто (найменший пінг)</string>
+    <string name="confirm_delete_profile">Видалити профіль «%1$s»?</string>
+    <string name="profile_shared_success">Профіль скопійовано в буфер обміну</string>
+
+    <string name="routing_title">Правила маршрутизації</string>
+    <string name="mode_global">Глобальний проксі</string>
+    <string name="mode_bypass">В обхід обраних</string>
+    <string name="mode_forward">Тільки для обраних</string>
+    <string name="routing_apps">Роздільне тунелювання</string>
+    <string name="routing_rules">Користувацькі правила</string>
+    <string name="add_rule">Додати правило</string>
+    <string name="test_domain">Перевірити домен</string>
+    <string name="search_apps">Пошук додатків</string>
+    <string name="no_apps_found">Додатки не знайдено</string>
+
+    <string name="doctor_title">Лікар з\'єднань</string>
+    <string name="vpn_permission_check">Дозвіл VPN</string>
+    <string name="battery_check">Оптимізація батареї</string>
+    <string name="dns_check">Доступність DNS</string>
+    <string name="reachability_check">Зв\'язок із сервером</string>
+    <string name="ipv6_check">Захист від витоків IPv6</string>
+    <string name="fix_issue">Виправити</string>
+    <string name="copy_diagnostic_report">Скопіювати звіт діагностики</string>
+    <string name="all_systems_green">Усі перевірки пройдено успішно</string>
+
+    <string name="appearance_title">Зовнішній вигляд і теми</string>
+    <string name="theme_preset">Шаблони оформлення</string>
+    <string name="preset_oled_crimson">OLED Crimson &amp; Shadow</string>
+    <string name="preset_cyber_violet">Cyber Violet &amp; Ash</string>
+    <string name="preset_monochrome">Monochrome Minimalist</string>
+    <string name="custom_theme">Власна тема</string>
+    <string name="theme_mode_light">Світла</string>
+    <string name="theme_mode_dark">Темна</string>
+    <string name="theme_mode_amoled">Глибокий AMOLED</string>
+    <string name="theme_mode_system">Системна</string>
+    <string name="background_title">Фон додатку</string>
+    <string name="background_solid">Суцільний колір</string>
+    <string name="background_gradient">Градієнт</string>
+    <string name="background_photo">Власне зображення</string>
+    <string name="wallpaper_apply_home">Встановити на головний екран</string>
+    <string name="wallpaper_apply_lock">Встановити на екран блокування</string>
+    <string name="wallpaper_apply_both">Встановити на обидва екрани</string>
+    <string name="launcher_icon_title">Варіант іконки запуску</string>
+
+    <string name="security_title">Безпека та приватність</string>
+    <string name="biometric_lock">Блокування біометрією</string>
+    <string name="flag_secure">Захист від знімків екрана (FLAG_SECURE)</string>
+    <string name="kill_switch">Kill Switch</string>
+    <string name="kill_switch_desc">Блокувати весь трафік при обриві зв\'язку</string>
+    <string name="panic_wipe">Екстрене очищення (Panic Wipe)</string>
+    <string name="panic_wipe_confirm">Негайно стерти всі профілі, ключі та налаштування?</string>
+    <string name="export_backup">Експорт зашифрованої резервної копії</string>
+    <string name="import_backup">Імпорт зашифрованої резервної копії</string>
+    <string name="backup_password_prompt">Введіть пароль для шифрування копії</string>
+
+    <string name="settings_title">Налаштування</string>
+    <string name="language_title">Мова інтерфейсу</string>
+    <string name="dns_title">Налаштування DNS</string>
+    <string name="logs_title">Журнал подій</string>
+    <string name="clear_logs">Очистити журнал</string>
+    <string name="export_logs">Експортувати журнал</string>
+    <string name="about_title">Про програму Nebula</string>
+    <string name="gpl_license_notice">Ліцензовано за GNU General Public License v3.0 з офіційним ядром sing-box</string>
+
+    <string name="onboarding_welcome">Ласкаво просимо до Nebula</string>
+    <string name="onboarding_welcome_desc">Швидкісний приватний клієнт з ядром sing-box</string>
+    <string name="onboarding_language_select">Оберіть мову</string>
+    <string name="onboarding_permissions_prompt">Надайте дозволи VPN та сповіщень</string>
+    <string name="onboarding_routing_preset">Оберіть початкову стратегію</string>
+    <string name="onboarding_preset_russia_direct">Прямий доступ до ресурсів (Direct)</string>
+    <string name="onboarding_preset_global_proxy">Проксі для всього інтернету (Строгий)</string>
+    <string name="onboarding_get_started">Почати</string>
+    <string name="onboarding_skip">Пропустити</string>
+</resources>

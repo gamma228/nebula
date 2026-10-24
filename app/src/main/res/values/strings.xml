@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nebula</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_servers">Servers</string>
+    <string name="nav_routing">Routing</string>
+    <string name="nav_doctor">Doctor</string>
+    <string name="nav_tools">Tools</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_appearance">Appearance</string>
+
+    <string name="state_disconnected">Disconnected</string>
+    <string name="state_connecting">Connecting…</string>
+    <string name="state_connected">Connected</string>
+    <string name="state_disconnecting">Disconnecting…</string>
+    <string name="state_error">Error: %1$s</string>
+    <string name="action_connect">Connect</string>
+    <string name="action_disconnect">Disconnect</string>
+
+    <string name="speed_upload">Upload: %1$s/s</string>
+    <string name="speed_download">Download: %1$s/s</string>
+    <string name="total_upload">Sent: %1$s</string>
+    <string name="total_download">Received: %1$s</string>
+    <string name="ping_ms">%1$d ms</string>
+    <string name="ping_testing">Testing…</string>
+    <string name="ping_timeout">Timeout</string>
+
+    <string name="profiles_title">Proxy Profiles</string>
+    <string name="add_profile">Add Profile</string>
+    <string name="import_clipboard">Import from Clipboard</string>
+    <string name="scan_qr">Scan QR Code</string>
+    <string name="import_file">Import from File</string>
+    <string name="subscription_update">Update Subscriptions</string>
+    <string name="subscription_expire">Expires: %1$s</string>
+    <string name="subscription_traffic">Used: %1$s of %2$s</string>
+    <string name="auto_select_fastest">Auto (Lowest Latency)</string>
+    <string name="confirm_delete_profile">Delete profile \"%1$s\"?</string>
+    <string name="profile_shared_success">Profile copied to clipboard</string>
+
+    <string name="routing_title">Routing Engine</string>
+    <string name="mode_global">Global Proxy</string>
+    <string name="mode_bypass">Bypass Selected</string>
+    <string name="mode_forward">Proxy Selected Only</string>
+    <string name="routing_apps">Per-App Routing</string>
+    <string name="routing_rules">Routing Rules</string>
+    <string name="add_rule">Add Rule</string>
+    <string name="test_domain">Test Domain Routing</string>
+    <string name="search_apps">Search installed apps</string>
+    <string name="no_apps_found">No apps found</string>
+
+    <string name="doctor_title">Connection Doctor</string>
+    <string name="vpn_permission_check">VPN Permission</string>
+    <string name="battery_check">Battery Restrictions</string>
+    <string name="dns_check">DNS Reachability</string>
+    <string name="reachability_check">Server Reachability</string>
+    <string name="ipv6_check">IPv6 Leak Shield</string>
+    <string name="fix_issue">Fix</string>
+    <string name="copy_diagnostic_report">Copy Diagnostic Report</string>
+    <string name="all_systems_green">All connection checks passed</string>
+
+    <string name="appearance_title">Appearance &amp; Theme</string>
+    <string name="theme_preset">Theme Preset</string>
+    <string name="preset_oled_crimson">OLED Crimson &amp; Shadow</string>
+    <string name="preset_cyber_violet">Cyber Violet &amp; Ash</string>
+    <string name="preset_monochrome">Monochrome Minimalist</string>
+    <string name="custom_theme">Custom Theme</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_dark">Dark</string>
+    <string name="theme_mode_amoled">Pure AMOLED</string>
+    <string name="theme_mode_system">Follow System</string>
+    <string name="background_title">In-App Background</string>
+    <string name="background_solid">Solid Color</string>
+    <string name="background_gradient">Gradient</string>
+    <string name="background_photo">Custom Image</string>
+    <string name="wallpaper_apply_home">Apply to Home Screen</string>
+    <string name="wallpaper_apply_lock">Apply to Lock Screen</string>
+    <string name="wallpaper_apply_both">Apply to Both Screens</string>
+    <string name="launcher_icon_title">Launcher Icon Variant</string>
+
+    <string name="security_title">Security &amp; Privacy</string>
+    <string name="biometric_lock">Biometric Lock</string>
+    <string name="flag_secure">Block Screenshots &amp; Recents (FLAG_SECURE)</string>
+    <string name="kill_switch">Kill Switch</string>
+    <string name="kill_switch_desc">Block all connections when proxy drops</string>
+    <string name="panic_wipe">Panic Wipe</string>
+    <string name="panic_wipe_confirm">Erase all keys, profiles, and settings immediately?</string>
+    <string name="export_backup">Export Encrypted Backup</string>
+    <string name="import_backup">Import Encrypted Backup</string>
+    <string name="backup_password_prompt">Enter backup encryption password</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="language_title">Language</string>
+    <string name="dns_title">DNS Settings</string>
+    <string name="logs_title">Logs</string>
+    <string name="clear_logs">Clear Logs</string>
+    <string name="export_logs">Export Logs</string>
+    <string name="about_title">About Nebula</string>
+    <string name="gpl_license_notice">Licensed under GNU General Public License v3.0 with official sing-box core</string>
+
+    <string name="onboarding_welcome">Welcome to Nebula</string>
+    <string name="onboarding_welcome_desc">High-performance private proxy client with sing-box core</string>
+    <string name="onboarding_language_select">Select Language</string>
+    <string name="onboarding_permissions_prompt">Grant VPN and Notification Permissions</string>
+    <string name="onboarding_routing_preset">Choose Routing Strategy</string>
+    <string name="onboarding_preset_russia_direct">Bypass Russian Sites (Direct RU)</string>
+    <string name="onboarding_preset_global_proxy">Proxy All Traffic (Strict)</string>
+    <string name="onboarding_get_started">Get Started</string>
+    <string name="onboarding_skip">Skip</string>
+</resources>

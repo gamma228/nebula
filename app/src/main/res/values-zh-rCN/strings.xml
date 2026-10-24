@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nebula</string>
+    <string name="nav_home">主页</string>
+    <string name="nav_servers">节点</string>
+    <string name="nav_routing">分流</string>
+    <string name="nav_doctor">诊断</string>
+    <string name="nav_tools">工具</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_appearance">个性化</string>
+
+    <string name="state_disconnected">未连接</string>
+    <string name="state_connecting">正在连接…</string>
+    <string name="state_connected">已连接</string>
+    <string name="state_disconnecting">正在断开…</string>
+    <string name="state_error">错误：%1$s</string>
+    <string name="action_connect">连接</string>
+    <string name="action_disconnect">断开</string>
+
+    <string name="speed_upload">上行：%1$s/s</string>
+    <string name="speed_download">下行：%1$s/s</string>
+    <string name="total_upload">发送：%1$s</string>
+    <string name="total_download">接收：%1$s</string>
+    <string name="ping_ms">%1$d 毫秒</string>
+    <string name="ping_testing">测试中…</string>
+    <string name="ping_timeout">超时</string>
+
+    <string name="profiles_title">代理配置</string>
+    <string name="add_profile">添加节点</string>
+    <string name="import_clipboard">从剪贴板导入</string>
+    <string name="scan_qr">扫描二维码</string>
+    <string name="import_file">从文件导入</string>
+    <string name="subscription_update">更新订阅</string>
+    <string name="subscription_expire">到期时间：%1$s</string>
+    <string name="subscription_traffic">已用流量：%1$s / %2$s</string>
+    <string name="auto_select_fastest">自动选择（最低延迟）</string>
+    <string name="confirm_delete_profile">删除配置“%1$s”？</string>
+    <string name="profile_shared_success">配置已复制到剪贴板</string>
+
+    <string name="routing_title">路由规则引擎</string>
+    <string name="mode_global">全局代理</string>
+    <string name="mode_bypass">绕过所选应用</string>
+    <string name="mode_forward">仅代理所选应用</string>
+    <string name="routing_apps">应用分流</string>
+    <string name="routing_rules">自定义规则</string>
+    <string name="add_rule">添加规则</string>
+    <string name="test_domain">测试域名分流</string>
+    <string name="search_apps">搜索已安装应用</string>
+    <string name="no_apps_found">未找到应用</string>
+
+    <string name="doctor_title">连接诊断医生</string>
+    <string name="vpn_permission_check">VPN 权限状态</string>
+    <string name="battery_check">电池优化限制</string>
+    <string name="dns_check">DNS 可达性</string>
+    <string name="reachability_check">服务器连通性</string>
+    <string name="ipv6_check">IPv6 防泄漏防护</string>
+    <string name="fix_issue">修复</string>
+    <string name="copy_diagnostic_report">复制诊断报告</string>
+    <string name="all_systems_green">所有网络检测均已通过</string>
+
+    <string name="appearance_title">外观与主题</string>
+    <string name="theme_preset">主题预设</string>
+    <string name="preset_oled_crimson">OLED 绯红之影 (Crimson &amp; Shadow)</string>
+    <string name="preset_cyber_violet">赛博紫灰 (Cyber Violet &amp; Ash)</string>
+    <string name="preset_monochrome">极简黑白 (Monochrome Minimalist)</string>
+    <string name="custom_theme">自定义主题</string>
+    <string name="theme_mode_light">浅色模式</string>
+    <string name="theme_mode_dark">深色模式</string>
+    <string name="theme_mode_amoled">纯黑 AMOLED</string>
+    <string name="theme_mode_system">跟随系统</string>
+    <string name="background_title">应用背景</string>
+    <string name="background_solid">纯色背景</string>
+    <string name="background_gradient">渐变色彩</string>
+    <string name="background_photo">自定义图片</string>
+    <string name="wallpaper_apply_home">设置为桌面壁纸</string>
+    <string name="wallpaper_apply_lock">设置为锁屏壁纸</string>
+    <string name="wallpaper_apply_both">同时设置两处壁纸</string>
+    <string name="launcher_icon_title">启动器图标样式</string>
+
+    <string name="security_title">安全与隐私</string>
+    <string name="biometric_lock">生物识别锁定</string>
+    <string name="flag_secure">防截屏与录屏保护 (FLAG_SECURE)</string>
+    <string name="kill_switch">故障熔断保护 (Kill Switch)</string>
+    <string name="kill_switch_desc">代理掉线时阻断一切外发流量</string>
+    <string name="panic_wipe">紧急擦除 (Panic Wipe)</string>
+    <string name="panic_wipe_confirm">立即彻底销毁所有节点、密钥与应用设置？</string>
+    <string name="export_backup">导出加密备份</string>
+    <string name="import_backup">导入加密备份</string>
+    <string name="backup_password_prompt">请输入备份加密密码</string>
+
+    <string name="settings_title">系统设置</string>
+    <string name="language_title">界面语言</string>
+    <string name="dns_title">DNS 协议配置</string>
+    <string name="logs_title">运行日志</string>
+    <string name="clear_logs">清空日志</string>
+    <string name="export_logs">导出日志文件</string>
+    <string name="about_title">关于 Nebula</string>
+    <string name="gpl_license_notice">采用 GNU 通用公共许可证 v3.0，搭载官方 sing-box 核心</string>
+
+    <string name="onboarding_welcome">欢迎使用 Nebula</string>
+    <string name="onboarding_welcome_desc">搭载 sing-box 原生核心的高性能抗封锁代理客户端</string>
+    <string name="onboarding_language_select">选择语言</string>
+    <string name="onboarding_permissions_prompt">授予 VPN 连接与通知推送权限</string>
+    <string name="onboarding_routing_preset">选择初始分流策略</string>
+    <string name="onboarding_preset_russia_direct">直连特定区域（Direct）</string>
+    <string name="onboarding_preset_global_proxy">全局严格代理（Strict）</string>
+    <string name="onboarding_get_started">即刻启程</string>
+    <string name="onboarding_skip">跳过向导</string>
+</resources>
