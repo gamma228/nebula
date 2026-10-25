@@ -20,10 +20,14 @@ Nebula is a modern, high-performance Android proxy and VPN client powered by the
   - Background subscription updates via WorkManager with quota inspection.
 
 - **Advanced Routing & Split Tunneling:**
+  - Dedicated top-level Routing tab with segmented views: `[Rules | Apps | Presets | Test]`.
+  - Smart multi-line rule detection (`SmartRuleParser`): pastes and auto-classifies domains, suffixes (`.ru`), IPv4 CIDRs, and package names.
+  - Live rule conflict and shadowing detection (`RuleConflictDetector`).
+  - Interactive Route Trace Simulator for testing DNS/outbound matching before traffic dispatch.
   - Per-app routing modes: Global, Bypass (Blacklist), and Forward (Whitelist) with strict mutual exclusivity.
   - Mass package name import parser.
-  - Domain suffix, keyword, regex, IP CIDR, and sing-box `rule_set` routing with drag-and-drop rule ordering.
-  - Direct routing presets for popular censorship environments.
+  - Domain suffix, keyword, regex, IP CIDR, and sing-box `rule_set` routing with priority indexing and bulk actions.
+  - Direct routing presets for popular censorship environments (`Russia Direct`, `AdBlock`, `Socials Proxy`).
 
 - **Zero Surveillance & Hardened Security:**
   - Zero analytics, zero telemetry, zero advertising libraries, and zero Google Play Services dependencies.
@@ -39,8 +43,11 @@ Nebula is a modern, high-performance Android proxy and VPN client powered by the
   - Custom app wallpaper support with adjustable blur and opacity overlays.
   - 5 dynamic launcher icon aliases (`.Default`, `.Crimson`, `.Violet`, `.Monochrome`, `.Stealth`).
 
-- **Diagnostics & Connection Doctor:**
+- **Diagnostics, Soak Testing & Connection Doctor:**
   - Real-time Connection Doctor performing multi-point diagnosis: Core binary, Config validity, Local DNS, Gateway reachability, Remote server handshake, and TUN routing interface.
+  - One-tap Redacted Diagnostics Bundle export (masking passwords, UUIDs, private keys).
+  - Physical device automated diagnostics collection via `scripts/collect-debug.sh` (bash) and `scripts/collect-debug.ps1` (PowerShell).
+  - Automated soak testing harness (`scripts/soak/run_soak_test.ps1`) tracking PSS/RSS drift, Dalvik heap, and open file descriptors over continuous UI cycles.
   - Active live connections monitor and live log buffer with level filtering.
 
 - **System Integration:**

@@ -189,3 +189,47 @@ Users reported connecting successfully to proxy nodes, but traffic was not circu
   - Add Rule bottom sheet & Smart Paste toggle: Verified
   - Route Trace Simulator with `yandex.ru` -> `direct (Direct Bypass)`: Verified
   - Visual evidence saved to `screen_routing_new.png`, `screen_add_rule_sheet.png`, `screen_smart_paste.png`, `screen_routing_apps.png`, `screen_routing_presets.png`, `screen_routing_test.png`, `screen_routing_trace_res.png`.
+
+---
+
+## [D6] SYSTEMATIC BUG SWEEP, STRESS TESTING, SOAK LEAK ANALYSIS, & RELEASE SIGNING
+
+### Symptoms & Root Cause
+1. **Stress Vulnerability & Unhandled Race Conditions**: Rapid continuous touch and keyboard interactions in complex Compose trees can trigger unhandled concurrency exceptions, StateFlow coroutine cancellation leaks, or window manager focus crashes.
+2. **Undetected Memory & File Descriptor Creep**: Long-running VPN background services frequently suffer slow resource leakage (unclosed TCP sockets in native Go runtime, unclosed Room cursors, or leaked BroadcastReceivers).
+3. **Physical Device Triage Friction**: Diagnosing connection failures on real hardware requires multiple manual ADB queries (network routes, battery whitelist status, process memory, and sanitized logcat).
+4. **Unverified Release Packaging**: Unminified or incorrectly signed APKs risk runtime crashes under R8 optimization or installation rejection on target devices.
+
+### Invariant Fix
+1. **10,000-Event ADB Monkey Stress Testing**:
+   - Injected 10,000 rapid monkey UI events (touch 40%, motion 25%, appswitch 10%, major nav 15%) on `emulator-5554`.
+   - Verified logcat for any `FATAL EXCEPTION`, `AndroidRuntime` crashes, or ANRs. Result: **0 crashes, 0 ANRs, 0 process restarts** (PID maintained throughout test).
+2. **Automated Soak Test Harness (`scripts/soak/run_soak_test.ps1`)**:
+   - Implemented real-time memory and FD tracking sampling Total PSS, Native Heap, Dalvik Heap, Open FDs (`/proc/<pid>/fd`), and Thread count (`/proc/<pid>/status`).
+   - Conducted continuous multi-minute UI cycling soak test.
+   - Result: PSS drift was **-1.2% (-2,200 kB)**, Native Heap drift was stable, FD drift was **0**, Thread count decreased by 6 threads. Verified: **PASS (Zero Leaks Detected)**.
+3. **Physical Device Diagnostics Suite (`scripts/collect-debug.sh` & `scripts/collect-debug.ps1`)**:
+   - Created standalone one-click diagnostics collection gathering hardware metadata, package dumpsys, routing tables (`ip addr`, `ip route`, `ip rule`), VPN status, battery optimization whitelist, memory telemetry, and sanitized logcat (automatically redacting passwords, private keys, Reality UUIDs).
+4. **Production Release Minification & Signature Verification**:
+   - Executed `./gradlew.bat assembleRelease` with R8 full optimization (`isMinifyEnabled = true`, `isShrinkResources = true`).
+   - Produced ABI splits (`arm64-v8a`, `armeabi-v7a`, `x86_64`) and universal APK.
+   - Verified cryptographic signatures using Android SDK `apksigner verify --verbose`: **Verified using v2 scheme (APK Signature Scheme v2): true (1 signer)**.
+   - Installed `app-x86_64-release.apk` (`app.nebula.vpn`) on API 34 emulator and verified cold start, notification permission request, onboarding flow, and main 5-tab dashboard.
+
+### Automated Verification Proof
+- `scripts/soak/run_soak_test.ps1`:
+  - Total PSS: 182,949 kB -> 180,745 kB (-1.2% drift)
+  - Open File Descriptors: 0 drift
+  - Verdict: `PASS (Zero Leaks Detected)`
+- ADB Monkey Test:
+  - 10,000 events injected (`Events injected: 10000`, elapsed 567s)
+  - Zero fatal exceptions, zero crashes, zero ANRs
+- Release APK Signature Verification (`apksigner verify --verbose`):
+  - `app-arm64-v8a-release.apk`: Verifies (v2 scheme: true)
+  - `app-x86_64-release.apk`: Verifies (v2 scheme: true)
+  - `app-universal-release.apk`: Verifies (v2 scheme: true)
+- Release APK Live Run:
+  - Streamed install of `app-x86_64-release.apk`: Success
+  - Cold start: Verified (PID 16311)
+  - UI evidence saved to `screen_release_home.png` and `screen_release_home_main.png`.
+

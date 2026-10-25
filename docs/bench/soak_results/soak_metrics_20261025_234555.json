@@ -1,0 +1,551 @@
+﻿{
+    "StartTime":  "2026-10-25T23:45:56.0131467+03:00",
+    "Samples":  [
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:45:57.2802034+03:00",
+                        "DalvikHeapKb":  11913,
+                        "Index":  1,
+                        "NativeHeapKb":  17254,
+                        "ElapsedSeconds":  1.3,
+                        "TotalPssKb":  180953,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:46:00.6680638+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  2,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  4.7,
+                        "TotalPssKb":  181085,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:46:04.0965896+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  3,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  8.1,
+                        "TotalPssKb":  181093,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:46:07.7306448+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  4,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  11.7,
+                        "TotalPssKb":  181085,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:46:11.2856603+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  5,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  15.3,
+                        "TotalPssKb":  181093,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:46:14.7579068+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  6,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  18.7,
+                        "TotalPssKb":  181085,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:46:18.4655529+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  7,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  22.5,
+                        "TotalPssKb":  181093,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  55,
+                        "Timestamp":  "2026-10-25T23:46:21.8167328+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  8,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  25.8,
+                        "TotalPssKb":  181085,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  51,
+                        "Timestamp":  "2026-10-25T23:46:25.4456608+03:00",
+                        "DalvikHeapKb":  11673,
+                        "Index":  9,
+                        "NativeHeapKb":  17642,
+                        "ElapsedSeconds":  29.4,
+                        "TotalPssKb":  180869,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  51,
+                        "Timestamp":  "2026-10-25T23:46:29.1686201+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  10,
+                        "NativeHeapKb":  17642,
+                        "ElapsedSeconds":  33.2,
+                        "TotalPssKb":  180865,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:32.5820753+03:00",
+                        "DalvikHeapKb":  11673,
+                        "Index":  11,
+                        "NativeHeapKb":  17642,
+                        "ElapsedSeconds":  36.6,
+                        "TotalPssKb":  180777,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:36.0312694+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  12,
+                        "NativeHeapKb":  17642,
+                        "ElapsedSeconds":  40,
+                        "TotalPssKb":  180769,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:39.7897618+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  13,
+                        "NativeHeapKb":  17554,
+                        "ElapsedSeconds":  43.8,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:43.1970421+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  14,
+                        "NativeHeapKb":  17554,
+                        "ElapsedSeconds":  47.2,
+                        "TotalPssKb":  180737,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:46.6014692+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  15,
+                        "NativeHeapKb":  17554,
+                        "ElapsedSeconds":  50.6,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:50.2277139+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  16,
+                        "NativeHeapKb":  17554,
+                        "ElapsedSeconds":  54.2,
+                        "TotalPssKb":  180733,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:53.8388006+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  17,
+                        "NativeHeapKb":  17554,
+                        "ElapsedSeconds":  57.8,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:46:57.2477723+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  18,
+                        "NativeHeapKb":  17558,
+                        "ElapsedSeconds":  61.2,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:00.9220872+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  19,
+                        "NativeHeapKb":  17558,
+                        "ElapsedSeconds":  64.9,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:04.3675678+03:00",
+                        "DalvikHeapKb":  11669,
+                        "Index":  20,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  68.4,
+                        "TotalPssKb":  180749,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:07.8764772+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  21,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  71.9,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:11.4300794+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  22,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  75.4,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:14.9040045+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  23,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  78.9,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:18.3389211+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  24,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  82.3,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:21.9958720+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  25,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  86,
+                        "TotalPssKb":  180749,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:25.5070967+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  26,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  89.5,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:29.0002158+03:00",
+                        "DalvikHeapKb":  11661,
+                        "Index":  27,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  93,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:32.5361373+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  28,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  96.5,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:36.1031850+03:00",
+                        "DalvikHeapKb":  11665,
+                        "Index":  29,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  100.1,
+                        "TotalPssKb":  180749,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:39.5138876+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  30,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  103.5,
+                        "TotalPssKb":  180737,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:43.1153141+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  31,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  107.1,
+                        "TotalPssKb":  180737,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:46.4895601+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  32,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  110.5,
+                        "TotalPssKb":  180737,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:50.1195253+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  33,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  114.1,
+                        "TotalPssKb":  180737,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:53.6680522+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  34,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  117.7,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:47:56.9887025+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  35,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  121,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:00.4662608+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  36,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  124.5,
+                        "TotalPssKb":  180737,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:04.2372347+03:00",
+                        "DalvikHeapKb":  11661,
+                        "Index":  37,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  128.2,
+                        "TotalPssKb":  180749,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:07.7460646+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  38,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  131.7,
+                        "TotalPssKb":  180737,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:11.2280045+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  39,
+                        "NativeHeapKb":  17562,
+                        "ElapsedSeconds":  135.2,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:15.0838463+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  40,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  139.1,
+                        "TotalPssKb":  180781,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:18.5437158+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  41,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  142.5,
+                        "TotalPssKb":  180789,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:21.8486144+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  42,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  145.8,
+                        "TotalPssKb":  180781,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:25.4253042+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  43,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  149.4,
+                        "TotalPssKb":  180789,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:28.7739688+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  44,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  152.8,
+                        "TotalPssKb":  180781,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:32.1519470+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  45,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  156.1,
+                        "TotalPssKb":  180789,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:35.5986455+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  46,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  159.6,
+                        "TotalPssKb":  180781,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:38.9054248+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  47,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  162.9,
+                        "TotalPssKb":  180789,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:42.2501151+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  48,
+                        "NativeHeapKb":  17650,
+                        "ElapsedSeconds":  166.2,
+                        "TotalPssKb":  180793,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:45.7648933+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  49,
+                        "NativeHeapKb":  17642,
+                        "ElapsedSeconds":  169.8,
+                        "TotalPssKb":  180793,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:49.1733977+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  50,
+                        "NativeHeapKb":  17598,
+                        "ElapsedSeconds":  173.2,
+                        "TotalPssKb":  180741,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:52.4952715+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  51,
+                        "NativeHeapKb":  17598,
+                        "ElapsedSeconds":  176.5,
+                        "TotalPssKb":  180749,
+                        "FdCount":  0
+                    },
+                    {
+                        "Threads":  49,
+                        "Timestamp":  "2026-10-25T23:48:55.8754789+03:00",
+                        "DalvikHeapKb":  11657,
+                        "Index":  52,
+                        "NativeHeapKb":  17598,
+                        "ElapsedSeconds":  179.9,
+                        "TotalPssKb":  180745,
+                        "FdCount":  0
+                    }
+                ],
+    "Baseline":  {
+                     "TotalPssKb":  182949,
+                     "NativeHeapKb":  18374,
+                     "FdCount":  0,
+                     "Threads":  55,
+                     "DalvikHeapKb":  13485
+                 },
+    "Statistics":  {
+                       "MinPssKb":  180733,
+                       "FdDrift":  0,
+                       "Verdict":  "PASS (Zero Leaks Detected)",
+                       "AvgPssKb":  180807.5,
+                       "DriftKb":  -2200,
+                       "MaxPssKb":  181093,
+                       "DriftPercent":  -1.2
+                   },
+    "EndTime":  "2026-10-25T23:48:59.2527895+03:00",
+    "Final":  {
+                  "TotalPssKb":  180749,
+                  "NativeHeapKb":  17598,
+                  "FdCount":  0,
+                  "Threads":  49,
+                  "DalvikHeapKb":  11657
+              },
+    "DurationMinutes":  3,
+    "Package":  "app.nebula.vpn.debug"
+}
