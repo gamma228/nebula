@@ -1,0 +1,35 @@
+{
+  "timestamp": 1792959024.4372036,
+  "mode": "tuned",
+  "dns_ip": {
+    "min_ms": 0.05,
+    "avg_ms": 0.56,
+    "max_ms": 4.77,
+    "success_rate": 100.0
+  },
+  "dns_domain": {
+    "min_ms": 0.34,
+    "avg_ms": 3.58,
+    "max_ms": 29.89,
+    "success_rate": 100.0
+  },
+  "ttfb": {
+    "min_ms": 0.81,
+    "avg_ms": 3.2,
+    "max_ms": 37.2,
+    "samples": 25
+  },
+  "short_connections": {
+    "total_requests": 50,
+    "success_count": 50,
+    "duration_sec": 0.087,
+    "requests_per_sec": 571.92
+  },
+  "throughput": {
+    "download_avg_mb_s": 600.62,
+    "upload_avg_mb_s": 378.71
+  },
+  "memory": {
+    "total_pss_mb": 133.37
+  }
+}

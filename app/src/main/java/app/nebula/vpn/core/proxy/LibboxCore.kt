@@ -61,7 +61,7 @@ class LibboxCore(
     private var commandClient: CommandClient? = null
     private var activeTunProvider: TunProvider? = null
 
-    private val logBuffer = mutableListOf<String>()
+    private val logBuffer = ArrayDeque<String>(2048)
 
     init {
         try {
@@ -210,9 +210,9 @@ class LibboxCore(
                         while (logs.hasNext()) {
                             val entry = logs.next()
                             val line = entry?.message ?: ""
-                            logBuffer.add(line)
+                            logBuffer.addLast(line)
                             if (logBuffer.size > 2000) {
-                                logBuffer.removeAt(0)
+                                logBuffer.removeFirst()
                             }
                         }
                     }

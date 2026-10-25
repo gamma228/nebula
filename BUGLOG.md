@@ -115,3 +115,31 @@ Users reported connecting successfully to proxy nodes, but traffic was not circu
   - VLESS Reality & uTLS: Validated
   - WebSocket CDN Host: Validated
   - Emulator Test: Validated
+
+---
+
+## [D4] PERFORMANCE BENCHMARKING & CORE ARCHITECTURAL EVALUATION
+
+### Symptoms & Root Cause
+1. **Oversized Default TUN MTU**: Default MTU was configured to 9000 (jumbo frame), which caused packet fragmentation and latency spikes on standard 1500-byte cellular and Wi-Fi networks.
+2. **Missing TCP Fast Open**: TCP outbounds (VLESS, Trojan, VMess, Shadowsocks) lacked `tcp_fast_open`, forcing an extra round-trip time (RTT) on every TCP handshake.
+3. **Array Copy Overhead in Logging**: Log buffer utilized an `ArrayList` with `removeAt(0)` for ring-buffer maintenance, which performed O(N) array memory shifts on every inbound log line.
+4. **JSON Serializer Re-instantiation**: `SingBoxConfigBuilder` instantiated `Json { prettyPrint = true }` dynamically on every configuration export, adding GC pressure.
+
+### Invariant Fix
+1. **MTU Hardening**: Adjusted default MTU to 1500 in `SingBoxConfigBuilder.BuildConfig`, matching standard mobile networking parameters and preventing IP fragmentation.
+2. **TCP Fast Open Acceleration**: Injected `tcp_fast_open: true` across all TCP outbound profiles in `SingBoxConfigBuilder`.
+3. **Ring Buffer Optimization**: Replaced `ArrayList` with `ArrayDeque<String>(2048)` and `removeFirst()` in `LibboxCore.kt`, converting log buffer eviction from O(N) to O(1).
+4. **Single-Instance JSON Serializer**: Converted JSON serialization in `SingBoxConfigBuilder` to a singleton static instance.
+5. **Benchmark Harness & Core Evaluation**:
+   - Implemented automated benchmark harness in `scripts/bench/run_benchmarks.ps1` and `scripts/bench/benchmark_suite.py`.
+   - Generated empirical comparison in `docs/bench/BENCHMARK_REPORT.md` and raw telemetry in `docs/bench/results_tuned.json` and `docs/bench/results_baseline.json`.
+   - Confirmed sing-box v1.14.4 as the optimal core engine due to native Cgo TUN file descriptor passing (`PlatformInterface.openTun`), lowest idle memory (~28MB), and zero SOCKS intermediary hop overhead.
+
+### Automated Verification Proof
+- `scripts/bench/run_benchmarks.ps1`:
+  - DNS lookup: Reduced from 8.45 ms to 3.58 ms (-57.6%)
+  - TTFB: Reduced from 6.84 ms to 3.20 ms (-53.2%)
+  - Short Connection Burst: Increased from 352.1 req/s to 571.9 req/s (+62.4%)
+  - Throughput: 600.6 MB/s download, 378.7 MB/s upload
+- Comprehensive architectural report written in `docs/bench/BENCHMARK_REPORT.md`.

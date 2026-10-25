@@ -28,6 +28,8 @@ import kotlinx.serialization.json.putJsonObject
  */
 object SingBoxConfigBuilder {
 
+    private val jsonSerializer = Json { prettyPrint = true }
+
     data class BuildConfig(
         val activeProfile: ProxyProfile?,
         val allProfiles: List<ProxyProfile> = emptyList(),
@@ -38,7 +40,7 @@ object SingBoxConfigBuilder {
         val remoteDnsUrl: String = "https://1.1.1.1/dns-query",
         val fakeDnsEnabled: Boolean = false,
         val killSwitchEnabled: Boolean = false,
-        val mtu: Int = 9000,
+        val mtu: Int = 1500,
         val localPortMixedInbound: Int? = null // Optional local SOCKS/HTTP inbound
     )
 
@@ -295,7 +297,7 @@ object SingBoxConfigBuilder {
             }
         }
 
-        return Json { prettyPrint = true }.encodeToString(JsonObject.serializer(), root)
+        return jsonSerializer.encodeToString(JsonObject.serializer(), root)
     }
 
     private fun buildTlsObject(tls: TlsConfig, defaultServerName: String): JsonObject {
@@ -371,6 +373,7 @@ object SingBoxConfigBuilder {
                     put("server_port", profile.port)
                     put("method", profile.encryption.ifEmpty { "aes-128-gcm" })
                     put("password", profile.authSecret)
+                    put("tcp_fast_open", true)
                 }
                 ProtocolType.VLESS -> {
                     put("type", "vless")
@@ -378,6 +381,7 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("uuid", profile.authSecret)
+                    put("tcp_fast_open", true)
                     val flowVal = when {
                         profile.tls.flow.isNotEmpty() -> profile.tls.flow
                         profile.tls.realityPublicKey.isNotEmpty() && profile.transport.type == TransportType.TCP -> "xtls-rprx-vision"
@@ -400,6 +404,7 @@ object SingBoxConfigBuilder {
                     put("server_port", profile.port)
                     put("uuid", profile.authSecret)
                     put("security", profile.encryption.ifEmpty { "auto" })
+                    put("tcp_fast_open", true)
                     if (profile.tls.enabled) {
                         put("tls", buildTlsObject(profile.tls, profile.server))
                     }
@@ -413,6 +418,7 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("password", profile.authSecret)
+                    put("tcp_fast_open", true)
                     if (profile.tls.enabled) {
                         put("tls", buildTlsObject(profile.tls, profile.server))
                     }
