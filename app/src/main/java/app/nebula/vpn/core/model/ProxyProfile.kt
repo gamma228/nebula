@@ -28,6 +28,7 @@ data class TlsConfig(
     val utlsFingerprint: String = "chrome",
     val realityPublicKey: String = "",
     val realityShortId: String = "",
+    val spiderX: String = "",
     val flow: String = ""
 )
 

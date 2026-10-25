@@ -97,7 +97,12 @@ object LinkParser {
         val sni = uri.getQueryParameter("sni") ?: host
         val pbk = uri.getQueryParameter("pbk") ?: ""
         val sid = uri.getQueryParameter("sid") ?: ""
+        val spx = uri.getQueryParameter("spx") ?: uri.getQueryParameter("spiderX") ?: ""
         val fp = uri.getQueryParameter("fp") ?: "chrome"
+        val alpnParam = uri.getQueryParameter("alpn")
+        val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
+        val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) }
+            ?: (uri.getQueryParameter("allowInsecure")?.let { it == "1" || it.equals("true", true) } ?: false)
 
         val typeParam = uri.getQueryParameter("type") ?: "tcp"
         val transportType = when (typeParam.lowercase()) {
@@ -107,6 +112,7 @@ object LinkParser {
             else -> TransportType.TCP
         }
         val path = uri.getQueryParameter("path") ?: ""
+        val hostHeader = uri.getQueryParameter("host") ?: ""
         val serviceName = uri.getQueryParameter("serviceName") ?: ""
 
         val rawFlow = uri.getQueryParameter("flow") ?: ""
@@ -127,14 +133,18 @@ object LinkParser {
             tls = TlsConfig(
                 enabled = isTls,
                 serverName = sni,
+                insecure = insecure,
+                alpn = alpnList,
                 utlsFingerprint = fp,
                 realityPublicKey = pbk,
                 realityShortId = sid,
+                spiderX = spx,
                 flow = flow
             ),
             transport = TransportConfig(
                 type = transportType,
                 path = path,
+                host = hostHeader,
                 serviceName = serviceName
             )
         )
@@ -152,8 +162,11 @@ object LinkParser {
         val name = jsonObj["ps"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() } ?: "VMess-$host:$port"
         val net = jsonObj["net"]?.jsonPrimitive?.content ?: "tcp"
         val path = jsonObj["path"]?.jsonPrimitive?.content ?: ""
+        val hostHeader = jsonObj["host"]?.jsonPrimitive?.content ?: ""
         val tlsStr = jsonObj["tls"]?.jsonPrimitive?.content ?: ""
         val sni = jsonObj["sni"]?.jsonPrimitive?.content ?: host
+        val alpnStr = jsonObj["alpn"]?.jsonPrimitive?.content ?: ""
+        val alpnList = if (alpnStr.isNotEmpty()) alpnStr.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
 
         val transportType = when (net.lowercase()) {
             "ws" -> TransportType.WS
@@ -172,11 +185,13 @@ object LinkParser {
             encryption = jsonObj["scy"]?.jsonPrimitive?.content ?: "auto",
             tls = TlsConfig(
                 enabled = tlsStr.equals("tls", true),
-                serverName = sni
+                serverName = sni,
+                alpn = alpnList
             ),
             transport = TransportConfig(
                 type = transportType,
-                path = path
+                path = path,
+                host = hostHeader
             )
         )
         return Result.Success(profile)
@@ -189,6 +204,21 @@ object LinkParser {
         val port = if (uri.port > 0) uri.port else 443
         val name = decodeFragment(uri.fragment, "Trojan-$host:$port")
         val sni = uri.getQueryParameter("sni") ?: host
+        val alpnParam = uri.getQueryParameter("alpn")
+        val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
+        val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) }
+            ?: (uri.getQueryParameter("allowInsecure")?.let { it == "1" || it.equals("true", true) } ?: false)
+
+        val typeParam = uri.getQueryParameter("type") ?: "tcp"
+        val transportType = when (typeParam.lowercase()) {
+            "ws" -> TransportType.WS
+            "grpc" -> TransportType.GRPC
+            "httpupgrade" -> TransportType.HTTP_UPGRADE
+            else -> TransportType.TCP
+        }
+        val path = uri.getQueryParameter("path") ?: ""
+        val hostHeader = uri.getQueryParameter("host") ?: ""
+        val serviceName = uri.getQueryParameter("serviceName") ?: ""
 
         val profile = ProxyProfile(
             id = UUID.randomUUID().toString(),
@@ -199,7 +229,15 @@ object LinkParser {
             authSecret = password,
             tls = TlsConfig(
                 enabled = true,
-                serverName = sni
+                serverName = sni,
+                insecure = insecure,
+                alpn = alpnList
+            ),
+            transport = TransportConfig(
+                type = transportType,
+                path = path,
+                host = hostHeader,
+                serviceName = serviceName
             )
         )
         return Result.Success(profile)
@@ -252,6 +290,8 @@ object LinkParser {
         val name = decodeFragment(uri.fragment, "Hy2-$host:$port")
         val sni = uri.getQueryParameter("sni") ?: host
         val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) } ?: false
+        val alpnParam = uri.getQueryParameter("alpn")
+        val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
 
         val profile = ProxyProfile(
             id = UUID.randomUUID().toString(),
@@ -263,7 +303,8 @@ object LinkParser {
             tls = TlsConfig(
                 enabled = true,
                 serverName = sni,
-                insecure = insecure
+                insecure = insecure,
+                alpn = alpnList
             )
         )
         return Result.Success(profile)

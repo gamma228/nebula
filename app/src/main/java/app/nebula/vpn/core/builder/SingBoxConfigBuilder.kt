@@ -8,6 +8,8 @@ import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.core.model.RoutingRule
 import app.nebula.vpn.core.model.RuleAction
 import app.nebula.vpn.core.model.RuleType
+import app.nebula.vpn.core.model.TlsConfig
+import app.nebula.vpn.core.model.TransportConfig
 import app.nebula.vpn.core.model.TransportType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -55,13 +57,27 @@ object SingBoxConfigBuilder {
             putJsonObject("dns") {
                 putJsonArray("servers") {
                     // Remote DNS (DoH or UDP) detoured to the proxy for complete bypass
-                    add(buildJsonObject {
-                        put("type", if (config.remoteDnsUrl.startsWith("https://")) "https" else "udp")
-                        put("tag", "dns-remote")
-                        put("server", config.remoteDnsUrl.removePrefix("https://").substringBefore("/"))
-                        put("detour", proxyDetourTag)
-                        put("domain_resolver", "dns-direct")
-                    })
+                    if (config.remoteDnsUrl.startsWith("https://")) {
+                        val withoutScheme = config.remoteDnsUrl.removePrefix("https://")
+                        val serverHost = withoutScheme.substringBefore("/")
+                        val path = "/" + withoutScheme.substringAfter("/", "dns-query")
+                        add(buildJsonObject {
+                            put("type", "https")
+                            put("tag", "dns-remote")
+                            put("server", serverHost)
+                            put("path", path)
+                            put("detour", proxyDetourTag)
+                            put("domain_resolver", "dns-direct")
+                        })
+                    } else {
+                        val serverHost = config.remoteDnsUrl.removePrefix("udp://").substringBefore(":")
+                        add(buildJsonObject {
+                            put("type", "udp")
+                            put("tag", "dns-remote")
+                            put("server", serverHost)
+                            put("detour", proxyDetourTag)
+                        })
+                    }
                     // Local direct DNS for resolving proxy node server addresses & local domains
                     add(buildJsonObject {
                         put("type", "local")
@@ -282,6 +298,69 @@ object SingBoxConfigBuilder {
         return Json { prettyPrint = true }.encodeToString(JsonObject.serializer(), root)
     }
 
+    private fun buildTlsObject(tls: TlsConfig, defaultServerName: String): JsonObject {
+        return buildJsonObject {
+            put("enabled", true)
+            put("server_name", tls.serverName.ifEmpty { defaultServerName })
+            if (tls.insecure) {
+                put("insecure", true)
+            }
+            if (tls.alpn.isNotEmpty()) {
+                putJsonArray("alpn") {
+                    for (a in tls.alpn) add(JsonPrimitive(a))
+                }
+            }
+            if (tls.realityPublicKey.isNotEmpty() || tls.utlsFingerprint.isNotEmpty()) {
+                putJsonObject("utls") {
+                    put("enabled", true)
+                    put("fingerprint", tls.utlsFingerprint.ifEmpty { "chrome" })
+                }
+            }
+            if (tls.realityPublicKey.isNotEmpty()) {
+                putJsonObject("reality") {
+                    put("enabled", true)
+                    put("public_key", tls.realityPublicKey)
+                    put("short_id", tls.realityShortId)
+                }
+            }
+        }
+    }
+
+    private fun buildTransportObject(transport: TransportConfig): JsonObject? {
+        if (transport.type == TransportType.TCP) return null
+        return buildJsonObject {
+            when (transport.type) {
+                TransportType.WS -> {
+                    put("type", "ws")
+                    if (transport.path.isNotEmpty()) {
+                        put("path", transport.path)
+                    }
+                    if (transport.host.isNotEmpty()) {
+                        putJsonObject("headers") {
+                            put("Host", transport.host)
+                        }
+                    }
+                }
+                TransportType.GRPC -> {
+                    put("type", "grpc")
+                    if (transport.serviceName.isNotEmpty()) {
+                        put("service_name", transport.serviceName)
+                    }
+                }
+                TransportType.HTTP_UPGRADE -> {
+                    put("type", "httpupgrade")
+                    if (transport.path.isNotEmpty()) {
+                        put("path", transport.path)
+                    }
+                    if (transport.host.isNotEmpty()) {
+                        put("host", transport.host)
+                    }
+                }
+                else -> {}
+            }
+        }
+    }
+
     private fun buildOutboundForProfile(profile: ProxyProfile, tag: String): JsonObject {
         return buildJsonObject {
             when (profile.protocol) {
@@ -308,39 +387,10 @@ object SingBoxConfigBuilder {
                         put("flow", flowVal)
                     }
                     if (profile.tls.enabled) {
-                        putJsonObject("tls") {
-                            put("enabled", true)
-                            put("server_name", profile.tls.serverName.ifEmpty { profile.server })
-                            if (profile.tls.realityPublicKey.isNotEmpty() || profile.tls.utlsFingerprint.isNotEmpty()) {
-                                putJsonObject("utls") {
-                                    put("enabled", true)
-                                    put("fingerprint", profile.tls.utlsFingerprint.ifEmpty { "chrome" })
-                                }
-                            }
-                            if (profile.tls.realityPublicKey.isNotEmpty()) {
-                                putJsonObject("reality") {
-                                    put("enabled", true)
-                                    put("public_key", profile.tls.realityPublicKey)
-                                    put("short_id", profile.tls.realityShortId)
-                                }
-                            }
-                        }
+                        put("tls", buildTlsObject(profile.tls, profile.server))
                     }
-                    if (profile.transport.type != TransportType.TCP) {
-                        putJsonObject("transport") {
-                            put("type", when (profile.transport.type) {
-                                TransportType.WS -> "ws"
-                                TransportType.GRPC -> "grpc"
-                                TransportType.HTTP_UPGRADE -> "httpupgrade"
-                                else -> "tcp"
-                            })
-                            if (profile.transport.path.isNotEmpty()) {
-                                put("path", profile.transport.path)
-                            }
-                            if (profile.transport.serviceName.isNotEmpty()) {
-                                put("service_name", profile.transport.serviceName)
-                            }
-                        }
+                    buildTransportObject(profile.transport)?.let {
+                        put("transport", it)
                     }
                 }
                 ProtocolType.VMESS -> {
@@ -351,18 +401,10 @@ object SingBoxConfigBuilder {
                     put("uuid", profile.authSecret)
                     put("security", profile.encryption.ifEmpty { "auto" })
                     if (profile.tls.enabled) {
-                        putJsonObject("tls") {
-                            put("enabled", true)
-                            put("server_name", profile.tls.serverName.ifEmpty { profile.server })
-                        }
+                        put("tls", buildTlsObject(profile.tls, profile.server))
                     }
-                    if (profile.transport.type != TransportType.TCP) {
-                        putJsonObject("transport") {
-                            put("type", if (profile.transport.type == TransportType.WS) "ws" else "grpc")
-                            if (profile.transport.path.isNotEmpty()) {
-                                put("path", profile.transport.path)
-                            }
-                        }
+                    buildTransportObject(profile.transport)?.let {
+                        put("transport", it)
                     }
                 }
                 ProtocolType.TROJAN -> {
@@ -371,9 +413,11 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("password", profile.authSecret)
-                    putJsonObject("tls") {
-                        put("enabled", true)
-                        put("server_name", profile.tls.serverName.ifEmpty { profile.server })
+                    if (profile.tls.enabled) {
+                        put("tls", buildTlsObject(profile.tls, profile.server))
+                    }
+                    buildTransportObject(profile.transport)?.let {
+                        put("transport", it)
                     }
                 }
                 ProtocolType.HYSTERIA2 -> {
@@ -382,12 +426,8 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("password", profile.authSecret)
-                    putJsonObject("tls") {
-                        put("enabled", true)
-                        put("server_name", profile.tls.serverName.ifEmpty { profile.server })
-                        if (profile.tls.insecure) {
-                            put("insecure", true)
-                        }
+                    if (profile.tls.enabled) {
+                        put("tls", buildTlsObject(profile.tls, profile.server))
                     }
                 }
             }

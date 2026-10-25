@@ -114,6 +114,103 @@ class SingBoxConfigBuilderTest {
         validateWithDesktopSingBox(config, "test-rules.json")
     }
 
+    @Test
+    fun testBuildConfigForVlessRealityWithSpiderXAndAlpn() {
+        val profile = ProxyProfile(
+            id = "test-reality",
+            name = "VLESS-Reality",
+            protocol = ProtocolType.VLESS,
+            server = "1.2.3.4",
+            port = 443,
+            authSecret = "00000000-0000-0000-0000-000000000000",
+            tls = TlsConfig(
+                enabled = true,
+                serverName = "example.com",
+                realityPublicKey = "GDlASyCCKyp6r1oFWNITgVAZFHUzTQfdjbk49JHP9m8",
+                realityShortId = "1234",
+                spiderX = "/login",
+                utlsFingerprint = "firefox",
+                flow = "xtls-rprx-vision",
+                alpn = listOf("h2", "http/1.1")
+            )
+        )
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile,
+                remoteDnsUrl = "https://1.1.1.1/dns-query"
+            )
+        )
+        assertTrue(config.contains("\"public_key\": \"GDlASyCCKyp6r1oFWNITgVAZFHUzTQfdjbk49JHP9m8\""))
+        assertTrue(config.contains("\"fingerprint\": \"firefox\""))
+        assertTrue(config.contains("\"alpn\""))
+        assertTrue(config.contains("\"path\": \"/dns-query\""))
+
+        validateWithDesktopSingBox(config, "test-reality-full.json")
+    }
+
+    @Test
+    fun testBuildConfigForWebSocketWithHostHeader() {
+        val profile = ProxyProfile(
+            id = "test-ws",
+            name = "VLESS-WS",
+            protocol = ProtocolType.VLESS,
+            server = "104.16.1.1",
+            port = 443,
+            authSecret = "00000000-0000-0000-0000-000000000000",
+            tls = TlsConfig(
+                enabled = true,
+                serverName = "worker.example.dev"
+            ),
+            transport = TransportConfig(
+                type = TransportType.WS,
+                path = "/chat?ed=2048",
+                host = "worker.example.dev"
+            )
+        )
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile
+            )
+        )
+        assertTrue(config.contains("\"type\": \"ws\""))
+        assertTrue(config.contains("\"path\": \"/chat?ed=2048\""))
+        assertTrue(config.contains("\"Host\": \"worker.example.dev\""))
+
+        validateWithDesktopSingBox(config, "test-ws.json")
+    }
+
+    @Test
+    fun testBuildConfigForTrojanWebSocket() {
+        val profile = ProxyProfile(
+            id = "test-trojan-ws",
+            name = "Trojan-WS",
+            protocol = ProtocolType.TROJAN,
+            server = "tr.example.com",
+            port = 443,
+            authSecret = "trojanpass",
+            tls = TlsConfig(
+                enabled = true,
+                serverName = "tr.example.com",
+                alpn = listOf("h2")
+            ),
+            transport = TransportConfig(
+                type = TransportType.WS,
+                path = "/trojan-ws",
+                host = "tr.example.com"
+            )
+        )
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile
+            )
+        )
+        assertTrue(config.contains("\"type\": \"trojan\""))
+        assertTrue(config.contains("\"type\": \"ws\""))
+        assertTrue(config.contains("\"Host\": \"tr.example.com\""))
+
+        validateWithDesktopSingBox(config, "test-trojan-ws.json")
+    }
+
     private fun validateWithDesktopSingBox(configJson: String, tempFileName: String) {
         val singBoxBin = File("C:/Users/User/tools/sing-box.exe")
         if (singBoxBin.exists()) {

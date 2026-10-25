@@ -41,7 +41,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nebula.vpn.R
 import app.nebula.vpn.ui.theme.StatusGreen
-import app.nebula.vpn.ui.theme.StatusYellow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.graphics.Color
+import app.nebula.vpn.ui.theme.EmeraldGreen
+import app.nebula.vpn.ui.theme.StatusRed
 
 @Composable
 fun DoctorScreen(
@@ -50,6 +54,7 @@ fun DoctorScreen(
 ) {
     val checks by viewModel.checks.collectAsState()
     val isRunning by viewModel.isRunning.collectAsState()
+    val verdict by viewModel.verdict.collectAsState()
     val context = LocalContext.current
 
     Column(
@@ -69,16 +74,65 @@ fun DoctorScreen(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            IconButton(onClick = { viewModel.runDiagnostics() }) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Rerun",
-                    tint = MaterialTheme.colorScheme.primary
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isRunning) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = EmeraldGreen
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                IconButton(onClick = { viewModel.runDiagnostics() }, enabled = !isRunning) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Rerun",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        if (verdict != null) {
+            val isSuccess = verdict!!.isSuccess
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isSuccess) EmeraldGreen.copy(alpha = 0.15f) else StatusRed.copy(alpha = 0.15f)
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = if (isSuccess) EmeraldGreen else StatusRed,
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = verdict!!.title,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = verdict!!.description,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+        }
 
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -99,7 +153,7 @@ fun DoctorScreen(
                         Icon(
                             imageVector = if (check.isPassed) Icons.Default.CheckCircle else Icons.Default.Warning,
                             contentDescription = null,
-                            tint = if (check.isPassed) StatusGreen else StatusYellow,
+                            tint = if (check.isPassed) EmeraldGreen else StatusRed,
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -126,10 +180,10 @@ fun DoctorScreen(
 
         Button(
             onClick = {
-                val report = viewModel.generateReport()
+                val report = viewModel.generateRedactedDiagnosticsBundle()
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Nebula Diagnostic Report", report))
-                Toast.makeText(context, "Report copied to clipboard", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Диагностический отчет скопирован", Toast.LENGTH_SHORT).show()
             },
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
             shape = MaterialTheme.shapes.medium,
@@ -138,7 +192,7 @@ fun DoctorScreen(
             Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = stringResource(R.string.copy_diagnostic_report),
+                text = "Скопировать отчет диагностики (без паролей)",
                 color = MaterialTheme.colorScheme.onSurface
             )
         }

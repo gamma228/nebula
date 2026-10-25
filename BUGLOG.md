@@ -66,3 +66,52 @@ When the user tapped "Check latency" or "Ping all", the entire application froze
 - `LatencyTesterTest`:
   - `hung servers trigger timeout without stalling queue` -> PASS
   - `cancel aborts in-flight batch and leaves no server in Testing state` -> PASS
+
+
+---
+
+## D3: Connecting Does Not Change Anything (Traffic Bypassing & Link Parsers)
+
+### Problem Description
+Users reported connecting successfully to proxy nodes, but traffic was not circumventing restrictions ("blocked sites stay blocked", requests leaking to local ISP DNS, or connections rejected with HTTP 403 / handshake errors). Advanced configurations such as VLESS Reality (with Vision/ALPN), WebSocket CDN endpoints, and Trojan nodes failed to pass traffic.
+
+### Root Cause Analysis
+1. **Dropped CDN Host Headers in WebSocket Transport**: `LinkParser` discarded the `host` query parameter on `type=ws` and `type=httpupgrade`. When configuring sing-box outbounds, `SingBoxConfigBuilder` omitted `headers: { "Host": ... }`, causing edge CDN reverse proxies (e.g., Cloudflare Workers) to return HTTP 403 Forbidden.
+2. **Missing ALPN & Insecure Negotiation**: `LinkParser` ignored `alpn` parameters and `insecure`/`allowInsecure` flags on VLESS, Trojan, and Hysteria2. Servers requiring HTTP/2 or specific ALPN tokens rejected TLS handshakes.
+3. **Truncated Trojan Transport**: `LinkParser.parseTrojan` completely omitted transport parsing, defaulting all Trojan nodes to raw TCP even when configured for WebSocket or gRPC.
+4. **Incomplete Remote DoH Definition**: In `SingBoxConfigBuilder`, remote DNS was constructed without an explicit `/dns-query` path or proper domain resolver separation, causing DoH requests over the proxy to fail or stall.
+5. **Absence of Diagnostic Self-Test**: Users had no in-app tool to verify exit IP, detect DNS leaks, or test censorship circumvention on target endpoints.
+
+### Invariant Fix
+1. **Model Parameter Hardening**: Extended `TlsConfig` and `TransportConfig` to preserve `alpn`, `insecure`, `host`, `serviceName`, and `spiderX`.
+2. **Comprehensive Link Parser**: Hardened `LinkParser` for all protocols (VLESS, VMess, Trojan, Shadowsocks, Hysteria2) to strictly parse all query parameters without loss.
+3. **Unified Sing-Box Config Builder**:
+   - Implemented `buildTlsObject` and `buildTransportObject` ensuring proper emission of `alpn` arrays, `utls` fingerprints, Reality short IDs/public keys, and `headers: { Host: ... }` for WebSocket.
+   - Enforced explicit `path: "/dns-query"` and `domain_resolver: "dns-direct"` on remote DoH servers, routing all DNS over the encrypted proxy detour.
+   - Preserved strict `hijack-dns` on both `protocol: "dns"` and `port: [53]`.
+4. **In-App Self-Test ("Doctor")**:
+   - Built comprehensive `DoctorViewModel` & `DoctorScreen` testing VPN permissions, battery optimization, proxy node reachability, DoH DNS detour, exit IP discovery, and restricted endpoint connectivity.
+   - Added Verdict Card and one-tap Redacted Diagnostics Bundle export (masking passwords, UUIDs, and keys).
+5. **Automated Verification Harness**: Implemented `scripts/block_simulation_harness.ps1` validating DNS hijacking, Reality handshakes, and CDN Host configurations against desktop `sing-box check -c`.
+
+### Automated Verification Proof
+- `LinkParserTest`:
+  - `testParseVlessReality` -> PASS
+  - `testParseVlessRealityWithSpiderXAndAlpn` -> PASS
+  - `testParseVlessWebSocketWithHostAndPath` -> PASS
+  - `testParseTrojan` -> PASS
+  - `testParseTrojanWebSocket` -> PASS
+  - `testParseShadowsocks` -> PASS
+  - `testParseHysteria2` -> PASS
+- `SingBoxConfigBuilderTest`:
+  - `testBuildConfigForShadowsocks` (sing-box check) -> PASS
+  - `testBuildConfigForVlessReality` (sing-box check) -> PASS
+  - `testBuildConfigForVlessRealityWithSpiderXAndAlpn` (sing-box check) -> PASS
+  - `testBuildConfigForWebSocketWithHostHeader` (sing-box check) -> PASS
+  - `testBuildConfigForTrojanWebSocket` (sing-box check) -> PASS
+  - `testBuildConfigWithSplitTunnelAndRules` (sing-box check) -> PASS
+- `scripts/block_simulation_harness.ps1`:
+  - DNS Hijack & DoH Detour: Validated
+  - VLESS Reality & uTLS: Validated
+  - WebSocket CDN Host: Validated
+  - Emulator Test: Validated
