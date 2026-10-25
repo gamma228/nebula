@@ -109,6 +109,13 @@ object LinkParser {
         val path = uri.getQueryParameter("path") ?: ""
         val serviceName = uri.getQueryParameter("serviceName") ?: ""
 
+        val rawFlow = uri.getQueryParameter("flow") ?: ""
+        val flow = when {
+            rawFlow.isNotEmpty() -> rawFlow
+            pbk.isNotEmpty() && transportType == TransportType.TCP -> "xtls-rprx-vision"
+            else -> ""
+        }
+
         val profile = ProxyProfile(
             id = UUID.randomUUID().toString(),
             name = name,
@@ -122,7 +129,8 @@ object LinkParser {
                 serverName = sni,
                 utlsFingerprint = fp,
                 realityPublicKey = pbk,
-                realityShortId = sid
+                realityShortId = sid,
+                flow = flow
             ),
             transport = TransportConfig(
                 type = transportType,

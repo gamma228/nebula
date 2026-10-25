@@ -1,7 +1,5 @@
 package app.nebula.vpn.ui.settings
 
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nebula.vpn.core.model.AppRoutingMode
@@ -89,6 +87,18 @@ class SettingsViewModel @Inject constructor(
         "en"
     )
 
+    val pingMode: StateFlow<String> = settingsRepository.pingMode.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        "TCP"
+    )
+
+    fun setPingMode(mode: String) {
+        viewModelScope.launch {
+            settingsRepository.setPingMode(mode)
+        }
+    }
+
     fun setKillSwitch(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setKillSwitchEnabled(enabled)
@@ -134,8 +144,6 @@ class SettingsViewModel @Inject constructor(
     fun changeLanguage(langCode: String) {
         viewModelScope.launch {
             settingsRepository.setLanguageCode(langCode)
-            val appLocale = LocaleListCompat.forLanguageTags(langCode)
-            AppCompatDelegate.setApplicationLocales(appLocale)
         }
     }
 

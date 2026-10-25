@@ -24,10 +24,13 @@ import dagger.hilt.android.AndroidEntryPoint
 import io.nekohasekai.libbox.TunOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -35,6 +38,7 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     companion object {
         const val ACTION_START = "app.nebula.vpn.action.START"
+        const val ACTION_SWITCH = "app.nebula.vpn.action.SWITCH"
         const val ACTION_STOP = "app.nebula.vpn.action.STOP"
         const val EXTRA_PROFILE_ID = "profile_id"
         private const val NOTIFICATION_ID = 1001
@@ -47,15 +51,39 @@ class ProxyVpnService : VpnService(), TunProvider {
     @Inject lateinit var vpnRepository: VpnRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val vpnMutex = Mutex()
+
     private var tunInterface: ParcelFileDescriptor? = null
     private var cachedRoutingMode: app.nebula.vpn.core.model.AppRoutingMode = app.nebula.vpn.core.model.AppRoutingMode.GLOBAL
     private var cachedTargetPackages: Set<String> = emptySet()
 
+    private var currentProfileId: String? = null
+    private var currentProfileName: String? = null
+    private var connectionStartTime: Long = 0L
+
+    private var stateCollectorJob: Job? = null
+    private var statsCollectorJob: Job? = null
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        val action = intent?.action
+        val profileId = intent?.getStringExtra(EXTRA_PROFILE_ID)
+        android.util.Log.i("ProxyVpnService", "onStartCommand: action=$action, profileId=$profileId, currentState=${vpnRepository.connectionState.value}")
+
+        when (action) {
             ACTION_START -> {
-                val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
-                startVpnTunnel(profileId)
+                if (vpnRepository.connectionState.value is ConnectionState.Connected) {
+                    android.util.Log.i("ProxyVpnService", "Already connected, switching profile instead")
+                    switchVpnProfile(profileId)
+                } else {
+                    startVpnTunnel(profileId)
+                }
+            }
+            ACTION_SWITCH -> {
+                if (vpnRepository.connectionState.value is ConnectionState.Connected) {
+                    switchVpnProfile(profileId)
+                } else {
+                    startVpnTunnel(profileId)
+                }
             }
             ACTION_STOP -> {
                 stopVpnTunnel()
@@ -66,98 +94,215 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     private fun startVpnTunnel(profileId: String?) {
         serviceScope.launch {
-            try {
-                vpnRepository.updateState(ConnectionState.Connecting)
-                startForegroundNotification("Connecting…", "Initializing tunnel")
-
-                val activeProfile = if (profileId != null) {
-                    profileRepository.getProfileById(profileId)
-                } else {
-                    val savedId = settingsRepository.selectedProfileId.first()
-                    savedId?.let { profileRepository.getProfileById(it) }
+            vpnMutex.withLock {
+                if (vpnRepository.connectionState.value is ConnectionState.Connected) {
+                    android.util.Log.i("ProxyVpnService", "startVpnTunnel: already connected, skipping")
+                    return@withLock
                 }
 
-                val allProfiles = profileRepository.allProfiles.first()
-                val customRules = routingRepository.allRules.first()
-                val routingMode = settingsRepository.routingMode.first()
-                val targetPackages = settingsRepository.targetPackages.first()
-                val remoteDns = settingsRepository.remoteDnsUrl.first()
-                val fakeDns = settingsRepository.fakeDnsEnabled.first()
-                val killSwitch = settingsRepository.killSwitchEnabled.first()
+                try {
+                    vpnRepository.updateState(ConnectionState.Connecting)
+                    startForegroundNotification("Connecting…", "Initializing tunnel")
 
-                cachedRoutingMode = routingMode
-                cachedTargetPackages = targetPackages
+                    val activeProfile = if (profileId != null) {
+                        profileRepository.getProfileById(profileId)
+                    } else {
+                        val savedId = settingsRepository.selectedProfileId.first()
+                        savedId?.let { profileRepository.getProfileById(it) } ?: profileRepository.allProfiles.first().firstOrNull()
+                    }
 
-                val configJson = SingBoxConfigBuilder.build(
-                    SingBoxConfigBuilder.BuildConfig(
-                        activeProfile = activeProfile,
-                        allProfiles = allProfiles,
-                        customRules = customRules,
-                        routingMode = routingMode,
-                        targetPackages = targetPackages,
-                        remoteDnsUrl = remoteDns,
-                        fakeDnsEnabled = fakeDns,
-                        killSwitchEnabled = killSwitch
+                    if (activeProfile == null) {
+                        android.util.Log.w("ProxyVpnService", "No proxy profiles available to start tunnel")
+                        vpnRepository.updateState(ConnectionState.Error("No server selected. Please add or select a server first."))
+                        stopSelf()
+                        return@withLock
+                    }
+
+                    currentProfileId = activeProfile.id
+                    currentProfileName = activeProfile.name
+                    connectionStartTime = System.currentTimeMillis()
+
+                    val allProfiles = profileRepository.allProfiles.first()
+                    val customRules = routingRepository.allRules.first()
+                    val routingMode = settingsRepository.routingMode.first()
+                    val targetPackages = settingsRepository.targetPackages.first()
+                    val remoteDns = settingsRepository.remoteDnsUrl.first()
+                    val fakeDns = settingsRepository.fakeDnsEnabled.first()
+                    val killSwitch = settingsRepository.killSwitchEnabled.first()
+
+                    cachedRoutingMode = routingMode
+                    cachedTargetPackages = targetPackages
+
+                    val configJson = SingBoxConfigBuilder.build(
+                        SingBoxConfigBuilder.BuildConfig(
+                            activeProfile = activeProfile,
+                            allProfiles = allProfiles,
+                            customRules = customRules,
+                            routingMode = routingMode,
+                            targetPackages = targetPackages,
+                            remoteDnsUrl = remoteDns,
+                            fakeDnsEnabled = fakeDns,
+                            killSwitchEnabled = killSwitch
+                        )
                     )
-                )
-                android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile?.name}, config length=${configJson.length}")
+                    android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile.name}, config length=${configJson.length}")
 
-                // Hand-off: start core with this as TunProvider
-                proxyCore.start(configJson, this@ProxyVpnService)
+                    // Hand-off: start core with this as TunProvider
+                    proxyCore.start(configJson, this@ProxyVpnService)
 
-                // Observe core state and speeds
-                launch {
-                    proxyCore.state.collect { state ->
-                        vpnRepository.updateState(state)
-                        when (state) {
-                            is ConnectionState.Connected -> {
-                                startForegroundNotification(
-                                    title = "Connected: ${activeProfile?.name ?: "Nebula"}",
-                                    content = "Protected via sing-box core"
-                                )
+                    // Cancel previous collectors if any
+                    stateCollectorJob?.cancel()
+                    statsCollectorJob?.cancel()
+
+                    stateCollectorJob = launch {
+                        proxyCore.state.collect { state ->
+                            when (state) {
+                                is ConnectionState.Connected -> {
+                                    val name = currentProfileName ?: activeProfile.name
+                                    val startT = if (connectionStartTime > 0L) connectionStartTime else System.currentTimeMillis()
+                                    vpnRepository.updateState(
+                                        ConnectionState.Connected(
+                                            profileName = name,
+                                            connectedAt = startT
+                                        )
+                                    )
+                                    startForegroundNotification(
+                                        title = "Connected: $name",
+                                        content = "Protected via sing-box core"
+                                    )
+                                }
+                                is ConnectionState.Error -> {
+                                    vpnRepository.updateState(state)
+                                    stopVpnTunnel()
+                                }
+                                is ConnectionState.Disconnected -> {
+                                    vpnRepository.updateState(state)
+                                    stopSelf()
+                                }
+                                else -> {
+                                    vpnRepository.updateState(state)
+                                }
                             }
-                            is ConnectionState.Error -> {
-                                stopVpnTunnel()
-                            }
-                            is ConnectionState.Disconnected -> {
-                                stopSelf()
-                            }
-                            else -> {}
                         }
                     }
-                }
 
-                launch {
-                    proxyCore.stats.collect { stats ->
-                        vpnRepository.updateStats(stats)
+                    statsCollectorJob = launch {
+                        proxyCore.stats.collect { stats ->
+                            vpnRepository.updateStats(stats)
+                        }
                     }
-                }
 
-            } catch (e: Exception) {
-                android.util.Log.e("ProxyVpnService", "startVpnTunnel error: ${e.message}", e)
-                vpnRepository.updateState(ConnectionState.Error(e.message ?: "Failed to start VPN"))
-                stopVpnTunnel()
+                } catch (e: Exception) {
+                    android.util.Log.e("ProxyVpnService", "startVpnTunnel error: ${e.message}", e)
+                    vpnRepository.updateState(ConnectionState.Error(e.message ?: "Failed to start VPN"))
+                    stopVpnTunnel()
+                }
+            }
+        }
+    }
+
+    private fun switchVpnProfile(profileId: String?) {
+        serviceScope.launch {
+            vpnMutex.withLock {
+                try {
+                    val targetProfile = if (profileId != null) {
+                        profileRepository.getProfileById(profileId)
+                    } else {
+                        val savedId = settingsRepository.selectedProfileId.first()
+                        savedId?.let { profileRepository.getProfileById(it) }
+                    } ?: return@withLock
+
+                    if (targetProfile.id == currentProfileId && vpnRepository.connectionState.value is ConnectionState.Connected) {
+                        android.util.Log.d("ProxyVpnService", "Profile is already active: ${targetProfile.name}")
+                        return@withLock
+                    }
+
+                    android.util.Log.i("ProxyVpnService", "Hot-switching to profile: ${targetProfile.name} (${targetProfile.id})")
+                    currentProfileId = targetProfile.id
+                    currentProfileName = targetProfile.name
+                    settingsRepository.setSelectedProfileId(targetProfile.id)
+
+                    val groupTag = "select"
+                    val outboundTag = "proxy-${targetProfile.id}"
+                    val switched = proxyCore.selectOutbound(groupTag, outboundTag)
+
+                    if (!switched) {
+                        android.util.Log.i("ProxyVpnService", "selectOutbound returned false, reloading full config in-place")
+                        val allProfiles = profileRepository.allProfiles.first()
+                        val customRules = routingRepository.allRules.first()
+                        val routingMode = settingsRepository.routingMode.first()
+                        val targetPackages = settingsRepository.targetPackages.first()
+                        val remoteDns = settingsRepository.remoteDnsUrl.first()
+                        val fakeDns = settingsRepository.fakeDnsEnabled.first()
+                        val killSwitch = settingsRepository.killSwitchEnabled.first()
+
+                        val configJson = SingBoxConfigBuilder.build(
+                            SingBoxConfigBuilder.BuildConfig(
+                                activeProfile = targetProfile,
+                                allProfiles = allProfiles,
+                                customRules = customRules,
+                                routingMode = routingMode,
+                                targetPackages = targetPackages,
+                                remoteDnsUrl = remoteDns,
+                                fakeDnsEnabled = fakeDns,
+                                killSwitchEnabled = killSwitch
+                            )
+                        )
+                        proxyCore.reloadConfig(configJson)
+                    }
+
+                    // Update UI and notification quietly with no disconnect flicker
+                    val startT = if (connectionStartTime > 0L) connectionStartTime else System.currentTimeMillis()
+                    vpnRepository.updateState(
+                        ConnectionState.Connected(
+                            profileName = targetProfile.name,
+                            connectedAt = startT
+                        )
+                    )
+                    startForegroundNotification(
+                        title = "Connected: ${targetProfile.name}",
+                        content = "Protected via sing-box core"
+                    )
+                    android.util.Log.i("ProxyVpnService", "Hot-switch completed successfully to ${targetProfile.name}")
+
+                } catch (e: Exception) {
+                    android.util.Log.e("ProxyVpnService", "switchVpnProfile error: ${e.message}", e)
+                }
             }
         }
     }
 
     private fun stopVpnTunnel() {
         serviceScope.launch {
-            vpnRepository.updateState(ConnectionState.Disconnecting)
-            try {
-                proxyCore.stop()
-            } catch (e: Exception) {
-                e.printStackTrace()
+            vpnMutex.withLock {
+                android.util.Log.i("ProxyVpnService", "Stopping VPN tunnel...")
+                stateCollectorJob?.cancel()
+                stateCollectorJob = null
+                statsCollectorJob?.cancel()
+                statsCollectorJob = null
+
+                vpnRepository.updateState(ConnectionState.Disconnecting)
+                try {
+                    proxyCore.stop()
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                try {
+                    tunInterface?.close()
+                    tunInterface = null
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+
+                currentProfileId = null
+                currentProfileName = null
+                connectionStartTime = 0L
+
+                vpnRepository.updateState(ConnectionState.Disconnected)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                android.util.Log.i("ProxyVpnService", "VPN tunnel stopped cleanly")
             }
-            try {
-                tunInterface?.close()
-                tunInterface = null
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-            vpnRepository.updateState(ConnectionState.Disconnected)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
         }
     }
 
@@ -175,12 +320,17 @@ class ProxyVpnService : VpnService(), TunProvider {
         }
 
         // Add IPv4 addresses
+        var hasIpv4Address = false
         val inet4Addresses = options.inet4Address
         if (inet4Addresses != null) {
             while (inet4Addresses.hasNext()) {
                 val prefix = inet4Addresses.next()
                 builder.addAddress(prefix.address(), prefix.prefix())
+                hasIpv4Address = true
             }
+        }
+        if (!hasIpv4Address) {
+            builder.addAddress("172.19.0.1", 30)
         }
 
         // Add IPv6 addresses
@@ -195,12 +345,15 @@ class ProxyVpnService : VpnService(), TunProvider {
         // Add Routes if autoRoute is enabled
         if (options.autoRoute) {
             val inet4Routes = options.inet4RouteAddress
+            var hasIpv4Route = false
             if (inet4Routes != null) {
                 while (inet4Routes.hasNext()) {
                     val prefix = inet4Routes.next()
                     builder.addRoute(prefix.address(), prefix.prefix())
+                    hasIpv4Route = true
                 }
-            } else {
+            }
+            if (!hasIpv4Route) {
                 builder.addRoute("0.0.0.0", 0)
             }
 
@@ -210,23 +363,26 @@ class ProxyVpnService : VpnService(), TunProvider {
                     val prefix = inet6Routes.next()
                     builder.addRoute(prefix.address(), prefix.prefix())
                 }
-            } else {
-                builder.addRoute("::", 0)
             }
         }
 
         // Add DNS Servers
+        var hasDns = false
         try {
             val dnsServers = options.dnsServerAddress
             if (dnsServers != null) {
                 while (dnsServers.hasNext()) {
                     val dns = dnsServers.next()
-                    builder.addDnsServer(dns)
+                    if (dns.isNotBlank()) {
+                        builder.addDnsServer(dns)
+                        hasDns = true
+                    }
                 }
-            } else {
-                builder.addDnsServer("172.19.0.2")
             }
         } catch (e: Exception) {
+            android.util.Log.w("ProxyVpnService", "Error reading dnsServerAddress: ${e.message}")
+        }
+        if (!hasDns) {
             builder.addDnsServer("172.19.0.2")
         }
 

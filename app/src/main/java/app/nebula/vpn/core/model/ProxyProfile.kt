@@ -27,7 +27,8 @@ data class TlsConfig(
     val alpn: List<String> = emptyList(),
     val utlsFingerprint: String = "chrome",
     val realityPublicKey: String = "",
-    val realityShortId: String = ""
+    val realityShortId: String = "",
+    val flow: String = ""
 )
 
 @Serializable

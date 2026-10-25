@@ -23,6 +23,7 @@ class SettingsRepository @Inject constructor(
     val themeConfigJson: Flow<String?> = dataStore.themeConfigJson
     val onboardingDone: Flow<Boolean> = dataStore.onboardingDone
     val bootAutostartEnabled: Flow<Boolean> = dataStore.bootAutostartEnabled
+    val pingMode: Flow<String> = dataStore.pingMode
 
     suspend fun setSelectedProfileId(id: String?) = dataStore.setSelectedProfileId(id)
     suspend fun setRoutingMode(mode: AppRoutingMode) = dataStore.setRoutingMode(mode)
@@ -37,5 +38,6 @@ class SettingsRepository @Inject constructor(
     suspend fun setThemeConfigJson(json: String) = dataStore.setThemeConfigJson(json)
     suspend fun setOnboardingDone(done: Boolean) = dataStore.setOnboardingDone(done)
     suspend fun setBootAutostartEnabled(enabled: Boolean) = dataStore.setBootAutostartEnabled(enabled)
+    suspend fun setPingMode(mode: String) = dataStore.setPingMode(mode)
     suspend fun clearAll() = dataStore.clearAll()
 }

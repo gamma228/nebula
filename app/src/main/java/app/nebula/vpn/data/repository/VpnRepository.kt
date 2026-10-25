@@ -40,6 +40,14 @@ class VpnRepository @Inject constructor(
         context.startForegroundService(intent)
     }
 
+    fun switchProfile(profileId: String) {
+        val intent = Intent(context, ProxyVpnService::class.java).apply {
+            action = ProxyVpnService.ACTION_SWITCH
+            putExtra(ProxyVpnService.EXTRA_PROFILE_ID, profileId)
+        }
+        context.startService(intent)
+    }
+
     fun stopVpn() {
         val intent = Intent(context, ProxyVpnService::class.java).apply {
             action = ProxyVpnService.ACTION_STOP

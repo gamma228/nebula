@@ -6,12 +6,18 @@ import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.core.model.Result
 import app.nebula.vpn.core.parser.LinkParser
 import app.nebula.vpn.core.parser.SubscriptionDecoder
+import app.nebula.vpn.core.proxy.PingTester
+import app.nebula.vpn.core.proxy.PingType
 import app.nebula.vpn.data.database.entity.SubscriptionEntity
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.SettingsRepository
 import app.nebula.vpn.data.repository.SubscriptionRepository
 import app.nebula.vpn.data.repository.VpnRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +25,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,7 +35,8 @@ class ServersViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val settingsRepository: SettingsRepository,
-    private val vpnRepository: VpnRepository
+    private val vpnRepository: VpnRepository,
+    private val pingTester: PingTester
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -37,6 +47,36 @@ class ServersViewModel @Inject constructor(
 
     private val _filterFavoriteOnly = MutableStateFlow(false)
     val filterFavoriteOnly: StateFlow<Boolean> = _filterFavoriteOnly.asStateFlow()
+
+    private val _sortByPing = MutableStateFlow(false)
+    val sortByPing: StateFlow<Boolean> = _sortByPing.asStateFlow()
+
+    private val _isPinging = MutableStateFlow(false)
+    val isPinging: StateFlow<Boolean> = _isPinging.asStateFlow()
+
+    private val _isPingingAll = MutableStateFlow(false)
+    val isPingingAll: StateFlow<Boolean> = _isPingingAll.asStateFlow()
+
+    private val _pingingSubscriptionId = MutableStateFlow<String?>(null)
+    val pingingSubscriptionId: StateFlow<String?> = _pingingSubscriptionId.asStateFlow()
+
+    private val _pingingProfileId = MutableStateFlow<String?>(null)
+    val pingingProfileId: StateFlow<String?> = _pingingProfileId.asStateFlow()
+
+    private val _livePingResults = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val livePingResults: StateFlow<Map<String, Long>> = _livePingResults.asStateFlow()
+
+    private val _pingProgress = MutableStateFlow(0f)
+    val pingProgress: StateFlow<Float> = _pingProgress.asStateFlow()
+
+    private val _activePingType = MutableStateFlow(PingType.TCP)
+    val activePingType: StateFlow<PingType> = _activePingType.asStateFlow()
+
+    val pingMode: StateFlow<String> = settingsRepository.pingMode.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        "TCP"
+    )
 
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
@@ -62,21 +102,140 @@ class ServersViewModel @Inject constructor(
         emptyList()
     )
 
-    val filteredProfiles: StateFlow<List<ProxyProfile>> = combine(
+    private data class FilterParams(
+        val query: String,
+        val protocol: String?,
+        val favOnly: Boolean,
+        val sortPing: Boolean
+    )
+
+    private val profilesWithLivePing: Flow<List<ProxyProfile>> = combine(
         profileRepository.allProfiles,
+        _livePingResults
+    ) { all, livePings ->
+        all.map { p ->
+            val live = livePings[p.id]
+            if (live != null) p.copy(lastPingMs = live) else p
+        }
+    }
+
+    private val filterParams: Flow<FilterParams> = combine(
         _searchQuery,
         _selectedProtocolFilter,
-        _filterFavoriteOnly
-    ) { all, query, protocol, favOnly ->
-        all.filter { profile ->
-            val matchesQuery = query.isEmpty() ||
-                    profile.name.contains(query, ignoreCase = true) ||
-                    profile.server.contains(query, ignoreCase = true)
-            val matchesProto = protocol == null || profile.protocol.name.equals(protocol, ignoreCase = true)
-            val matchesFav = !favOnly || profile.isFavorite
+        _filterFavoriteOnly,
+        _sortByPing
+    ) { query, protocol, favOnly, sortPing ->
+        FilterParams(query, protocol, favOnly, sortPing)
+    }
+
+    val filteredProfiles: StateFlow<List<ProxyProfile>> = combine(
+        profilesWithLivePing,
+        filterParams
+    ) { profiles, filter ->
+        val filtered = profiles.filter { profile ->
+            val matchesQuery = filter.query.isEmpty() ||
+                    profile.name.contains(filter.query, ignoreCase = true) ||
+                    profile.server.contains(filter.query, ignoreCase = true)
+            val matchesProto = filter.protocol == null || profile.protocol.name.equals(filter.protocol, ignoreCase = true)
+            val matchesFav = !filter.favOnly || profile.isFavorite
             matchesQuery && matchesProto && matchesFav
         }
+        if (filter.sortPing) {
+            filtered.sortedWith(
+                compareBy(
+                    { it.lastPingMs == null || it.lastPingMs <= 0L },
+                    { it.lastPingMs ?: Long.MAX_VALUE }
+                )
+            )
+        } else {
+            filtered
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun pingAllProfiles() {
+        if (_isPingingAll.value) return
+        val type = if (pingMode.value == "HTTP") PingType.HTTP else PingType.TCP
+        viewModelScope.launch(Dispatchers.IO) {
+            _isPingingAll.value = true
+            _isPinging.value = true
+            try {
+                runBatchPing(allProfiles.value, type)
+            } finally {
+                _isPingingAll.value = false
+                _isPinging.value = false
+            }
+        }
+    }
+
+    fun pingSubscriptionProfiles(subscriptionId: String) {
+        if (_pingingSubscriptionId.value != null) return
+        val type = if (pingMode.value == "HTTP") PingType.HTTP else PingType.TCP
+        val subsProfiles = allProfiles.value.filter { it.subscriptionId == subscriptionId }
+        if (subsProfiles.isNotEmpty()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                _pingingSubscriptionId.value = subscriptionId
+                try {
+                    runBatchPing(subsProfiles, type)
+                } finally {
+                    _pingingSubscriptionId.value = null
+                }
+            }
+        }
+    }
+
+    fun pingSingleProfile(profileId: String) {
+        if (_pingingProfileId.value != null) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _pingingProfileId.value = profileId
+            try {
+                val profile = profileRepository.getProfileById(profileId) ?: return@launch
+                val type = if (pingMode.value == "HTTP") PingType.HTTP else PingType.TCP
+                val latency = if (type == PingType.TCP) {
+                    pingTester.pingTcp(profile.server, profile.port)
+                } else {
+                    pingTester.pingHttp()
+                }
+                _livePingResults.value = _livePingResults.value + (profile.id to latency)
+                profileRepository.updatePing(profile.id, latency)
+            } finally {
+                _pingingProfileId.value = null
+            }
+        }
+    }
+
+    private suspend fun runBatchPing(profiles: List<ProxyProfile>, type: PingType) {
+        if (profiles.isEmpty()) return
+        _activePingType.value = type
+        _pingProgress.value = 0f
+
+        val total = profiles.size
+        val completed = AtomicInteger(0)
+        val semaphore = Semaphore(8)
+        val results = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+        profiles.map { profile ->
+            viewModelScope.async(Dispatchers.IO) {
+                semaphore.withPermit {
+                    val latency = if (type == PingType.TCP) {
+                        pingTester.pingTcp(profile.server, profile.port)
+                    } else {
+                        pingTester.pingHttp()
+                    }
+                    results[profile.id] = latency
+                    _livePingResults.value = _livePingResults.value + (profile.id to latency)
+                    val done = completed.incrementAndGet()
+                    _pingProgress.value = done.toFloat() / total.toFloat()
+                }
+            }
+        }.awaitAll()
+
+        profileRepository.updatePingsBatch(results)
+        _importStatusMessage.value = "Проверка пинга (${if (type == PingType.TCP) "TCP" else "HTTP"}) завершена ($total серверов)"
+    }
+
+    fun toggleSortByPing() {
+        _sortByPing.value = !_sortByPing.value
+    }
 
     fun onSearchQueryChanged(query: String) {
         _searchQuery.value = query
@@ -94,7 +253,7 @@ class ServersViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setSelectedProfileId(id)
             if (vpnRepository.connectionState.value is app.nebula.vpn.core.model.ConnectionState.Connected) {
-                vpnRepository.startVpn(id)
+                vpnRepository.switchProfile(id)
             }
         }
     }

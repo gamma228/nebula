@@ -172,7 +172,7 @@ fun AppearanceScreen(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "Corner Shape",
+                        text = "Стиль углов (Форма интерфейса)",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
@@ -182,15 +182,38 @@ fun AppearanceScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        ShapeChip("Squircle", theme.buttonShape == ButtonShape.SQUIRCLE) {
+                        ShapeChip("Squircle (16dp)", theme.buttonShape == ButtonShape.SQUIRCLE) {
                             viewModel.setButtonShape(ButtonShape.SQUIRCLE)
                         }
-                        ShapeChip("Rounded", theme.buttonShape == ButtonShape.ROUNDED) {
+                        ShapeChip("Capsule (Пилл)", theme.buttonShape == ButtonShape.ROUNDED) {
                             viewModel.setButtonShape(ButtonShape.ROUNDED)
                         }
-                        ShapeChip("Sharp", theme.buttonShape == ButtonShape.SHARP) {
+                        ShapeChip("Sharp (Кибер)", theme.buttonShape == ButtonShape.SHARP) {
                             viewModel.setButtonShape(ButtonShape.SHARP)
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Live Interactive Preview Box of Current Shape
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(MaterialTheme.shapes.medium)
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = when (theme.buttonShape) {
+                                ButtonShape.SQUIRCLE -> "✦ Squircle: Плавный суперэллипс (16dp)"
+                                ButtonShape.ROUNDED -> "● Rounded: Полная капсула / Пилл (26dp+)"
+                                ButtonShape.SHARP -> "■ Sharp: Высокоточный кибернетический срез (4dp)"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 }
             }

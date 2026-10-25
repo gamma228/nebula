@@ -30,7 +30,11 @@ class StubProxyCore : ProxyCore {
         // No-op for stub
     }
 
-    override suspend fun selectOutbound(groupTag: String, outboundTag: String) {
+    override suspend fun selectOutbound(groupTag: String, outboundTag: String): Boolean {
+        return true
+    }
+
+    override suspend fun reloadConfig(configJson: String) {
         // No-op for stub
     }
 }

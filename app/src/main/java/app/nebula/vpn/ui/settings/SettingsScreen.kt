@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Fingerprint
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -56,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nebula.vpn.R
@@ -84,10 +87,12 @@ fun SettingsScreen(
     val biometricLock by viewModel.biometricLockEnabled.collectAsState()
     val flagSecure by viewModel.flagSecureEnabled.collectAsState()
     val currentLang by viewModel.currentLanguageCode.collectAsState()
+    val pingMode by viewModel.pingMode.collectAsState()
 
     var showPanicDialog by remember { mutableStateOf(false) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showConnectionDialog by remember { mutableStateOf(false) }
+    var showPingModeDialog by remember { mutableStateOf(false) }
     var showTunnelDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
 
@@ -122,30 +127,32 @@ fun SettingsScreen(
             onDismissRequest = { showLanguageDialog = false },
             title = { Text(stringResource(R.string.language_title)) },
             text = {
-                Column {
-                    LanguageOption("Русский", "ru", currentLang) {
-                        viewModel.changeLanguage("ru")
-                        showLanguageDialog = false
-                    }
-                    LanguageOption("English (Default)", "en", currentLang) {
-                        viewModel.changeLanguage("en")
-                        showLanguageDialog = false
-                    }
-                    LanguageOption("Українська", "uk", currentLang) {
-                        viewModel.changeLanguage("uk")
-                        showLanguageDialog = false
-                    }
-                    LanguageOption("简体中文", "zh-CN", currentLang) {
-                        viewModel.changeLanguage("zh-CN")
-                        showLanguageDialog = false
-                    }
-                    LanguageOption("Deutsch", "de", currentLang) {
-                        viewModel.changeLanguage("de")
-                        showLanguageDialog = false
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val langs = listOf(
+                        "Русский" to "ru",
+                        "English (Default)" to "en",
+                        "Українська" to "uk",
+                        "简体中文" to "zh-CN",
+                        "Deutsch" to "de"
+                    )
+                    langs.forEach { (name, code) ->
+                        LanguageOption(
+                            name = name,
+                            code = code,
+                            selectedCode = currentLang
+                        ) {
+                            viewModel.changeLanguage(code)
+                            showLanguageDialog = false
+                        }
                     }
                 }
             },
-            confirmButton = {}
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            }
         )
     }
 
@@ -208,6 +215,60 @@ fun SettingsScreen(
             confirmButton = {
                 TextButton(onClick = { showConnectionDialog = false }) {
                     Text("Готово")
+                }
+            }
+        )
+    }
+
+    // Ping Check Mode Dialog
+    if (showPingModeDialog) {
+        AlertDialog(
+            onDismissRequest = { showPingModeDialog = false },
+            title = { Text("Метод проверки задержки (пинга)") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (pingMode == "TCP") EmeraldGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.setPingMode("TCP")
+                                showPingModeDialog = false
+                            }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("⚡ TCP Handshake (Рекомендуется)", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Замер времени открытия TCP-сокета до порта узла. Быстрый отклик, нулевой расход трафика.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (pingMode == "HTTP") EmeraldGreen.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.setPingMode("HTTP")
+                                showPingModeDialog = false
+                            }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("🌐 HTTP URL Test (204)", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Реальный веб-запрос Cloudflare 204. Проверяет сквозную доступность интернета.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPingModeDialog = false }) {
+                    Text("Отмена")
                 }
             }
         )
@@ -301,7 +362,7 @@ fun SettingsScreen(
     ) {
         // Top Header
         Text(
-            text = "Настройки",
+            text = stringResource(R.string.settings_title),
             fontSize = 26.sp,
             fontWeight = FontWeight.Black,
             color = MaterialTheme.colorScheme.onBackground,
@@ -309,86 +370,94 @@ fun SettingsScreen(
         )
 
         // SECTION: ПРОКСИ ПО ПРИЛОЖЕНИЯМ
-        SettingsSectionHeader("ПРОКСИ ПО ПРИЛОЖЕНИЯМ")
+        SettingsSectionHeader(stringResource(R.string.routing_title).uppercase())
         SettingNavigationCard(
             icon = Icons.Default.Apps,
             iconTint = Color(0xFFFFB703),
             iconBg = Color(0xFFFFB703).copy(alpha = 0.15f),
-            title = "Прокси по приложениям",
+            title = stringResource(R.string.routing_apps),
             value = when (routingMode) {
-                AppRoutingMode.GLOBAL -> "Все"
-                AppRoutingMode.BYPASS_APPS -> "Обход"
-                AppRoutingMode.FORWARD_APPS -> "Выбранные"
+                AppRoutingMode.GLOBAL -> stringResource(R.string.mode_global)
+                AppRoutingMode.BYPASS_APPS -> stringResource(R.string.mode_bypass)
+                AppRoutingMode.FORWARD_APPS -> stringResource(R.string.mode_forward)
             },
             onClick = onNavigateToRouting
         )
 
         // SECTION: ОФОРМЛЕНИЕ
-        SettingsSectionHeader("ОФОРМЛЕНИЕ")
+        SettingsSectionHeader(stringResource(R.string.appearance_title).uppercase())
         SettingNavigationCard(
             icon = Icons.Default.Palette,
             iconTint = EmeraldGreen,
             iconBg = EmeraldGreen.copy(alpha = 0.15f),
-            title = "Оформление",
+            title = stringResource(R.string.appearance_title),
             value = when (activeTheme.presetId) {
-                "emerald_cyber" -> "Изумрудная"
-                "oled_crimson" -> "Crimson"
-                "cyber_violet" -> "Violet"
-                "monochrome" -> "Монохром"
-                else -> "Кастомная"
+                "emerald_cyber" -> "Cyber Emerald"
+                "oled_crimson" -> stringResource(R.string.preset_oled_crimson)
+                "cyber_violet" -> stringResource(R.string.preset_cyber_violet)
+                "monochrome" -> stringResource(R.string.preset_monochrome)
+                else -> stringResource(R.string.custom_theme)
             },
             onClick = onNavigateToAppearance
         )
 
         // SECTION: СОЕДИНЕНИЕ
-        SettingsSectionHeader("СОЕДИНЕНИЕ")
+        SettingsSectionHeader(stringResource(R.string.vpn_permission_check).uppercase())
         SettingNavigationCard(
             icon = Icons.Default.FlashOn,
             iconTint = Color(0xFFFFB703),
             iconBg = Color(0xFFFFB703).copy(alpha = 0.15f),
-            title = "Соединение",
-            value = if (killSwitch) "Kill Switch вкл" else "Настроить",
+            title = stringResource(R.string.kill_switch),
+            value = if (killSwitch) "ON" else "OFF",
             onClick = { showConnectionDialog = true }
+        )
+        SettingNavigationCard(
+            icon = Icons.Default.Speed,
+            iconTint = EmeraldGreen,
+            iconBg = EmeraldGreen.copy(alpha = 0.15f),
+            title = "Ping Method",
+            value = if (pingMode == "HTTP") "HTTP (URL 204)" else "TCP Handshake",
+            onClick = { showPingModeDialog = true }
         )
 
         // SECTION: ТУННЕЛЬ
-        SettingsSectionHeader("ТУННЕЛЬ И DNS")
+        SettingsSectionHeader(stringResource(R.string.dns_title).uppercase())
         SettingNavigationCard(
             icon = Icons.Default.Dns,
             iconTint = MintTeal,
             iconBg = MintTeal.copy(alpha = 0.15f),
-            title = "Туннель и DNS",
-            value = if (fakeDns) "Fake-DNS" else "Стандартный",
+            title = stringResource(R.string.dns_title),
+            value = if (fakeDns) "Fake-DNS" else "Standard",
             onClick = { showTunnelDialog = true }
         )
 
         // SECTION: ДИАГНОСТИКА И ЛОГИ
-        SettingsSectionHeader("ДИАГНОСТИКА И ЛОГИ")
+        SettingsSectionHeader(stringResource(R.string.logs_title).uppercase())
         SettingNavigationCard(
             icon = Icons.Default.MedicalServices,
             iconTint = EmeraldGreen,
             iconBg = EmeraldGreen.copy(alpha = 0.15f),
-            title = "Connection Doctor",
-            value = "Проверить",
+            title = stringResource(R.string.doctor_title),
+            value = stringResource(R.string.fix_issue),
             onClick = onNavigateToDoctor
         )
         SettingNavigationCard(
             icon = Icons.Default.Build,
             iconTint = Color(0xFF3B82F6),
             iconBg = Color(0xFF3B82F6).copy(alpha = 0.15f),
-            title = "Журнал и инструменты",
-            value = "Логи",
+            title = stringResource(R.string.logs_title),
+            value = "Logs",
             onClick = onNavigateToTools
         )
 
         // SECTION: БЕЗОПАСНОСТЬ
-        SettingsSectionHeader("БЕЗОПАСНОСТЬ И ПРИВАТНОСТЬ")
+        SettingsSectionHeader(stringResource(R.string.security_title).uppercase())
         SettingSwitchCard(
             icon = Icons.Default.Fingerprint,
             iconTint = Color(0xFFA855F7),
             iconBg = Color(0xFFA855F7).copy(alpha = 0.15f),
-            title = "Биометрическая защита",
-            subtitle = "Запрос отпечатка или PIN при входе",
+            title = stringResource(R.string.biometric_lock),
+            subtitle = "Biometric / PIN",
             checked = biometricLock,
             onCheckedChange = { viewModel.setBiometricLock(it) }
         )
@@ -396,8 +465,8 @@ fun SettingsScreen(
             icon = Icons.Default.Security,
             iconTint = Color(0xFF3B82F6),
             iconBg = Color(0xFF3B82F6).copy(alpha = 0.15f),
-            title = "Защита экрана (FLAG_SECURE)",
-            subtitle = "Запрет скриншотов и скрытие в недавних",
+            title = stringResource(R.string.flag_secure),
+            subtitle = "FLAG_SECURE",
             checked = flagSecure,
             onCheckedChange = { viewModel.setFlagSecure(it) }
         )
@@ -405,18 +474,18 @@ fun SettingsScreen(
             icon = Icons.Default.DeleteForever,
             iconTint = StatusRed,
             iconBg = StatusRed.copy(alpha = 0.15f),
-            title = "Экстренное удаление (Panic Wipe)",
-            subtitle = "Мгновенно уничтожить все профили и ключи",
+            title = stringResource(R.string.panic_wipe),
+            subtitle = stringResource(R.string.panic_wipe_confirm),
             onClick = { showPanicDialog = true }
         )
 
         // SECTION: ПРИЛОЖЕНИЕ
-        SettingsSectionHeader("ПРИЛОЖЕНИЕ")
+        SettingsSectionHeader(stringResource(R.string.language_title).uppercase())
         SettingNavigationCard(
             icon = Icons.Default.Language,
             iconTint = Color(0xFF8B5CF6),
             iconBg = Color(0xFF8B5CF6).copy(alpha = 0.15f),
-            title = "Язык интерфейса",
+            title = stringResource(R.string.language_title),
             value = when (currentLang) {
                 "ru" -> "Русский"
                 "uk" -> "Українська"
@@ -430,7 +499,7 @@ fun SettingsScreen(
             icon = Icons.Default.Info,
             iconTint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             iconBg = MaterialTheme.colorScheme.surfaceVariant,
-            title = "О приложении",
+            title = stringResource(R.string.about_title),
             value = "v1.0.0",
             onClick = { showAboutDialog = true }
         )
@@ -480,8 +549,8 @@ private fun SettingNavigationCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
                         .background(iconBg),
                     contentAlignment = Alignment.Center
                 ) {
@@ -492,27 +561,35 @@ private fun SettingNavigationCard(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(14.dp))
+                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = title,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
                 Text(
                     text = value,
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(6.dp))
                 Icon(
                     imageVector = Icons.Default.ArrowForwardIos,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
-                    modifier = Modifier.size(13.dp)
+                    modifier = Modifier.size(12.dp)
                 )
             }
         }
@@ -559,18 +636,22 @@ private fun SettingSwitchCard(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = subtitle,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
@@ -623,18 +704,22 @@ private fun SettingClickableCard(
                     modifier = Modifier.size(20.dp)
                 )
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column {
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = iconTint
+                    color = iconTint,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -648,27 +733,31 @@ private fun LanguageOption(
     selectedCode: String,
     onSelect: () -> Unit
 ) {
+    val isSelected = code == selectedCode || (code == "zh-CN" && selectedCode == "zh") || (code == "en" && selectedCode.isEmpty())
+    val bg = if (isSelected) EmeraldGreen.copy(alpha = 0.12f) else Color.Transparent
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(bg)
             .clickable { onSelect() }
-            .padding(vertical = 12.dp, horizontal = 8.dp),
+            .padding(vertical = 12.dp, horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             text = name,
             fontSize = 15.sp,
-            fontWeight = if (code == selectedCode) FontWeight.Bold else FontWeight.Normal,
-            color = if (code == selectedCode) EmeraldGreen else MaterialTheme.colorScheme.onSurface
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+            color = if (isSelected) EmeraldGreen else MaterialTheme.colorScheme.onSurface
         )
-        if (code == selectedCode) {
+        if (isSelected) {
             Icon(
-                imageVector = Icons.Default.GppGood,
+                imageVector = Icons.Default.CheckCircle,
                 contentDescription = null,
                 tint = EmeraldGreen,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
     }

@@ -80,6 +80,14 @@ class LibboxCore(
 
     override suspend fun start(configJson: String, tunProvider: TunProvider): Unit = withContext(Dispatchers.IO) {
         try {
+            val existingServer = commandServer
+            if (existingServer != null) {
+                android.util.Log.i("LibboxCore", "CommandServer already running, hot reloading service...")
+                reloadConfig(configJson)
+                _state.value = ConnectionState.Connected(profileName = "Active Proxy")
+                return@withContext
+            }
+
             android.util.Log.i("LibboxCore", "Starting LibboxCommandServer...")
             _state.value = ConnectionState.Connecting
             activeTunProvider = tunProvider
@@ -106,6 +114,24 @@ class LibboxCore(
             throw e
         }
         Unit
+    }
+
+    override suspend fun reloadConfig(configJson: String): Unit = withContext(Dispatchers.IO) {
+        val server = commandServer
+        if (server != null) {
+            try {
+                android.util.Log.i("LibboxCore", "reloadConfig: length=${configJson.length}")
+                val overrideOptions = OverrideOptions()
+                server.startOrReloadService(configJson, overrideOptions)
+                android.util.Log.i("LibboxCore", "reloadConfig completed successfully!")
+            } catch (e: Exception) {
+                android.util.Log.e("LibboxCore", "reloadConfig error: ${e.message}", e)
+                throw e
+            }
+        } else {
+            val tun = activeTunProvider ?: return@withContext
+            start(configJson, tun)
+        }
     }
 
     override suspend fun stop(): Unit = withContext(Dispatchers.IO) {
@@ -136,13 +162,17 @@ class LibboxCore(
         Unit
     }
 
-    override suspend fun selectOutbound(groupTag: String, outboundTag: String): Unit = withContext(Dispatchers.IO) {
+    override suspend fun selectOutbound(groupTag: String, outboundTag: String): Boolean = withContext(Dispatchers.IO) {
+        val client = commandClient ?: return@withContext false
         try {
-            commandClient?.selectOutbound(groupTag, outboundTag)
+            android.util.Log.i("LibboxCore", "selectOutbound: group=$groupTag, outbound=$outboundTag")
+            client.selectOutbound(groupTag, outboundTag)
+            android.util.Log.i("LibboxCore", "selectOutbound succeeded!")
+            true
         } catch (e: Exception) {
-            e.printStackTrace()
+            android.util.Log.w("LibboxCore", "selectOutbound failed: ${e.message}")
+            false
         }
-        Unit
     }
 
     private fun initCommandClient() {

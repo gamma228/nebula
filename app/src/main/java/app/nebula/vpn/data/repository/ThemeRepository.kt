@@ -24,10 +24,10 @@ class ThemeRepository @Inject constructor(
             mode = ThemeMode.AMOLED,
             primaryColorHex = "#00D084",
             accentColorHex = "#06B6D4",
-            surfaceColorHex = "#13171C",
-            backgroundColorHex = "#090C0E",
-            buttonShape = ButtonShape.ROUNDED,
-            cornerRadiusDp = 18,
+            surfaceColorHex = "#040609",
+            backgroundColorHex = "#000000",
+            buttonShape = ButtonShape.SQUIRCLE,
+            cornerRadiusDp = 16,
             neonBordersEnabled = false
         )
 
@@ -36,8 +36,8 @@ class ThemeRepository @Inject constructor(
             mode = ThemeMode.AMOLED,
             primaryColorHex = "#E60049",
             accentColorHex = "#8A2BE2",
-            surfaceColorHex = "#121217",
-            backgroundColorHex = "#050508",
+            surfaceColorHex = "#060306",
+            backgroundColorHex = "#000000",
             buttonShape = ButtonShape.SQUIRCLE,
             cornerRadiusDp = 16,
             neonBordersEnabled = true
@@ -45,13 +45,13 @@ class ThemeRepository @Inject constructor(
 
         val PRESET_CYBER_VIOLET = ThemeConfig(
             presetId = "cyber_violet",
-            mode = ThemeMode.DARK,
+            mode = ThemeMode.AMOLED,
             primaryColorHex = "#8A2BE2",
             accentColorHex = "#00FFFF",
-            surfaceColorHex = "#161622",
-            backgroundColorHex = "#0B0B12",
+            surfaceColorHex = "#080612",
+            backgroundColorHex = "#000000",
             buttonShape = ButtonShape.ROUNDED,
-            cornerRadiusDp = 20,
+            cornerRadiusDp = 26,
             neonBordersEnabled = true
         )
 
@@ -60,10 +60,10 @@ class ThemeRepository @Inject constructor(
             mode = ThemeMode.AMOLED,
             primaryColorHex = "#FFFFFF",
             accentColorHex = "#A0A0A0",
-            surfaceColorHex = "#1A1A1A",
+            surfaceColorHex = "#080808",
             backgroundColorHex = "#000000",
             buttonShape = ButtonShape.SHARP,
-            cornerRadiusDp = 8,
+            cornerRadiusDp = 4,
             neonBordersEnabled = false
         )
     }

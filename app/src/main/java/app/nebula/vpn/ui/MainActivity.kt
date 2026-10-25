@@ -2,18 +2,25 @@ package app.nebula.vpn.ui
 
 import android.Manifest
 import android.app.Activity
+import android.app.LocaleManager
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.content.res.Resources
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.LocaleList
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +52,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,11 +62,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import app.nebula.vpn.R
@@ -92,9 +103,13 @@ import app.nebula.vpn.ui.theme.EmeraldGreen
 import app.nebula.vpn.ui.theme.NebulaTheme
 import app.nebula.vpn.ui.tools.ToolsScreen
 import app.nebula.vpn.ui.tools.ToolsViewModel
+import app.nebula.vpn.vpn.BootReceiver
+import app.nebula.vpn.vpn.ProxyVpnService
+import app.nebula.vpn.vpn.VpnTileService
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
@@ -109,7 +124,7 @@ sealed class Screen(val index: Int, val titleRes: Int, val icon: ImageVector) {
 }
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     @Inject
     lateinit var settingsRepository: SettingsRepository
@@ -185,8 +200,36 @@ class MainActivity : ComponentActivity() {
             val isOnboardingDone by settingsRepository.onboardingDone.collectAsState(
                 initial = true
             )
+            val currentLanguageCode by settingsRepository.languageCode.collectAsState(
+                initial = "en"
+            )
 
-            NebulaTheme(config = activeTheme) {
+            val baseContext = LocalContext.current
+            val (localizedContext, localizedConfig) = remember(currentLanguageCode, baseContext) {
+                val targetLocale = when (currentLanguageCode) {
+                    "ru" -> Locale("ru")
+                    "uk" -> Locale("uk")
+                    "zh-CN", "zh" -> Locale.SIMPLIFIED_CHINESE
+                    "de" -> Locale.GERMAN
+                    else -> Locale.ENGLISH
+                }
+                Locale.setDefault(targetLocale)
+                val config = Configuration(baseContext.resources.configuration)
+                config.setLocale(targetLocale)
+                val wrapped = object : ContextWrapper(baseContext) {
+                    private val localizedResources: Resources by lazy {
+                        baseContext.createConfigurationContext(config).resources
+                    }
+                    override fun getResources(): Resources = localizedResources
+                }
+                Pair(wrapped, config)
+            }
+
+            CompositionLocalProvider(
+                LocalContext provides localizedContext,
+                LocalConfiguration provides localizedConfig
+            ) {
+                NebulaTheme(config = activeTheme) {
                 if (!isOnboardingDone) {
                     OnboardingScreen(
                         onComplete = { routingPresetDirectRu ->
@@ -305,6 +348,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -445,7 +489,12 @@ class MainActivity : ComponentActivity() {
                         when (currentScreen) {
                             is Screen.Home -> HomeScreen(
                                 viewModel = homeViewModel,
-                                onNavigateToServers = { currentScreen = Screen.Servers }
+                                onNavigateToServers = { currentScreen = Screen.Servers },
+                                onRequestConnect = {
+                                    requestVpnPermissionAndExecute {
+                                        homeViewModel.toggleConnection()
+                                    }
+                                }
                             )
                             is Screen.Servers -> ServersScreen(
                                 viewModel = serversViewModel,

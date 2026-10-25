@@ -30,6 +30,7 @@ class SettingsDataStore(private val context: Context) {
         private val KEY_THEME_CONFIG = stringPreferencesKey("theme_config")
         private val KEY_ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
         private val KEY_BOOT_AUTOSTART = booleanPreferencesKey("boot_autostart")
+        private val KEY_PING_MODE = stringPreferencesKey("ping_mode")
     }
 
     val selectedProfileId: Flow<String?> = context.dataStore.data.map { it[KEY_SELECTED_PROFILE_ID] }
@@ -110,6 +111,11 @@ class SettingsDataStore(private val context: Context) {
     val bootAutostartEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_BOOT_AUTOSTART] ?: false }
     suspend fun setBootAutostartEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_BOOT_AUTOSTART] = enabled }
+    }
+
+    val pingMode: Flow<String> = context.dataStore.data.map { it[KEY_PING_MODE] ?: "TCP" }
+    suspend fun setPingMode(mode: String) {
+        context.dataStore.edit { it[KEY_PING_MODE] = mode }
     }
 
     suspend fun clearAll() {

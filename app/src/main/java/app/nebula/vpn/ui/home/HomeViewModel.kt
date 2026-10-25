@@ -6,6 +6,7 @@ import app.nebula.vpn.core.model.ConnectionState
 import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.core.model.ThemeConfig
 import app.nebula.vpn.core.model.TrafficStats
+import app.nebula.vpn.core.proxy.PingTester
 import app.nebula.vpn.data.database.entity.SubscriptionEntity
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.SettingsRepository
@@ -13,6 +14,7 @@ import app.nebula.vpn.data.repository.SubscriptionRepository
 import app.nebula.vpn.data.repository.ThemeRepository
 import app.nebula.vpn.data.repository.VpnRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -31,7 +33,8 @@ class HomeViewModel @Inject constructor(
     private val profileRepository: ProfileRepository,
     private val subscriptionRepository: SubscriptionRepository,
     private val settingsRepository: SettingsRepository,
-    private val themeRepository: ThemeRepository
+    private val themeRepository: ThemeRepository,
+    private val pingTester: PingTester
 ) : ViewModel() {
 
     val connectionState: StateFlow<ConnectionState> = vpnRepository.connectionState
@@ -109,7 +112,7 @@ class HomeViewModel @Inject constructor(
             val profile = profileRepository.getProfileById(id)
             _selectedProfile.value = profile
             if (connectionState.value is ConnectionState.Connected) {
-                vpnRepository.startVpn(id)
+                vpnRepository.switchProfile(id)
             }
         }
     }
@@ -120,6 +123,18 @@ class HomeViewModel @Inject constructor(
             _isRefreshingSubscription.value = true
             subscriptionRepository.refreshSubscription(sub.id)
             _isRefreshingSubscription.value = false
+        }
+    }
+
+    fun pingActiveServer() {
+        val profile = _selectedProfile.value ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            val latency = pingTester.pingTcp(profile.server, profile.port)
+            profileRepository.updatePing(profile.id, latency)
+            val updated = profileRepository.getProfileById(profile.id)
+            if (updated != null) {
+                _selectedProfile.value = updated
+            }
         }
     }
 

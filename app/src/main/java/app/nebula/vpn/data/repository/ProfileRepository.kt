@@ -36,8 +36,11 @@ class ProfileRepository @Inject constructor(
     }
 
     suspend fun updatePing(id: String, pingMs: Long) {
-        val entity = profileDao.getProfileById(id) ?: return
-        profileDao.updateProfile(entity.copy(lastPingMs = pingMs))
+        profileDao.updatePing(id, pingMs)
+    }
+
+    suspend fun updatePingsBatch(updates: Map<String, Long>) {
+        profileDao.updatePingsBatch(updates)
     }
 
     suspend fun toggleFavorite(id: String) {

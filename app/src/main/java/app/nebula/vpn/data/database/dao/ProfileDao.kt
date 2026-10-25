@@ -30,6 +30,16 @@ interface ProfileDao {
     @Update
     suspend fun updateProfile(profile: ProfileEntity)
 
+    @Query("UPDATE profiles SET lastPingMs = :pingMs WHERE id = :id")
+    suspend fun updatePing(id: String, pingMs: Long)
+
+    @androidx.room.Transaction
+    suspend fun updatePingsBatch(updates: Map<String, Long>) {
+        for ((id, ping) in updates) {
+            updatePing(id, ping)
+        }
+    }
+
     @Delete
     suspend fun deleteProfile(profile: ProfileEntity)
 

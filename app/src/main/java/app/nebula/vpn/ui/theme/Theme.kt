@@ -1,6 +1,7 @@
 package app.nebula.vpn.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -17,6 +18,24 @@ import app.nebula.vpn.core.model.ThemeMode
 
 val LocalThemeConfig = compositionLocalOf { ThemeConfig() }
 
+fun ThemeConfig.getCardShape(): CornerBasedShape = when (buttonShape) {
+    ButtonShape.ROUNDED -> RoundedCornerShape(26.dp)
+    ButtonShape.SQUIRCLE -> RoundedCornerShape(16.dp)
+    ButtonShape.SHARP -> RoundedCornerShape(4.dp)
+}
+
+fun ThemeConfig.getChipShape(): CornerBasedShape = when (buttonShape) {
+    ButtonShape.ROUNDED -> RoundedCornerShape(50)
+    ButtonShape.SQUIRCLE -> RoundedCornerShape(10.dp)
+    ButtonShape.SHARP -> RoundedCornerShape(2.dp)
+}
+
+fun ThemeConfig.getButtonShape(): CornerBasedShape = when (buttonShape) {
+    ButtonShape.ROUNDED -> RoundedCornerShape(50)
+    ButtonShape.SQUIRCLE -> RoundedCornerShape(14.dp)
+    ButtonShape.SHARP -> RoundedCornerShape(4.dp)
+}
+
 @Composable
 fun NebulaTheme(
     config: ThemeConfig = ThemeConfig(),
@@ -29,10 +48,43 @@ fun NebulaTheme(
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
 
+    val isAmoled = config.mode == ThemeMode.AMOLED
+
     val primary = parseColor(config.primaryColorHex, EmeraldGreen)
     val accent = parseColor(config.accentColorHex, MintTeal)
-    val surface = if (config.mode == ThemeMode.AMOLED) Color(0xFF13171C) else parseColor(config.surfaceColorHex, SlateGrey)
-    val background = if (config.mode == ThemeMode.AMOLED) Color(0xFF090C0E) else parseColor(config.backgroundColorHex, DeepBlack)
+
+    // TRUE PITCH BLACK FOR AMOLED (#000000)
+    val background = if (isAmoled) {
+        Color(0xFF000000)
+    } else if (isDark) {
+        parseColor(config.backgroundColorHex, DeepBlack)
+    } else {
+        PureWhite
+    }
+
+    val surface = if (isAmoled) {
+        Color(0xFF040608)
+    } else if (isDark) {
+        parseColor(config.surfaceColorHex, SlateGrey)
+    } else {
+        Color(0xFFF4F4F6)
+    }
+
+    val surfaceVariant = if (isAmoled) {
+        Color(0xFF0A0E14)
+    } else if (isDark) {
+        SlateGreyLight
+    } else {
+        Color(0xFFE5E7EB)
+    }
+
+    val outline = if (isAmoled) {
+        if (config.neonBordersEnabled) primary.copy(alpha = 0.55f) else Color(0xFF161F2C)
+    } else if (isDark) {
+        if (config.neonBordersEnabled) primary.copy(alpha = 0.45f) else BorderSubtle
+    } else {
+        Color(0xFFDCDCE2)
+    }
 
     val colorScheme = if (isDark) {
         darkColorScheme(
@@ -40,12 +92,12 @@ fun NebulaTheme(
             secondary = accent,
             background = background,
             surface = surface,
-            surfaceVariant = SlateGreyLight,
+            surfaceVariant = surfaceVariant,
             onPrimary = PureWhite,
             onSecondary = PureWhite,
             onBackground = PureWhite,
             onSurface = PureWhite,
-            outline = BorderSubtle
+            outline = outline
         )
     } else {
         lightColorScheme(
@@ -61,24 +113,17 @@ fun NebulaTheme(
         )
     }
 
-    val radius = config.cornerRadiusDp.dp
-    val shapes = when (config.buttonShape) {
-        ButtonShape.ROUNDED -> Shapes(
-            small = RoundedCornerShape(radius / 2),
-            medium = RoundedCornerShape(radius),
-            large = RoundedCornerShape(radius * 1.5f)
+    val shapes = Shapes(
+        small = config.getChipShape(),
+        medium = config.getCardShape(),
+        large = RoundedCornerShape(
+            when (config.buttonShape) {
+                ButtonShape.ROUNDED -> 32.dp
+                ButtonShape.SQUIRCLE -> 22.dp
+                ButtonShape.SHARP -> 6.dp
+            }
         )
-        ButtonShape.SQUIRCLE -> Shapes(
-            small = RoundedCornerShape(radius / 2),
-            medium = RoundedCornerShape(radius),
-            large = RoundedCornerShape(radius * 1.5f)
-        )
-        ButtonShape.SHARP -> Shapes(
-            small = RoundedCornerShape(4.dp),
-            medium = RoundedCornerShape(6.dp),
-            large = RoundedCornerShape(8.dp)
-        )
-    }
+    )
 
     CompositionLocalProvider(LocalThemeConfig provides config) {
         MaterialTheme(

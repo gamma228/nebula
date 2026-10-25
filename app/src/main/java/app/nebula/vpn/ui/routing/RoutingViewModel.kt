@@ -116,6 +116,56 @@ class RoutingViewModel @Inject constructor(
         }
     }
 
+    fun applyRuDirectPreset() {
+        viewModelScope.launch {
+            val current = customRules.value.toMutableList()
+            val presets = listOf(
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "ru", RuleAction.DIRECT, priority = current.size),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "su", RuleAction.DIRECT, priority = current.size + 1),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "xn--p1ai", RuleAction.DIRECT, priority = current.size + 2)
+            )
+            routingRepository.saveRules(presets)
+        }
+    }
+
+    fun applySocialsProxyPreset() {
+        viewModelScope.launch {
+            val current = customRules.value.toMutableList()
+            val presets = listOf(
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "instagram.com", RuleAction.PROXY, priority = current.size),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "cdninstagram.com", RuleAction.PROXY, priority = current.size + 1),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "twitter.com", RuleAction.PROXY, priority = current.size + 2),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "x.com", RuleAction.PROXY, priority = current.size + 3),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_SUFFIX, "facebook.com", RuleAction.PROXY, priority = current.size + 4)
+            )
+            routingRepository.saveRules(presets)
+        }
+    }
+
+    fun applyAdBlockPreset() {
+        viewModelScope.launch {
+            val current = customRules.value.toMutableList()
+            val presets = listOf(
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_KEYWORD, "doubleclick", RuleAction.BLOCK, priority = current.size),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_KEYWORD, "adservice", RuleAction.BLOCK, priority = current.size + 1),
+                RoutingRule(UUID.randomUUID().toString(), RuleType.DOMAIN_KEYWORD, "googleadservices", RuleAction.BLOCK, priority = current.size + 2)
+            )
+            routingRepository.saveRules(presets)
+        }
+    }
+
+    fun clearAllRules() {
+        viewModelScope.launch {
+            for (rule in customRules.value) {
+                routingRepository.deleteRule(rule.id)
+            }
+        }
+    }
+
+    fun clearTraceResult() {
+        _domainTraceResult.value = null
+    }
+
     fun traceDomain(domain: String) {
         val cleanDomain = domain.trim().lowercase()
         for (rule in customRules.value.sortedBy { it.priority }) {

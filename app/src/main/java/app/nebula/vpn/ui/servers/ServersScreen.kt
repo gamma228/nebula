@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
@@ -98,6 +100,12 @@ fun ServersScreen(
     val selectedProtocol by viewModel.selectedProtocolFilter.collectAsState()
     val selectedId by viewModel.selectedProfileId.collectAsState()
     val favoriteOnly by viewModel.filterFavoriteOnly.collectAsState()
+    val isPinging by viewModel.isPinging.collectAsState()
+    val isPingingAll by viewModel.isPingingAll.collectAsState()
+    val pingingSubscriptionId by viewModel.pingingSubscriptionId.collectAsState()
+    val pingingProfileId by viewModel.pingingProfileId.collectAsState()
+    val pingProgress by viewModel.pingProgress.collectAsState()
+    val sortByPing by viewModel.sortByPing.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val statusMessage by viewModel.importStatusMessage.collectAsState()
 
@@ -279,6 +287,35 @@ fun ServersScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Ping all profiles in entire app
+                    IconButton(
+                        onClick = { viewModel.pingAllProfiles() },
+                        enabled = !isPingingAll && !isImporting
+                    ) {
+                        if (isPingingAll) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = "Проверить пинг всех",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    // Sort by latency
+                    IconButton(onClick = { viewModel.toggleSortByPing() }) {
+                        Icon(
+                            imageVector = Icons.Default.Sort,
+                            contentDescription = "Сортировка по пингу",
+                            tint = if (sortByPing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+
                     IconButton(
                         onClick = { viewModel.refreshAllSubscriptions() },
                         enabled = !isImporting
@@ -300,6 +337,18 @@ fun ServersScreen(
                         )
                     }
                 }
+            }
+
+            if (isPingingAll) {
+                LinearProgressIndicator(
+                    progress = { pingProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp)),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
             }
 
             // Search Bar
@@ -365,7 +414,11 @@ fun ServersScreen(
                         profiles = subProfiles,
                         selectedId = selectedId,
                         isExpanded = isExpanded,
+                        isPinging = (pingingSubscriptionId == sub.id),
+                        pingingProfileId = pingingProfileId,
                         onToggleExpand = { expandedSubs[sub.id] = !isExpanded },
+                        onPingSubscription = { viewModel.pingSubscriptionProfiles(sub.id) },
+                        onPingProfile = { viewModel.pingSingleProfile(it) },
                         onRefresh = { viewModel.refreshSubscription(sub.id) },
                         onDelete = { viewModel.deleteSubscription(sub.id) },
                         onSelectProfile = { viewModel.selectProfile(it) },
@@ -392,9 +445,11 @@ fun ServersScreen(
                         ServerItemCard(
                             profile = profile,
                             isSelected = profile.id == selectedId,
+                            isPinging = (pingingProfileId == profile.id),
                             onSelect = { viewModel.selectProfile(profile.id) },
                             onToggleFavorite = { viewModel.toggleFavorite(profile.id) },
-                            onDelete = { viewModel.deleteProfile(profile.id) }
+                            onDelete = { viewModel.deleteProfile(profile.id) },
+                            onPing = { viewModel.pingSingleProfile(profile.id) }
                         )
                     }
                 }
@@ -414,7 +469,11 @@ private fun SubscriptionAccordion(
     profiles: List<ProxyProfile>,
     selectedId: String?,
     isExpanded: Boolean,
+    isPinging: Boolean = false,
+    pingingProfileId: String? = null,
     onToggleExpand: () -> Unit,
+    onPingSubscription: () -> Unit,
+    onPingProfile: (String) -> Unit,
     onRefresh: () -> Unit,
     onDelete: () -> Unit,
     onSelectProfile: (String) -> Unit,
@@ -480,15 +539,16 @@ private fun SubscriptionAccordion(
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 text = subscription.title.ifBlank { "Подписка" },
-                                fontSize = 15.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
@@ -506,6 +566,26 @@ private fun SubscriptionAccordion(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onPingSubscription,
+                        enabled = !isPinging,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        if (isPinging) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = "Проверить пинг подписки",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
@@ -532,50 +612,75 @@ private fun SubscriptionAccordion(
                 }
             }
 
-            // Quota Bar
-            val total = subscription.totalBytes ?: (20L * 1024 * 1024 * 1024)
+            // Quota Bar (only shown when real quota/expiry or usage exists)
+            val total = subscription.totalBytes
             val used = (subscription.uploadBytes ?: 0L) + (subscription.downloadBytes ?: 0L)
-            val progress = if (total > 0) (used.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+            val hasQuota = total != null && total > 0L
+            val hasExpiry = subscription.expireEpochSeconds != null && subscription.expireEpochSeconds > 0L
 
-            val daysRemaining = if (subscription.expireEpochSeconds != null) {
-                val nowSec = System.currentTimeMillis() / 1000
-                val diffSec = subscription.expireEpochSeconds - nowSec
-                (diffSec / 86400).coerceAtLeast(0)
-            } else {
-                30L
+            if (hasQuota || hasExpiry || used > 0L) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    if (hasExpiry) {
+                        val nowSec = System.currentTimeMillis() / 1000
+                        val diffSec = subscription.expireEpochSeconds!! - nowSec
+                        val daysRemaining = (diffSec / 86400).coerceAtLeast(0)
+                        Text(
+                            text = "Осталось $daysRemaining дн.",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    } else {
+                        Text(
+                            text = "Бессрочно",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+
+                    if (hasQuota) {
+                        Text(
+                            text = "${formatBytes(used)} / ${formatBytes(total!!)}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                    } else if (used > 0L) {
+                        Text(
+                            text = "Использовано: ${formatBytes(used)}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                    } else {
+                        Text(
+                            text = "Безлимит",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                        )
+                    }
+                }
+
+                if (hasQuota) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    val progress = (used.toFloat() / total!!.toFloat()).coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = EmeraldGreen,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                        strokeCap = StrokeCap.Round
+                    )
+                }
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "Осталось $daysRemaining дн.",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-                Text(
-                    text = "${formatBytes(used)} / ${formatBytes(total)}",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp)),
-                color = EmeraldGreen,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                strokeCap = StrokeCap.Round
-            )
 
             // Inner Profiles List
             AnimatedVisibility(visible = isExpanded) {
@@ -588,9 +693,11 @@ private fun SubscriptionAccordion(
                         ServerItemCard(
                             profile = profile,
                             isSelected = isSelected,
+                            isPinging = (pingingProfileId == profile.id),
                             onSelect = { onSelectProfile(profile.id) },
                             onToggleFavorite = { onToggleFavorite(profile.id) },
-                            onDelete = { onDeleteProfile(profile.id) }
+                            onDelete = { onDeleteProfile(profile.id) },
+                            onPing = { onPingProfile(profile.id) }
                         )
                     }
                 }
@@ -603,9 +710,11 @@ private fun SubscriptionAccordion(
 private fun ServerItemCard(
     profile: ProxyProfile,
     isSelected: Boolean,
+    isPinging: Boolean = false,
     onSelect: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onPing: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(
@@ -683,27 +792,56 @@ private fun ServerItemCard(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Ping Badge
+                // Clickable Ping Badge for Single Server
                 val ping = profile.lastPingMs
                 val pingColor = when {
                     ping == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    ping < 0 -> StatusRed
                     ping < 120 -> StatusGreen
                     ping < 250 -> StatusYellow
                     else -> StatusRed
                 }
-                Box(
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(pingColor)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (ping != null) "$ping ms" else "--",
-                    fontSize = 11.sp,
-                    color = pingColor,
-                    fontWeight = FontWeight.Medium
-                )
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(pingColor.copy(alpha = 0.12f))
+                        .clickable(enabled = !isPinging) { onPing() }
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                ) {
+                    if (isPinging) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "...",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(pingColor)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = when {
+                                ping == null -> "--"
+                                ping < 0 -> "Таймаут"
+                                else -> "$ping ms"
+                            },
+                            fontSize = 11.sp,
+                            color = pingColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
 
                 IconButton(onClick = onToggleFavorite, modifier = Modifier.size(28.dp)) {
                     Icon(

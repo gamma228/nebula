@@ -11,5 +11,6 @@ interface ProxyCore {
     suspend fun start(configJson: String, tunProvider: TunProvider)
     suspend fun stop()
     suspend fun urlTest(groupTag: String)
-    suspend fun selectOutbound(groupTag: String, outboundTag: String)
+    suspend fun selectOutbound(groupTag: String, outboundTag: String): Boolean
+    suspend fun reloadConfig(configJson: String)
 }

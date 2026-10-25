@@ -49,19 +49,24 @@ object SingBoxConfigBuilder {
             }
 
             // 2. DNS configuration
+            val hasProfiles = config.activeProfile != null || config.allProfiles.isNotEmpty()
+            val proxyDetourTag = if (hasProfiles) "select" else "direct"
+
             putJsonObject("dns") {
                 putJsonArray("servers") {
-                    // Remote DNS (DoH or UDP)
+                    // Remote DNS (DoH or UDP) detoured to the proxy for complete bypass
                     add(buildJsonObject {
                         put("type", if (config.remoteDnsUrl.startsWith("https://")) "https" else "udp")
                         put("tag", "dns-remote")
                         put("server", config.remoteDnsUrl.removePrefix("https://").substringBefore("/"))
+                        put("detour", proxyDetourTag)
                         put("domain_resolver", "dns-direct")
                     })
-                    // Local direct DNS
+                    // Local direct DNS for resolving proxy node server addresses & local domains
                     add(buildJsonObject {
                         put("type", "local")
                         put("tag", "dns-direct")
+                        put("detour", "direct")
                     })
                     if (config.fakeDnsEnabled) {
                         add(buildJsonObject {
@@ -78,7 +83,19 @@ object SingBoxConfigBuilder {
                             put("server", "dns-fakeip")
                         })
                     }
+                    val directDomains = config.customRules
+                        .filter { it.isEnabled && it.action == RuleAction.DIRECT }
+                        .map { it.value }
+                    if (directDomains.isNotEmpty()) {
+                        add(buildJsonObject {
+                            putJsonArray("domain_suffix") {
+                                for (d in directDomains) add(JsonPrimitive(d))
+                            }
+                            put("server", "dns-direct")
+                        })
+                    }
                 }
+                put("strategy", "prefer_ipv4")
                 if (config.fakeDnsEnabled) {
                     putJsonObject("fakeip") {
                         put("enabled", true)
@@ -99,7 +116,8 @@ object SingBoxConfigBuilder {
                     put("mtu", config.mtu)
                     put("auto_route", true)
                     put("strict_route", config.killSwitchEnabled)
-                    put("stack", "gvisor")
+                    put("endpoint_independent_nat", true)
+                    put("stack", "mixed")
                 })
 
                 if (config.localPortMixedInbound != null && config.localPortMixedInbound > 0) {
@@ -114,37 +132,32 @@ object SingBoxConfigBuilder {
 
             // 4. Outbounds
             val outboundsList = mutableListOf<JsonObject>()
-            val activeTag: String
+            val allProfilesList = if (config.allProfiles.isNotEmpty()) {
+                config.allProfiles
+            } else if (config.activeProfile != null) {
+                listOf(config.activeProfile)
+            } else {
+                emptyList()
+            }
 
-            if (config.activeProfile != null) {
-                activeTag = "proxy-${config.activeProfile.id}"
-                outboundsList.add(buildOutboundForProfile(config.activeProfile, activeTag))
+            if (allProfilesList.isNotEmpty()) {
+                val activeId = config.activeProfile?.id ?: allProfilesList.first().id
+                val profileTags = allProfilesList.map { "proxy-${it.id}" }
 
-                // Also add other profiles if needed for groups
-                for (p in config.allProfiles) {
-                    if (p.id != config.activeProfile.id) {
-                        outboundsList.add(buildOutboundForProfile(p, "proxy-${p.id}"))
+                // Selector outbound for instant, seamless hot-switching
+                outboundsList.add(buildJsonObject {
+                    put("type", "selector")
+                    put("tag", "select")
+                    putJsonArray("outbounds") {
+                        for (tag in profileTags) add(JsonPrimitive(tag))
                     }
-                }
-            } else if (config.allProfiles.isNotEmpty()) {
-                // Auto URL-test fastest
-                activeTag = "auto-urltest"
-                for (p in config.allProfiles) {
+                    put("default", "proxy-$activeId")
+                })
+
+                // Add all individual node outbounds
+                for (p in allProfilesList) {
                     outboundsList.add(buildOutboundForProfile(p, "proxy-${p.id}"))
                 }
-                outboundsList.add(buildJsonObject {
-                    put("type", "urltest")
-                    put("tag", activeTag)
-                    putJsonArray("outbounds") {
-                        for (p in config.allProfiles) {
-                            add(JsonPrimitive("proxy-${p.id}"))
-                        }
-                    }
-                    put("url", "https://www.gstatic.com/generate_204")
-                    put("interval", "3m0s")
-                })
-            } else {
-                activeTag = "direct"
             }
 
             // Built-in outbounds
@@ -164,10 +177,12 @@ object SingBoxConfigBuilder {
             }
 
             // 5. Route rules
+            val finalTarget = if (allProfilesList.isNotEmpty()) "select" else "direct"
+
             putJsonObject("route") {
                 put("default_domain_resolver", "dns-direct")
                 put("auto_detect_interface", true)
-                put("final", if (config.killSwitchEnabled && activeTag != "direct") activeTag else activeTag)
+                put("final", finalTarget)
 
                 val referencedRuleSets = config.customRules
                     .filter { it.isEnabled && it.type == RuleType.RULE_SET }
@@ -199,6 +214,18 @@ object SingBoxConfigBuilder {
                         put("protocol", "dns")
                         put("action", "hijack-dns")
                     })
+                    add(buildJsonObject {
+                        putJsonArray("port") {
+                            add(JsonPrimitive(53))
+                        }
+                        put("action", "hijack-dns")
+                    })
+
+                    // Always bypass private / LAN networks
+                    add(buildJsonObject {
+                        put("ip_is_private", true)
+                        put("outbound", "direct")
+                    })
 
                     // Per-App routing rules (at the sing-box route layer)
                     if (config.targetPackages.isNotEmpty()) {
@@ -208,7 +235,7 @@ object SingBoxConfigBuilder {
                                     putJsonArray("package_name") {
                                         for (pkg in config.targetPackages) add(JsonPrimitive(pkg))
                                     }
-                                    put("outbound", activeTag)
+                                    put("outbound", finalTarget)
                                 })
                                 add(buildJsonObject {
                                     put("outbound", "direct")
@@ -232,7 +259,7 @@ object SingBoxConfigBuilder {
                         val ruleTarget = when (rule.action) {
                             RuleAction.DIRECT -> "direct"
                             RuleAction.BLOCK -> "block"
-                            RuleAction.PROXY -> rule.targetOutbound ?: activeTag
+                            RuleAction.PROXY -> rule.targetOutbound ?: finalTarget
                         }
 
                         add(buildJsonObject {
@@ -272,17 +299,22 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("uuid", profile.authSecret)
-                    if (profile.tls.realityPublicKey.isNotEmpty()) {
-                        put("flow", "xtls-rprx-vision")
+                    val flowVal = when {
+                        profile.tls.flow.isNotEmpty() -> profile.tls.flow
+                        profile.tls.realityPublicKey.isNotEmpty() && profile.transport.type == TransportType.TCP -> "xtls-rprx-vision"
+                        else -> null
+                    }
+                    if (flowVal != null) {
+                        put("flow", flowVal)
                     }
                     if (profile.tls.enabled) {
                         putJsonObject("tls") {
                             put("enabled", true)
                             put("server_name", profile.tls.serverName.ifEmpty { profile.server })
-                            if (profile.tls.utlsFingerprint.isNotEmpty()) {
+                            if (profile.tls.realityPublicKey.isNotEmpty() || profile.tls.utlsFingerprint.isNotEmpty()) {
                                 putJsonObject("utls") {
                                     put("enabled", true)
-                                    put("fingerprint", profile.tls.utlsFingerprint)
+                                    put("fingerprint", profile.tls.utlsFingerprint.ifEmpty { "chrome" })
                                 }
                             }
                             if (profile.tls.realityPublicKey.isNotEmpty()) {
