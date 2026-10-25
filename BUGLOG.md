@@ -233,3 +233,53 @@ Users reported connecting successfully to proxy nodes, but traffic was not circu
   - Cold start: Verified (PID 16311)
   - UI evidence saved to `screen_release_home.png` and `screen_release_home_main.png`.
 
+---
+
+## [D7] CLEAN VPN TEARDOWN SYNCHRONIZATION & PHYSICAL INTERFACE RESOLUTION
+
+### Symptoms & Root Cause
+1. **VPN Disconnect Hang & Lingering System Activity**:
+   - *Symptom*: User pressed Disconnect; UI immediately flashed Disconnected, but the Android system VPN status bar key icon stayed on indefinitely, `ProxyVpnService` remained alive, and `tun0` lingered in the kernel routing table.
+   - *Root Cause*:
+     - `ProxyVpnService.onDestroy()` called `serviceScope.cancel()`. However, `stopVpnTunnel()` was launched inside `serviceScope`. When `stopSelf()` was reached, the system immediately triggered `onDestroy()`, which cancelled `serviceScope` while `proxyCore.stop()` or `tunInterface?.close()` was still in-flight, leaving the native TUN file descriptor open and the service orphaned.
+     - The outer mutex in `stopVpnTunnel()` had a rigid 3000ms timeout that raced against inner `proxyCore.stop()` teardown.
+     - `DefaultConnectionManager.disconnect()` eagerly transitioned UI state to `Disconnected` without waiting for `ProxyVpnService` to complete teardown.
+2. **Proxy Traffic Failure on Free Subscription Nodes ("No Available Network Interface")**:
+   - *Symptom*: Nodes imported from public subscriptions (VLESS, VMess, Trojan, Shadowsocks) worked properly in v2rayNG, but in Nebula failed to pass any data or bypass restrictions.
+   - *Root Cause*:
+     - In `SingBoxConfigBuilder.kt`, `auto_detect_interface: true` was included in the route configuration. On Android 10+ (API 29+), sing-box's desktop route engine (`default_parallel_interface.go` / `selectInterfaces`) attempts raw netlink socket queries (`netlink_route_socket`), which SELinux strictly denies for `untrusted_app` (`avc: denied { bind } for netlink_route_socket`).
+     - Furthermore, `PlatformInterface.startDefaultInterfaceMonitor` in `LibboxCore.kt` was an empty stub method. When sing-box started its dialer, it received zero physical interface data.
+     - Consequently, whenever sing-box attempted to open an outbound connection to any remote proxy IP, it failed immediately with `ERROR: open connection to <ip>:<port>: no available network interface` and aborted every single TCP/UDP connection.
+     - Additionally, for WebSocket-based nodes, sing-box uTLS negotiated HTTP/2 by default, which edge CDNs (Cloudflare, NGINX) reject for WebSocket upgrades unless ALPN `["http/1.1"]` is explicitly requested.
+
+### Invariant Fix
+1. **Dedicated Teardown Scope & Deterministic Teardown Sequence**:
+   - Introduced `teardownScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)` in `ProxyVpnService` that survives `onDestroy()`.
+   - Guaranteed sequential shutdown order: `proxyCore.stop()` -> `tunInterface?.close()` -> `stopForeground(STOP_FOREGROUND_REMOVE)` -> `vpnRepository.updateState(Disconnected)` -> `stopSelf()`.
+   - Increased outer teardown timeout to 5000ms.
+   - Updated `DefaultConnectionManager.disconnect()` to emit `Disconnecting` and await `Disconnected` before snapping.
+2. **Android Physical Interface Monitoring & Socket Protection**:
+   - Removed `auto_detect_interface: true` from `SingBoxConfigBuilder.kt`.
+   - Implemented `PlatformInterface.startDefaultInterfaceMonitor(listener)` using `ConnectivityManager.NetworkCallback` with `NET_CAPABILITY_INTERNET` and `NET_CAPABILITY_NOT_VPN`, querying physical network interfaces (`wlan0` / `eth0`) and invoking `listener.updateDefaultInterface(name, index, isExpensive, isConstrained)`.
+   - Implemented `PlatformInterface.getInterfaces()` returning a valid `NetworkInterfaceIterator`.
+   - Implemented `PlatformInterface.usePlatformAutoDetectInterfaceControl() = true` and `autoDetectInterfaceControl(fd)` calling `vpnService.protect(fd)` so outbound traffic bypasses the VPN tunnel without SELinux-prohibited netlink queries.
+   - Enforced ALPN `["http/1.1"]` on WebSocket outbounds.
+3. **Application ID Unification**:
+   - Removed `applicationIdSuffix = ".debug"` to ensure single consistent package `app.nebula.vpn` everywhere.
+
+### Automated Verification Proof
+1. **Live Emulator Teardown & Routing Verification (`emulator-5554`)**:
+   - Triggered connect -> `ProxyVpnService` started, `LibboxCore` registered physical interface `wlan0` (index 16), TUN established with fd=131.
+   - Outbound traffic logged: `outbound/shadowsocks: outbound connection to 185.242.86.156:54170` (Zero `no available network interface` errors).
+   - `dumpsys connectivity`: `Network 111 WIFI|VPN`, `Interface: tun0`, `UIDs: [0-99999]`, `UnderlyingNetworks: wlan0`.
+   - Triggered disconnect:
+     - `ProxyVpnService: Stopping VPN tunnel internally...`
+     - `LibboxCore stopped cleanly`
+     - `tunInterface closed successfully`
+     - `updateState -> Disconnected`
+     - `VPN tunnel stopped cleanly, key icon cleared`
+   - Executed `adb shell ip route`: `tun0` route immediately removed from kernel routing table.
+2. **Unit & Key Parity Test Suite**:
+   - `./gradlew.bat testDebugUnitTest`: **100% BUILD SUCCESSFUL** (30 tasks executed/up-to-date).
+
+

@@ -137,9 +137,9 @@ class DefaultLatencyTester(
     constructor(probe: LatencyProbe) : this(
         probe = probe,
         dispatcher = Dispatchers.IO,
-        parallelism = 6,
-        perServerTimeoutMs = 5000L,
-        globalTimeoutMs = 30000L
+        parallelism = 12,
+        perServerTimeoutMs = 1500L,
+        globalTimeoutMs = 20000L
     )
 
     private val _progress = MutableStateFlow(BatchTestProgress())
@@ -167,6 +167,20 @@ class DefaultLatencyTester(
 
         val semaphore = Semaphore(parallelism)
         var completedCount = 0
+        var lastEmitTime = 0L
+
+        fun maybeEmitProgress(force: Boolean = false) {
+            val now = System.currentTimeMillis()
+            if (force || now - lastEmitTime >= 150L) {
+                lastEmitTime = now
+                _progress.value = BatchTestProgress(
+                    completed = completedCount,
+                    total = profiles.size,
+                    isRunning = true,
+                    currentServerStates = HashMap(initialStates)
+                )
+            }
+        }
 
         val job = coroutineContext[Job]
         activeBatchJob = job
@@ -180,7 +194,7 @@ class DefaultLatencyTester(
                             if (!isActive) return@withPermit
                             synchronized(initialStates) {
                                 initialStates[profile.id] = ServerTestState.Testing
-                                _progress.value = _progress.value.copy(currentServerStates = HashMap(initialStates))
+                                maybeEmitProgress(force = false)
                             }
 
                             val state = try {
@@ -198,10 +212,7 @@ class DefaultLatencyTester(
                             synchronized(initialStates) {
                                 initialStates[profile.id] = state
                                 completedCount++
-                                _progress.value = _progress.value.copy(
-                                    completed = completedCount,
-                                    currentServerStates = HashMap(initialStates)
-                                )
+                                maybeEmitProgress(force = false)
                             }
                         }
                     }
@@ -217,6 +228,7 @@ class DefaultLatencyTester(
                 }
                 _progress.value = _progress.value.copy(
                     isRunning = false,
+                    completed = completedCount,
                     currentServerStates = HashMap(initialStates)
                 )
             }

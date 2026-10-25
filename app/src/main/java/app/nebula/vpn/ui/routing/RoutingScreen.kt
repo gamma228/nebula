@@ -23,9 +23,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import app.nebula.vpn.ui.theme.StatusGreen
+import app.nebula.vpn.ui.theme.StatusRed
+import app.nebula.vpn.ui.theme.StatusYellow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AltRoute
+import androidx.compose.material.icons.automirrored.filled.AltRoute
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
@@ -101,10 +104,7 @@ import app.nebula.vpn.core.model.AppRoutingMode
 import app.nebula.vpn.core.model.RoutingRule
 import app.nebula.vpn.core.model.RuleAction
 import app.nebula.vpn.core.model.RuleType
-import app.nebula.vpn.ui.theme.EmeraldGreen
-import app.nebula.vpn.ui.theme.StatusGreen
-import app.nebula.vpn.ui.theme.StatusRed
-import app.nebula.vpn.ui.theme.StatusYellow
+import app.nebula.vpn.ui.theme.NebulaTheme
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -422,7 +422,7 @@ fun RulesTabContent(
                             Icon(Icons.Default.Bolt, contentDescription = "Proxy", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                         }
                         IconButton(onClick = { onBulkChangeAction(RuleAction.DIRECT) }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.AltRoute, contentDescription = "Direct", tint = StatusGreen, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.AltRoute, contentDescription = "Direct", tint = StatusGreen, modifier = Modifier.size(18.dp))
                         }
                         IconButton(onClick = { onBulkChangeAction(RuleAction.BLOCK) }, modifier = Modifier.size(32.dp)) {
                             Icon(Icons.Default.Block, contentDescription = "Block", tint = StatusRed, modifier = Modifier.size(18.dp))
@@ -841,7 +841,7 @@ fun PresetsTabContent(
             PresetCard(
                 title = stringResource(R.string.preset_russia_direct),
                 description = stringResource(R.string.preset_russia_direct_desc),
-                icon = Icons.Default.AltRoute,
+                icon = Icons.AutoMirrored.Filled.AltRoute,
                 rulesPreview = listOf(".ru (Direct)", ".su (Direct)", ".рф (Direct)"),
                 onApply = onApplyRuDirect
             )

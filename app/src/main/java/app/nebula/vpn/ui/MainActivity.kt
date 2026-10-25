@@ -418,9 +418,10 @@ class MainActivity : AppCompatActivity() {
 
         Scaffold(
             bottomBar = {
+                val navColors = NebulaTheme.colors
                 NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = navColors.surface,
+                    contentColor = navColors.textPrimary
                 ) {
                     bottomBarScreens.forEach { screen ->
                         val isSelected = currentScreen == screen
@@ -430,11 +431,11 @@ class MainActivity : AppCompatActivity() {
                             selected = isSelected,
                             onClick = { currentScreen = screen },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = EmeraldGreen,
-                                selectedTextColor = EmeraldGreen,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                indicatorColor = EmeraldGreen.copy(alpha = 0.15f)
+                                selectedIconColor = navColors.primary,
+                                selectedTextColor = navColors.primary,
+                                unselectedIconColor = navColors.textMuted,
+                                unselectedTextColor = navColors.textMuted,
+                                indicatorColor = navColors.primary.copy(alpha = 0.15f)
                             )
                         )
                     }

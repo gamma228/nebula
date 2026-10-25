@@ -2,6 +2,10 @@ package app.nebula.vpn.core.proxy
 
 import android.content.Context
 import android.net.ConnectivityManager
+import android.net.LinkProperties
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Build
 import app.nebula.vpn.core.model.ConnectionState
 import app.nebula.vpn.core.model.TrafficStats
@@ -137,17 +141,32 @@ class LibboxCore(
     override suspend fun stop(): Unit = withContext(Dispatchers.IO) {
         try {
             _state.value = ConnectionState.Disconnecting
-            commandClient?.disconnect()
+            try {
+                commandClient?.disconnect()
+            } catch (e: Exception) {
+                android.util.Log.w("LibboxCore", "commandClient.disconnect error: ${e.message}")
+            }
             commandClient = null
 
-            commandServer?.closeService()
-            commandServer?.close()
+            try {
+                commandServer?.closeService()
+            } catch (e: Exception) {
+                android.util.Log.w("LibboxCore", "commandServer.closeService error: ${e.message}")
+            }
+
+            try {
+                commandServer?.close()
+            } catch (e: Exception) {
+                android.util.Log.w("LibboxCore", "commandServer.close error: ${e.message}")
+            }
             commandServer = null
             activeTunProvider = null
 
             _state.value = ConnectionState.Disconnected
             _stats.value = TrafficStats()
+            android.util.Log.i("LibboxCore", "LibboxCore stopped cleanly")
         } catch (e: Exception) {
+            android.util.Log.e("LibboxCore", "LibboxCore.stop error: ${e.message}", e)
             _state.value = ConnectionState.Disconnected
         }
         Unit
@@ -167,6 +186,12 @@ class LibboxCore(
         try {
             android.util.Log.i("LibboxCore", "selectOutbound: group=$groupTag, outbound=$outboundTag")
             client.selectOutbound(groupTag, outboundTag)
+            try {
+                client.closeConnections()
+                android.util.Log.i("LibboxCore", "closeConnections succeeded for clean switch")
+            } catch (e: Exception) {
+                android.util.Log.w("LibboxCore", "closeConnections warning: ${e.message}")
+            }
             android.util.Log.i("LibboxCore", "selectOutbound succeeded!")
             true
         } catch (e: Exception) {
@@ -210,6 +235,9 @@ class LibboxCore(
                         while (logs.hasNext()) {
                             val entry = logs.next()
                             val line = entry?.message ?: ""
+                            if (line.isNotBlank()) {
+                                android.util.Log.d("SingBoxCore", line)
+                            }
                             logBuffer.addLast(line)
                             if (logBuffer.size > 2000) {
                                 logBuffer.removeFirst()
@@ -236,16 +264,110 @@ class LibboxCore(
 
             val client = Libbox.newCommandClient(clientHandler, clientOptions)
             commandClient = client
-            client.connect()
+            var connected = false
+            for (attempt in 1..3) {
+                try {
+                    client.connect()
+                    connected = true
+                    android.util.Log.i("LibboxCore", "CommandClient connected successfully on attempt $attempt")
+                    break
+                } catch (e: Exception) {
+                    android.util.Log.w("LibboxCore", "CommandClient connect attempt $attempt failed: ${e.message}")
+                    Thread.sleep(100)
+                }
+            }
+            if (!connected) {
+                android.util.Log.e("LibboxCore", "Failed to connect CommandClient after 3 attempts")
+            }
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    private var defaultInterfaceMonitor: InterfaceUpdateListener? = null
+    private var defaultNetworkCallback: ConnectivityManager.NetworkCallback? = null
+
+    private fun notifyDefaultInterface(listener: InterfaceUpdateListener) {
+        try {
+            var ifaceName: String? = null
+            var isExpensive = false
+            var isConstrained = false
+
+            // 1. Check all physical networks that provide Internet and are not VPNs
+            val allNetworks = connectivityManager.allNetworks
+            for (net in allNetworks) {
+                val caps = connectivityManager.getNetworkCapabilities(net) ?: continue
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue
+                if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue
+
+                val lp = connectivityManager.getLinkProperties(net)
+                if (!lp?.interfaceName.isNullOrBlank()) {
+                    ifaceName = lp?.interfaceName
+                    isExpensive = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                    isConstrained = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED)
+                    } else false
+
+                    // Prefer WiFi / Ethernet over cellular for stability
+                    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                    ) {
+                        break
+                    }
+                }
+            }
+
+            // 2. Fallback to activeNetwork if not VPN
+            if (ifaceName == null) {
+                val activeNet = connectivityManager.activeNetwork
+                if (activeNet != null) {
+                    val caps = connectivityManager.getNetworkCapabilities(activeNet)
+                    if (caps != null && !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                        val lp = connectivityManager.getLinkProperties(activeNet)
+                        if (!lp?.interfaceName.isNullOrBlank()) {
+                            ifaceName = lp?.interfaceName
+                            isExpensive = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                            isConstrained = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED)
+                            } else false
+                        }
+                    }
+                }
+            }
+
+            // 3. Fallback to first active physical interface from java.net
+            if (ifaceName == null) {
+                val nifs = java.net.NetworkInterface.getNetworkInterfaces()
+                while (nifs?.hasMoreElements() == true) {
+                    val nif = nifs.nextElement()
+                    if (!nif.isLoopback && nif.isUp && !nif.name.startsWith("tun") && !nif.name.startsWith("dummy")) {
+                        ifaceName = nif.name
+                        break
+                    }
+                }
+            }
+
+            val finalName = ifaceName ?: ""
+            val index = if (finalName.isNotEmpty()) {
+                try {
+                    java.net.NetworkInterface.getByName(finalName)?.index ?: 0
+                } catch (_: Exception) { 0 }
+            } else {
+                -1
+            }
+
+            android.util.Log.i("LibboxCore", "updateDefaultInterface: name='$finalName', index=$index, expensive=$isExpensive, constrained=$isConstrained")
+            listener.updateDefaultInterface(finalName, index, isExpensive, isConstrained)
+        } catch (e: Exception) {
+            android.util.Log.e("LibboxCore", "Failed to notify default interface: ${e.message}", e)
         }
     }
 
     private fun createPlatformInterface(tunProvider: TunProvider): PlatformInterface {
         return object : PlatformInterface {
             override fun autoDetectInterfaceControl(fd: Int) {
-                tunProvider.protect(fd)
+                val protected = tunProvider.protect(fd)
+                android.util.Log.i("LibboxCore", "autoDetectInterfaceControl: fd=$fd, protected=$protected")
             }
 
             override fun cancelNotification(tag: String?, id: Int) {}
@@ -254,7 +376,15 @@ class LibboxCore(
 
             override fun clearDNSCache() {}
 
-            override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {}
+            override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
+                defaultNetworkCallback?.let {
+                    try {
+                        connectivityManager.unregisterNetworkCallback(it)
+                    } catch (_: Exception) {}
+                    defaultNetworkCallback = null
+                }
+                defaultInterfaceMonitor = null
+            }
 
             override fun closeNeighborMonitor(listener: NeighborUpdateListener?) {}
 
@@ -283,7 +413,42 @@ class LibboxCore(
                 return owner
             }
 
-            override fun getInterfaces(): NetworkInterfaceIterator? = null
+            override fun getInterfaces(): NetworkInterfaceIterator? {
+                return try {
+                    val nifs = java.net.NetworkInterface.getNetworkInterfaces() ?: return null
+                    val list = mutableListOf<io.nekohasekai.libbox.NetworkInterface>()
+                    for (nif in nifs.asSequence()) {
+                        if (nif.isLoopback || !nif.isUp) continue
+                        val libboxIface = io.nekohasekai.libbox.NetworkInterface().apply {
+                            name = nif.name
+                            index = nif.index
+                            mtu = try { nif.mtu } catch (_: Exception) { 1500 }
+
+                            val addrs = mutableListOf<String>()
+                            for (addr in nif.interfaceAddresses) {
+                                val ip = addr.address?.hostAddress ?: continue
+                                val cleanIp = ip.substringBefore('%')
+                                addrs.add("$cleanIp/${addr.networkPrefixLength}")
+                            }
+                            addresses = object : StringIterator {
+                                private var i = 0
+                                override fun hasNext(): Boolean = i < addrs.size
+                                override fun len(): Int = addrs.size
+                                override fun next(): String = addrs[i++]
+                            }
+                        }
+                        list.add(libboxIface)
+                    }
+                    object : NetworkInterfaceIterator {
+                        private var i = 0
+                        override fun hasNext(): Boolean = i < list.size
+                        override fun next(): io.nekohasekai.libbox.NetworkInterface = list[i++]
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("LibboxCore", "Error in getInterfaces: ${e.message}", e)
+                    null
+                }
+            }
 
             override fun includeAllNetworks(): Boolean = false
 
@@ -314,7 +479,36 @@ class LibboxCore(
 
             override fun sendNotification(notification: Notification?) {}
 
-            override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {}
+            override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener?) {
+                if (listener == null) return
+                defaultInterfaceMonitor = listener
+                notifyDefaultInterface(listener)
+
+                val callback = object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) {
+                        defaultInterfaceMonitor?.let { notifyDefaultInterface(it) }
+                    }
+                    override fun onLost(network: Network) {
+                        defaultInterfaceMonitor?.let { notifyDefaultInterface(it) }
+                    }
+                    override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
+                        defaultInterfaceMonitor?.let { notifyDefaultInterface(it) }
+                    }
+                    override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                        defaultInterfaceMonitor?.let { notifyDefaultInterface(it) }
+                    }
+                }
+                defaultNetworkCallback = callback
+                try {
+                    val request = NetworkRequest.Builder()
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                        .build()
+                    connectivityManager.registerNetworkCallback(request, callback)
+                } catch (e: Exception) {
+                    android.util.Log.e("LibboxCore", "Failed to register network callback: ${e.message}", e)
+                }
+            }
 
             override fun startNeighborMonitor(listener: NeighborUpdateListener?) {}
 

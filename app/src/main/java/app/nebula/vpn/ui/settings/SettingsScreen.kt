@@ -100,8 +100,8 @@ fun SettingsScreen(
     if (showPanicDialog) {
         AlertDialog(
             onDismissRequest = { showPanicDialog = false },
-            title = { Text("Экстренное удаление (Panic Wipe)") },
-            text = { Text("Все сохранённые профили, подписки, ключи и базы данных будут немедленно и безвозвратно уничтожены.") },
+            title = { Text(stringResource(R.string.panic_wipe)) },
+            text = { Text(stringResource(R.string.panic_wipe_confirm)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -110,12 +110,12 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusRed)
                 ) {
-                    Text("Уничтожить всё")
+                    Text(stringResource(R.string.panic_wipe))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showPanicDialog = false }) {
-                    Text("Отмена")
+                    Text(stringResource(android.R.string.cancel))
                 }
             }
         )
@@ -160,7 +160,7 @@ fun SettingsScreen(
     if (showConnectionDialog) {
         AlertDialog(
             onDismissRequest = { showConnectionDialog = false },
-            title = { Text("Настройки соединения") },
+            title = { Text(stringResource(R.string.settings_connection_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(
@@ -169,8 +169,8 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Автоподключение при старте", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Подключаться к VPN при запуске системы", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(stringResource(R.string.settings_autostart_title), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(stringResource(R.string.settings_autostart_desc), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Switch(
                             checked = bootAutostart,
@@ -185,8 +185,8 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Обход локальной сети (LAN)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Прямой доступ к устройствам в домашней сети", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(stringResource(R.string.settings_bypass_lan_title), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(stringResource(R.string.settings_bypass_lan_desc), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Switch(
                             checked = bypassLan,
@@ -201,8 +201,8 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Kill Switch (Блокировка утечек)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Блокировать весь трафик при обрыве туннеля", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(stringResource(R.string.settings_killswitch_title), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(stringResource(R.string.settings_killswitch_desc), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Switch(
                             checked = killSwitch,
@@ -214,7 +214,7 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showConnectionDialog = false }) {
-                    Text("Готово")
+                    Text(stringResource(R.string.settings_done))
                 }
             }
         )
@@ -224,7 +224,7 @@ fun SettingsScreen(
     if (showPingModeDialog) {
         AlertDialog(
             onDismissRequest = { showPingModeDialog = false },
-            title = { Text("Метод проверки задержки (пинга)") },
+            title = { Text(stringResource(R.string.settings_ping_method_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Card(
@@ -240,9 +240,9 @@ fun SettingsScreen(
                             }
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text("⚡ TCP Handshake (Рекомендуется)", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text(stringResource(R.string.settings_ping_tcp_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text("Замер времени открытия TCP-сокета до порта узла. Быстрый отклик, нулевой расход трафика.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(stringResource(R.string.settings_ping_tcp_desc), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                     }
 
@@ -259,16 +259,17 @@ fun SettingsScreen(
                             }
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
-                            Text("🌐 HTTP URL Test (204)", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                            Text(stringResource(R.string.settings_ping_http_title), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text("Реальный веб-запрос Cloudflare 204. Проверяет сквозную доступность интернета.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(stringResource(R.string.settings_ping_http_desc), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                     }
                 }
             },
-            confirmButton = {
+            confirmButton = {},
+            dismissButton = {
                 TextButton(onClick = { showPingModeDialog = false }) {
-                    Text("Отмена")
+                    Text(stringResource(android.R.string.cancel))
                 }
             }
         )
@@ -279,7 +280,7 @@ fun SettingsScreen(
         var tempDns by remember { mutableStateOf(remoteDns) }
         AlertDialog(
             onDismissRequest = { showTunnelDialog = false },
-            title = { Text("Туннель и DNS") },
+            title = { Text(stringResource(R.string.settings_tunnel_dns_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(
@@ -288,8 +289,8 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Fake-DNS (198.18.0.0/15)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("Ускорение соединений и защита от DNS poisoning", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(stringResource(R.string.settings_fake_dns_title), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(stringResource(R.string.settings_fake_dns_desc), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                         Switch(
                             checked = fakeDns,
@@ -299,7 +300,7 @@ fun SettingsScreen(
                     }
 
                     Column {
-                        Text("Удалённый DNS (DoH/DoT)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(stringResource(R.string.settings_remote_dns_title), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
                             value = tempDns,
@@ -318,12 +319,12 @@ fun SettingsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen)
                 ) {
-                    Text("Сохранить")
+                    Text(stringResource(R.string.settings_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showTunnelDialog = false }) {
-                    Text("Отмена")
+                    Text(stringResource(android.R.string.cancel))
                 }
             }
         )
@@ -333,19 +334,19 @@ fun SettingsScreen(
     if (showAboutDialog) {
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
-            title = { Text("О приложении Nebula") },
+            title = { Text(stringResource(R.string.about_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Nebula VPN Client v1.0.0", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text("Ядро прокси: SagerNet sing-box v1.14.4 (GPL-3.0)", fontSize = 13.sp)
-                    Text("Поддерживаемые протоколы: VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                    Text(stringResource(R.string.settings_about_protocols), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Полная приватность: 0 трекеров, 0 аналитики, 0 Google Play Services, 100% открытый исходный код.", fontSize = 12.sp, color = EmeraldGreen)
+                    Text(stringResource(R.string.settings_about_privacy), fontSize = 12.sp, color = EmeraldGreen)
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showAboutDialog = false }) {
-                    Text("Закрыть")
+                    Text(stringResource(R.string.settings_close))
                 }
             }
         )
@@ -415,7 +416,7 @@ fun SettingsScreen(
             icon = Icons.Default.Speed,
             iconTint = EmeraldGreen,
             iconBg = EmeraldGreen.copy(alpha = 0.15f),
-            title = "Ping Method",
+            title = stringResource(R.string.settings_ping_method_title),
             value = if (pingMode == "HTTP") "HTTP (URL 204)" else "TCP Handshake",
             onClick = { showPingModeDialog = true }
         )

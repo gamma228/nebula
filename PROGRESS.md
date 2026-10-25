@@ -93,6 +93,13 @@
   - **D5 (Material 3 Routing Redesign):** Elevated Routing to 5th top-level bottom nav item; segmented `[Rules | Apps | Presets | Test]` tabs; `SmartRuleParser`; `RuleConflictDetector`; Route Trace Simulator; 100% key parity across 5 locales.
   - **D6 (Stress, Soak & Release Verification):** 10,000-event ADB monkey test (0 crashes, 0 ANRs); 3-min continuous soak test (-1.2% PSS drift, 0 FD drift); physical diagnostics scripts; release signing & APK signature scheme v2 verification.
 
+- [x] **Phase 14: VPN Teardown Synchronization, Physical Interface Resolution & Tokenization (D7)**
+  - **VPN Teardown Synchronization:** Added dedicated `teardownScope` surviving `onDestroy()`, sequential cleanup (`proxyCore.stop()` -> `tunInterface?.close()` -> `stopForeground` -> `vpnRepository.updateState(Disconnected)` -> `stopSelf()`), 5s teardown timeout, guaranteed key icon removal and kernel `tun0` route deletion.
+  - **Free Subscription Nodes & Interface Monitor:** Resolved `no available network interface` error by removing desktop-only `auto_detect_interface` netlink binding (blocked by Android SELinux), implementing `PlatformInterface.startDefaultInterfaceMonitor` using `ConnectivityManager.NetworkCallback` to detect physical `wlan0`/`eth0` networks, enforcing ALPN `["http/1.1"]` for WebSocket outbounds, and protecting sockets with `VpnService.protect(fd)`.
+  - **Zero Fake Quota/Expiry:** Stripped synthetic 100GB/365-day defaults; empty headers display unlimited/permanent without synthetic counter values.
+  - **Subscription-Scoped Ping:** Per-subscription ping button only tests servers in that subscription.
+  - **Full UI Tokenization & Parity:** Tokenized dialogs in Settings, Tools, Appearance, Doctor; eliminated hardcoded Russian strings in favor of 5-language localized keys with `StringsParityTest` 100% green.
+
 ---
 
 ## Core Artifact Details

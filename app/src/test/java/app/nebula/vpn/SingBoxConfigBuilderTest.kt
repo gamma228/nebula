@@ -211,6 +211,44 @@ class SingBoxConfigBuilderTest {
         validateWithDesktopSingBox(config, "test-trojan-ws.json")
     }
 
+    @Test
+    fun testDnsConfigurationRobustness() {
+        val profile = ProxyProfile(
+            id = "test-dns",
+            name = "DNS-Test",
+            protocol = ProtocolType.VLESS,
+            server = "vpn.example.com",
+            port = 443,
+            authSecret = "uuid123",
+            tls = TlsConfig(enabled = true, serverName = "vpn.example.com")
+        )
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(activeProfile = profile)
+        )
+
+        // Verifies direct DNS uses native dns-local and fallback Yandex 77.88.8.8 and Google
+        assertTrue("Must contain dns-local", config.contains("\"tag\": \"dns-local\""))
+        assertTrue("Must contain dns-direct-yandex with Yandex 77.88.8.8", config.contains("\"server\": \"77.88.8.8\""))
+        assertTrue("Must contain dns-direct-google with 8.8.8.8", config.contains("\"tag\": \"dns-direct-google\""))
+        assertTrue("Default domain resolver must be dns-local", config.contains("\"default_domain_resolver\": \"dns-local\""))
+
+        // Verifies remote DNS provides DoH (TCP 443) through proxy for 100% proxy compatibility (including Cloudflare CDN)
+        assertTrue("Must contain dns-remote-doh", config.contains("\"tag\": \"dns-remote-doh\""))
+        assertTrue("Must contain dns-remote-google", config.contains("\"tag\": \"dns-remote-google\""))
+
+        // Verifies stack is gvisor for unrooted Android kernel safety
+        assertTrue("Must use gvisor stack", config.contains("\"stack\": \"gvisor\""))
+
+        // Verifies utls is enabled with chrome fingerprint by default
+        assertTrue("Must enable utls", config.contains("\"utls\""))
+        assertTrue("Must use chrome fingerprint", config.contains("\"fingerprint\": \"chrome\""))
+
+        // Verifies packet_encoding xudp is present for Xray compatibility
+        assertTrue("Must have packet_encoding xudp", config.contains("\"packet_encoding\": \"xudp\""))
+
+        validateWithDesktopSingBox(config, "test-dns-robust.json")
+    }
+
     private fun validateWithDesktopSingBox(configJson: String, tempFileName: String) {
         val singBoxBin = File("C:/Users/User/tools/sing-box.exe")
         if (singBoxBin.exists()) {

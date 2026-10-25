@@ -38,7 +38,7 @@ object SingBoxConfigBuilder {
         val routingMode: AppRoutingMode = AppRoutingMode.GLOBAL,
         val targetPackages: Set<String> = emptySet(),
         val remoteDnsUrl: String = "https://1.1.1.1/dns-query",
-        val fakeDnsEnabled: Boolean = false,
+        val fakeDnsEnabled: Boolean = true,
         val killSwitchEnabled: Boolean = false,
         val mtu: Int = 1500,
         val localPortMixedInbound: Int? = null // Optional local SOCKS/HTTP inbound
@@ -58,33 +58,67 @@ object SingBoxConfigBuilder {
 
             putJsonObject("dns") {
                 putJsonArray("servers") {
-                    // Remote DNS (DoH or UDP) detoured to the proxy for complete bypass
+                    // 1. Primary remote DNS (DoH over TCP 443 through proxy) - works over 100% of proxies (including Cloudflare CDN WebSockets/gRPC)
+                    add(buildJsonObject {
+                        put("type", "https")
+                        put("tag", "dns-remote-doh")
+                        put("server", "1.1.1.1")
+                        put("path", "/dns-query")
+                        put("detour", proxyDetourTag)
+                    })
+                    // 2. Secondary remote DNS (Google DoH over TCP 443 through proxy)
+                    add(buildJsonObject {
+                        put("type", "https")
+                        put("tag", "dns-remote-google")
+                        put("server", "8.8.8.8")
+                        put("path", "/dns-query")
+                        put("detour", proxyDetourTag)
+                    })
+                    // 3. User configured remote DNS (DoH or custom UDP)
                     if (config.remoteDnsUrl.startsWith("https://")) {
                         val withoutScheme = config.remoteDnsUrl.removePrefix("https://")
                         val serverHost = withoutScheme.substringBefore("/")
                         val path = "/" + withoutScheme.substringAfter("/", "dns-query")
                         add(buildJsonObject {
                             put("type", "https")
-                            put("tag", "dns-remote")
+                            put("tag", "dns-remote-custom")
                             put("server", serverHost)
                             put("path", path)
                             put("detour", proxyDetourTag)
-                            put("domain_resolver", "dns-direct")
                         })
-                    } else {
+                    } else if (config.remoteDnsUrl.isNotBlank()) {
                         val serverHost = config.remoteDnsUrl.removePrefix("udp://").substringBefore(":")
                         add(buildJsonObject {
                             put("type", "udp")
-                            put("tag", "dns-remote")
+                            put("tag", "dns-remote-custom")
                             put("server", serverHost)
                             put("detour", proxyDetourTag)
                         })
                     }
-                    // Local direct DNS for resolving proxy node server addresses & local domains
+                    // 4. Fast UDP remote DNS (for nodes with native UDP support)
+                    add(buildJsonObject {
+                        put("type", "udp")
+                        put("tag", "dns-remote-udp")
+                        put("server", "8.8.8.8")
+                        put("detour", proxyDetourTag)
+                    })
+                    // 5. Direct DNS via Android system native resolver
                     add(buildJsonObject {
                         put("type", "local")
-                        put("tag", "dns-direct")
+                        put("tag", "dns-local")
                         put("detour", "direct")
+                    })
+                    // 6. Direct DNS fallback (Yandex 77.88.8.8)
+                    add(buildJsonObject {
+                        put("type", "udp")
+                        put("tag", "dns-direct-yandex")
+                        put("server", "77.88.8.8")
+                    })
+                    // 7. Direct DNS fallback (Google 8.8.8.8)
+                    add(buildJsonObject {
+                        put("type", "udp")
+                        put("tag", "dns-direct-google")
+                        put("server", "8.8.8.8")
                     })
                     if (config.fakeDnsEnabled) {
                         add(buildJsonObject {
@@ -95,12 +129,26 @@ object SingBoxConfigBuilder {
                     }
                 }
                 putJsonArray("rules") {
-                    if (config.fakeDnsEnabled) {
-                        add(buildJsonObject {
-                            put("inbound", "tun-in")
-                            put("server", "dns-fakeip")
-                        })
-                    }
+                    // Local / Private domains resolve directly via local DNS
+                    add(buildJsonObject {
+                        putJsonArray("domain_suffix") {
+                            add(JsonPrimitive("local"))
+                            add(JsonPrimitive("lan"))
+                            add(JsonPrimitive("home.arpa"))
+                            add(JsonPrimitive("internal"))
+                        }
+                        put("server", "dns-local")
+                    })
+                    // Russian domestic domains resolve directly via local/direct DNS
+                    add(buildJsonObject {
+                        putJsonArray("domain_suffix") {
+                            add(JsonPrimitive("ru"))
+                            add(JsonPrimitive("su"))
+                            add(JsonPrimitive("xn--p1ai"))
+                        }
+                        put("server", "dns-local")
+                    })
+                    // User configured direct domains
                     val directDomains = config.customRules
                         .filter { it.isEnabled && it.action == RuleAction.DIRECT }
                         .map { it.value }
@@ -109,17 +157,20 @@ object SingBoxConfigBuilder {
                             putJsonArray("domain_suffix") {
                                 for (d in directDomains) add(JsonPrimitive(d))
                             }
-                            put("server", "dns-direct")
+                            put("server", "dns-local")
+                        })
+                    }
+                    // FakeIP for all other traffic when enabled
+                    if (config.fakeDnsEnabled) {
+                        add(buildJsonObject {
+                            putJsonArray("inbound") {
+                                add(JsonPrimitive("tun-in"))
+                            }
+                            put("server", "dns-fakeip")
                         })
                     }
                 }
                 put("strategy", "prefer_ipv4")
-                if (config.fakeDnsEnabled) {
-                    putJsonObject("fakeip") {
-                        put("enabled", true)
-                        put("inet4_range", "198.18.0.0/15")
-                    }
-                }
             }
 
             // 3. Inbounds
@@ -135,7 +186,7 @@ object SingBoxConfigBuilder {
                     put("auto_route", true)
                     put("strict_route", config.killSwitchEnabled)
                     put("endpoint_independent_nat", true)
-                    put("stack", "mixed")
+                    put("stack", "gvisor")
                 })
 
                 if (config.localPortMixedInbound != null && config.localPortMixedInbound > 0) {
@@ -198,8 +249,7 @@ object SingBoxConfigBuilder {
             val finalTarget = if (allProfilesList.isNotEmpty()) "select" else "direct"
 
             putJsonObject("route") {
-                put("default_domain_resolver", "dns-direct")
-                put("auto_detect_interface", true)
+                put("default_domain_resolver", "dns-local")
                 put("final", finalTarget)
 
                 val referencedRuleSets = config.customRules
@@ -300,47 +350,80 @@ object SingBoxConfigBuilder {
         return jsonSerializer.encodeToString(JsonObject.serializer(), root)
     }
 
-    private fun buildTlsObject(tls: TlsConfig, defaultServerName: String): JsonObject {
+    private fun buildTlsObject(
+        tls: TlsConfig,
+        defaultServerName: String,
+        transportType: TransportType = TransportType.TCP
+    ): JsonObject {
         return buildJsonObject {
             put("enabled", true)
-            put("server_name", tls.serverName.ifEmpty { defaultServerName })
-            if (tls.insecure) {
+            val sni = tls.serverName.ifEmpty { defaultServerName }
+            if (sni.isNotEmpty()) {
+                put("server_name", sni)
+            }
+            if (tls.realityPublicKey.isEmpty() && tls.insecure) {
                 put("insecure", true)
             }
-            if (tls.alpn.isNotEmpty()) {
+            val alpnToUse = if (tls.alpn.isNotEmpty()) {
+                tls.alpn
+            } else if (transportType == TransportType.WS) {
+                listOf("http/1.1")
+            } else {
+                emptyList()
+            }
+            if (alpnToUse.isNotEmpty()) {
                 putJsonArray("alpn") {
-                    for (a in tls.alpn) add(JsonPrimitive(a))
+                    for (a in alpnToUse) add(JsonPrimitive(a))
                 }
             }
-            if (tls.realityPublicKey.isNotEmpty() || tls.utlsFingerprint.isNotEmpty()) {
-                putJsonObject("utls") {
-                    put("enabled", true)
-                    put("fingerprint", tls.utlsFingerprint.ifEmpty { "chrome" })
-                }
+            val fp = tls.utlsFingerprint.ifEmpty { "chrome" }
+            putJsonObject("utls") {
+                put("enabled", true)
+                put("fingerprint", fp)
             }
             if (tls.realityPublicKey.isNotEmpty()) {
                 putJsonObject("reality") {
                     put("enabled", true)
                     put("public_key", tls.realityPublicKey)
-                    put("short_id", tls.realityShortId)
+                    if (tls.realityShortId.isNotEmpty()) {
+                        put("short_id", tls.realityShortId)
+                    }
                 }
             }
         }
     }
 
-    private fun buildTransportObject(transport: TransportConfig): JsonObject? {
+    private fun buildTransportObject(
+        transport: TransportConfig,
+        defaultHost: String = "",
+        sni: String = ""
+    ): JsonObject? {
         if (transport.type == TransportType.TCP) return null
         return buildJsonObject {
             when (transport.type) {
                 TransportType.WS -> {
                     put("type", "ws")
-                    if (transport.path.isNotEmpty()) {
-                        put("path", transport.path)
+                    val rawPath = transport.path
+                    val path = when {
+                        rawPath.isEmpty() -> "/"
+                        rawPath.startsWith("/") -> rawPath
+                        else -> "/$rawPath"
                     }
-                    if (transport.host.isNotEmpty()) {
+                    put("path", path)
+                    val hostHeader = when {
+                        transport.host.isNotEmpty() -> transport.host
+                        sni.isNotEmpty() -> sni
+                        defaultHost.isNotEmpty() -> defaultHost
+                        else -> ""
+                    }
+                    if (hostHeader.isNotEmpty()) {
                         putJsonObject("headers") {
-                            put("Host", transport.host)
+                            put("Host", hostHeader)
                         }
+                    }
+                    if (path.contains("ed=") || path.contains("early_data")) {
+                        put("max_early_data", 2048)
+                        put("early_data_header_name", "Sec-WebSocket-Protocol")
                     }
                 }
                 TransportType.GRPC -> {
@@ -351,11 +434,21 @@ object SingBoxConfigBuilder {
                 }
                 TransportType.HTTP_UPGRADE -> {
                     put("type", "httpupgrade")
-                    if (transport.path.isNotEmpty()) {
-                        put("path", transport.path)
+                    val rawPath = transport.path
+                    val path = when {
+                        rawPath.isEmpty() -> "/"
+                        rawPath.startsWith("/") -> rawPath
+                        else -> "/$rawPath"
                     }
-                    if (transport.host.isNotEmpty()) {
-                        put("host", transport.host)
+                    put("path", path)
+                    val hostHeader = when {
+                        transport.host.isNotEmpty() -> transport.host
+                        sni.isNotEmpty() -> sni
+                        defaultHost.isNotEmpty() -> defaultHost
+                        else -> ""
+                    }
+                    if (hostHeader.isNotEmpty()) {
+                        put("host", hostHeader)
                     }
                 }
                 else -> {}
@@ -373,7 +466,6 @@ object SingBoxConfigBuilder {
                     put("server_port", profile.port)
                     put("method", profile.encryption.ifEmpty { "aes-128-gcm" })
                     put("password", profile.authSecret)
-                    put("tcp_fast_open", true)
                 }
                 ProtocolType.VLESS -> {
                     put("type", "vless")
@@ -381,19 +473,19 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("uuid", profile.authSecret)
-                    put("tcp_fast_open", true)
+                    put("packet_encoding", "xudp")
                     val flowVal = when {
-                        profile.tls.flow.isNotEmpty() -> profile.tls.flow
-                        profile.tls.realityPublicKey.isNotEmpty() && profile.transport.type == TransportType.TCP -> "xtls-rprx-vision"
+                        profile.transport.type == TransportType.TCP && profile.tls.flow.isNotEmpty() -> profile.tls.flow
+                        profile.transport.type == TransportType.TCP && profile.tls.realityPublicKey.isNotEmpty() -> "xtls-rprx-vision"
                         else -> null
                     }
                     if (flowVal != null) {
                         put("flow", flowVal)
                     }
                     if (profile.tls.enabled) {
-                        put("tls", buildTlsObject(profile.tls, profile.server))
+                        put("tls", buildTlsObject(profile.tls, profile.server, profile.transport.type))
                     }
-                    buildTransportObject(profile.transport)?.let {
+                    buildTransportObject(profile.transport, profile.server, profile.tls.serverName)?.let {
                         put("transport", it)
                     }
                 }
@@ -404,11 +496,12 @@ object SingBoxConfigBuilder {
                     put("server_port", profile.port)
                     put("uuid", profile.authSecret)
                     put("security", profile.encryption.ifEmpty { "auto" })
-                    put("tcp_fast_open", true)
+                    put("alter_id", 0)
+                    put("packet_encoding", "xudp")
                     if (profile.tls.enabled) {
-                        put("tls", buildTlsObject(profile.tls, profile.server))
+                        put("tls", buildTlsObject(profile.tls, profile.server, profile.transport.type))
                     }
-                    buildTransportObject(profile.transport)?.let {
+                    buildTransportObject(profile.transport, profile.server, profile.tls.serverName)?.let {
                         put("transport", it)
                     }
                 }
@@ -418,11 +511,9 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("password", profile.authSecret)
-                    put("tcp_fast_open", true)
-                    if (profile.tls.enabled) {
-                        put("tls", buildTlsObject(profile.tls, profile.server))
-                    }
-                    buildTransportObject(profile.transport)?.let {
+                    val tlsToUse = if (profile.tls.enabled) profile.tls else profile.tls.copy(enabled = true)
+                    put("tls", buildTlsObject(tlsToUse, profile.server, profile.transport.type))
+                    buildTransportObject(profile.transport, profile.server, profile.tls.serverName)?.let {
                         put("transport", it)
                     }
                 }

@@ -114,4 +114,45 @@ class LinkParserTest {
         assertTrue(profile.tls.insecure)
         assertEquals(listOf("h3"), profile.tls.alpn)
     }
+
+    @Test
+    fun testParseVmessWithSkipCertVerifyAndWs() {
+        // {"add": "202.78.162.5", "aid": 0, "host": "irsoft.sytes.net", "id": "2ff97c6d-8557-42a4-b43f-19c77c5959ea", "net": "ws", "path": "/@forwardv2ray", "port": 443, "ps": "VMess-Test", "tls": "tls", "security": "auto", "skip-cert-verify": true, "sni": ""}
+        val json = """{"add":"202.78.162.5","aid":0,"host":"irsoft.sytes.net","id":"2ff97c6d-8557-42a4-b43f-19c77c5959ea","net":"ws","path":"/@forwardv2ray","port":443,"ps":"VMess-Test","tls":"tls","security":"auto","skip-cert-verify":true,"sni":""}"""
+        val b64 = java.util.Base64.getEncoder().encodeToString(json.toByteArray())
+        val link = "vmess://$b64"
+
+        val result = LinkParser.parse(link)
+        assertTrue("Parsing VMess with skip-cert-verify must succeed", result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("VMess-Test", profile.name)
+        assertEquals(ProtocolType.VMESS, profile.protocol)
+        assertEquals("202.78.162.5", profile.server)
+        assertEquals(443, profile.port)
+        assertEquals("2ff97c6d-8557-42a4-b43f-19c77c5959ea", profile.authSecret)
+        assertTrue("Must be TLS enabled", profile.tls.enabled)
+        assertTrue("Must be insecure/skip-cert-verify", profile.tls.insecure)
+        assertEquals("SNI must fallback to host header when empty", "irsoft.sytes.net", profile.tls.serverName)
+        assertEquals(TransportType.WS, profile.transport.type)
+        assertEquals("/@forwardv2ray", profile.transport.path)
+    }
+
+    @Test
+    fun testParseVmessInvalidPortRejected() {
+        val json = """{"add":"dummy.notice","port":0,"id":"uuid","net":"tcp","ps":"Notice"}"""
+        val b64 = java.util.Base64.getEncoder().encodeToString(json.toByteArray())
+        val link = "vmess://$b64"
+
+        val result = LinkParser.parse(link)
+        assertTrue("VMess with port 0 must be rejected", result is Result.Error)
+    }
+
+    @Test
+    fun testParseVlessWsStripsFlow() {
+        val link = "vless://uuid@104.16.1.1:443?type=ws&security=tls&flow=xtls-rprx-vision&host=worker.dev#WS-Node"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("Flow must be stripped for non-TCP transport", "", profile.tls.flow)
+    }
 }

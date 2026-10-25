@@ -2,6 +2,7 @@ package app.nebula.vpn.vpn
 
 import android.app.Notification
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.VpnService
@@ -51,9 +52,12 @@ class ProxyVpnService : VpnService(), TunProvider {
     @Inject lateinit var vpnRepository: VpnRepository
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val teardownScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val vpnMutex = Mutex()
 
+    private var tunNativeFd: Int = -1
     private var tunInterface: ParcelFileDescriptor? = null
+    private var tunnelJob: Job? = null
     private var cachedRoutingMode: app.nebula.vpn.core.model.AppRoutingMode = app.nebula.vpn.core.model.AppRoutingMode.GLOBAL
     private var cachedTargetPackages: Set<String> = emptySet()
 
@@ -71,7 +75,7 @@ class ProxyVpnService : VpnService(), TunProvider {
 
         when (action) {
             ACTION_START -> {
-                if (vpnRepository.connectionState.value is ConnectionState.Connected) {
+                if (vpnRepository.connectionState.value is ConnectionState.Connected && tunInterface != null) {
                     android.util.Log.i("ProxyVpnService", "Already connected, switching profile instead")
                     switchVpnProfile(profileId)
                 } else {
@@ -79,7 +83,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                 }
             }
             ACTION_SWITCH -> {
-                if (vpnRepository.connectionState.value is ConnectionState.Connected) {
+                if (vpnRepository.connectionState.value is ConnectionState.Connected && tunInterface != null) {
                     switchVpnProfile(profileId)
                 } else {
                     startVpnTunnel(profileId)
@@ -93,10 +97,11 @@ class ProxyVpnService : VpnService(), TunProvider {
     }
 
     private fun startVpnTunnel(profileId: String?) {
-        serviceScope.launch {
+        tunnelJob?.cancel()
+        tunnelJob = serviceScope.launch {
             vpnMutex.withLock {
-                if (vpnRepository.connectionState.value is ConnectionState.Connected) {
-                    android.util.Log.i("ProxyVpnService", "startVpnTunnel: already connected, skipping")
+                if (vpnRepository.connectionState.value is ConnectionState.Connected && tunInterface != null) {
+                    android.util.Log.i("ProxyVpnService", "startVpnTunnel: already connected with active TUN, skipping")
                     return@withLock
                 }
 
@@ -177,7 +182,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                                 }
                                 is ConnectionState.Disconnected -> {
                                     vpnRepository.updateState(state)
-                                    stopSelf()
+                                    stopVpnTunnel()
                                 }
                                 else -> {
                                     vpnRepository.updateState(state)
@@ -195,7 +200,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                 } catch (e: Exception) {
                     android.util.Log.e("ProxyVpnService", "startVpnTunnel error: ${e.message}", e)
                     vpnRepository.updateState(ConnectionState.Error(e.message ?: "Failed to start VPN"))
-                    stopVpnTunnel()
+                    stopVpnTunnelInternal()
                 }
             }
         }
@@ -273,39 +278,68 @@ class ProxyVpnService : VpnService(), TunProvider {
     }
 
     private fun stopVpnTunnel() {
-        serviceScope.launch {
-            vpnMutex.withLock {
-                android.util.Log.i("ProxyVpnService", "Stopping VPN tunnel...")
-                stateCollectorJob?.cancel()
-                stateCollectorJob = null
-                statsCollectorJob?.cancel()
-                statsCollectorJob = null
-
-                vpnRepository.updateState(ConnectionState.Disconnecting)
-                try {
-                    kotlinx.coroutines.withTimeoutOrNull(3000L) {
-                        proxyCore.stop()
+        tunnelJob?.cancel()
+        tunnelJob = null
+        teardownScope.launch {
+            try {
+                kotlinx.coroutines.withTimeout(5000L) {
+                    vpnMutex.withLock {
+                        stopVpnTunnelInternal()
                     }
-                } catch (e: Exception) {
-                    e.printStackTrace()
                 }
-                try {
-                    tunInterface?.close()
-                    tunInterface = null
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-
-                currentProfileId = null
-                currentProfileName = null
-                connectionStartTime = 0L
-
-                vpnRepository.updateState(ConnectionState.Disconnected)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                android.util.Log.i("ProxyVpnService", "VPN tunnel stopped cleanly")
+            } catch (e: Exception) {
+                android.util.Log.w("ProxyVpnService", "vpnMutex acquisition timed out during stop, forcing teardown: ${e.message}")
+                stopVpnTunnelInternal()
             }
         }
+    }
+
+    private suspend fun stopVpnTunnelInternal() {
+        android.util.Log.i("ProxyVpnService", "Stopping VPN tunnel internally...")
+        stateCollectorJob?.cancel()
+        stateCollectorJob = null
+        statsCollectorJob?.cancel()
+        statsCollectorJob = null
+
+        vpnRepository.updateState(ConnectionState.Disconnecting)
+
+        // 1. First stop proxyCore so libbox stops forwarding and unblocks native Go read loops
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(2000L) {
+                proxyCore.stop()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ProxyVpnService", "proxyCore.stop error: ${e.message}", e)
+        }
+
+        // 2. Close Java TUN file descriptor so Linux kernel immediately tears down tun0
+        try {
+            tunInterface?.close()
+            android.util.Log.i("ProxyVpnService", "tunInterface closed successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("ProxyVpnService", "Error closing tunInterface: ${e.message}", e)
+        }
+        tunInterface = null
+
+        if (tunNativeFd > 0) {
+            try {
+                ParcelFileDescriptor.adoptFd(tunNativeFd).close()
+            } catch (ignored: Exception) {}
+            tunNativeFd = -1
+        }
+
+        // 3. Tear down foreground service and notification immediately so user sees status bar icon clear
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+        nm?.cancel(NOTIFICATION_ID)
+
+        currentProfileId = null
+        currentProfileName = null
+        connectionStartTime = 0L
+
+        vpnRepository.updateState(ConnectionState.Disconnected)
+        stopSelf()
+        android.util.Log.i("ProxyVpnService", "VPN tunnel stopped cleanly, key icon cleared")
     }
 
     /**
@@ -360,11 +394,16 @@ class ProxyVpnService : VpnService(), TunProvider {
             }
 
             val inet6Routes = options.inet6RouteAddress
+            var hasIpv6Route = false
             if (inet6Routes != null) {
                 while (inet6Routes.hasNext()) {
                     val prefix = inet6Routes.next()
                     builder.addRoute(prefix.address(), prefix.prefix())
+                    hasIpv6Route = true
                 }
+            }
+            if (!hasIpv6Route) {
+                builder.addRoute("::", 0)
             }
         }
 
@@ -402,9 +441,14 @@ class ProxyVpnService : VpnService(), TunProvider {
             android.util.Log.e("ProxyVpnService", "VpnService.Builder.establish() returned null! (Is VPN prepared?)")
             throw IllegalStateException("VpnService.Builder.establish() returned null")
         }
-        android.util.Log.i("ProxyVpnService", "TUN established successfully, native fd=${pfd.fd}")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
+            setUnderlyingNetworks(null)
+        }
         tunInterface = pfd
-        return pfd.detachFd()
+        val nativeFd = pfd.dup().detachFd()
+        android.util.Log.i("ProxyVpnService", "TUN established successfully, native fd=$nativeFd, pfd=$pfd")
+        tunNativeFd = nativeFd
+        return nativeFd
     }
 
     override fun protect(fd: Int): Boolean {
@@ -421,6 +465,28 @@ class ProxyVpnService : VpnService(), TunProvider {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+        tunnelJob?.cancel()
+        tunnelJob = null
+        try {
+            tunInterface?.close()
+        } catch (ignored: Exception) {}
+        tunInterface = null
+
+        if (tunNativeFd > 0) {
+            try {
+                ParcelFileDescriptor.adoptFd(tunNativeFd).close()
+            } catch (ignored: Exception) {}
+            tunNativeFd = -1
+        }
+
+        kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+            try {
+                kotlinx.coroutines.withTimeoutOrNull(1000L) {
+                    proxyCore.stop()
+                }
+            } catch (ignored: Exception) {}
+        }
+        teardownScope.cancel()
     }
 
     private fun startForegroundNotification(title: String, content: String) {

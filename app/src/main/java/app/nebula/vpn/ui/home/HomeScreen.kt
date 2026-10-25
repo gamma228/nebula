@@ -1,22 +1,16 @@
 package app.nebula.vpn.ui.home
 
-import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,24 +27,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowForwardIos
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -60,14 +46,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -76,14 +63,10 @@ import app.nebula.vpn.R
 import app.nebula.vpn.core.model.ConnectionState
 import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.data.database.entity.SubscriptionEntity
-import app.nebula.vpn.ui.theme.EmeraldGreen
-import app.nebula.vpn.ui.theme.LocalThemeConfig
-import app.nebula.vpn.ui.theme.MintTeal
-import app.nebula.vpn.ui.theme.StatusGreen
-import app.nebula.vpn.ui.theme.StatusRed
-import app.nebula.vpn.ui.theme.StatusYellow
-import app.nebula.vpn.ui.theme.getCardShape
-import app.nebula.vpn.ui.theme.getChipShape
+import app.nebula.vpn.ui.components.NebulaOrb
+import app.nebula.vpn.ui.components.NebulaStatusHeader
+import app.nebula.vpn.ui.components.NebulaTrafficChart
+import app.nebula.vpn.ui.theme.NebulaTheme
 import java.text.DecimalFormat
 
 @Composable
@@ -100,64 +83,69 @@ fun HomeScreen(
     val isRefreshingSub by viewModel.isRefreshingSubscription.collectAsState()
     val durationSeconds by viewModel.connectionDurationSeconds.collectAsState()
     val allProfiles by viewModel.allProfiles.collectAsState()
-    val themeConfig = LocalThemeConfig.current
-    val context = LocalContext.current
+
+    val colors = NebulaTheme.colors
+    val spacing = NebulaTheme.spacing
+    val shapes = NebulaTheme.shapes
+    val typography = NebulaTheme.typography
 
     val isConnected = connectionState is ConnectionState.Connected
-    val isConnecting = connectionState is ConnectionState.Connecting
-
+    val isConnecting = connectionState is ConnectionState.Connecting || connectionState is ConnectionState.Reconnecting
     val scrollState = rememberScrollState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(scrollState)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = spacing.md, vertical = spacing.sm),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Futuristic Cosmic Header
+        // App Title & State Indicator
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 16.dp),
+                .padding(top = spacing.xxs, bottom = spacing.md),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "NEBULA",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp,
-                    color = MaterialTheme.colorScheme.primary
+                    style = typography.titleLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    ),
+                    color = colors.primary
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "CORE",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                Spacer(modifier = Modifier.width(spacing.xs))
+                Box(
                     modifier = Modifier
-                        .clip(themeConfig.getChipShape())
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clip(shapes.chip)
+                        .background(colors.surfaceElevated)
                         .padding(horizontal = 6.dp, vertical = 2.dp)
-                )
+                ) {
+                    Text(
+                        text = "CORE",
+                        style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textSecondary
+                    )
+                }
             }
 
             // Connection State Pill Badge
             val (statusText, statusBg, statusFg) = when {
-                isConnected -> Triple(stringResource(R.string.state_connected), StatusGreen.copy(alpha = 0.15f), StatusGreen)
-                isConnecting -> Triple(stringResource(R.string.state_connecting), StatusYellow.copy(alpha = 0.15f), StatusYellow)
-                else -> Triple(stringResource(R.string.state_disconnected), MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                isConnected -> Triple(stringResource(R.string.state_connected), colors.statusOk.copy(alpha = 0.15f), colors.statusOk)
+                isConnecting -> Triple(stringResource(R.string.state_connecting), colors.statusWarning.copy(alpha = 0.15f), colors.statusWarning)
+                else -> Triple(stringResource(R.string.state_disconnected), colors.surfaceElevated, colors.textMuted)
             }
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
-                    .clip(themeConfig.getChipShape())
+                    .clip(shapes.chip)
                     .background(statusBg)
-                    .border(1.dp, statusFg.copy(alpha = 0.3f), themeConfig.getChipShape())
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .border(1.dp, statusFg.copy(alpha = 0.35f), shapes.chip)
+                    .padding(horizontal = spacing.sm, vertical = 6.dp)
             ) {
                 Box(
                     modifier = Modifier
@@ -168,171 +156,102 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = statusText,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    style = typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = statusFg
                 )
             }
         }
 
-        // Aerospace Glass Telemetry HUD
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = themeConfig.getCardShape(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outline, themeConfig.getCardShape())
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Upload Telemetry
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowUpward,
-                            contentDescription = "Upload",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "UPLOAD",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formatSpeed(trafficStats.uploadSpeedBps),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
+        // Live Telemetry Status Header (Upload, Download, Session, Ping)
+        NebulaStatusHeader(
+            downloadBps = trafficStats.downloadSpeedBps,
+            uploadBps = trafficStats.uploadSpeedBps,
+            durationSeconds = durationSeconds,
+            pingMs = selectedProfile?.lastPingMs
+        )
 
-                // Vertical Divider Line
-                Box(
-                    modifier = Modifier
-                        .height(24.dp)
-                        .width(1.dp)
-                        .background(MaterialTheme.colorScheme.outline)
-                )
+        Spacer(modifier = Modifier.height(spacing.lg))
 
-                // Session Uptime Clock
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Timer,
-                            contentDescription = "Duration",
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "SESSION",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formatDuration(durationSeconds),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                // Vertical Divider Line
-                Box(
-                    modifier = Modifier
-                        .height(24.dp)
-                        .width(1.dp)
-                        .background(MaterialTheme.colorScheme.outline)
-                )
-
-                // Download Telemetry
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowDownward,
-                            contentDescription = "Download",
-                            tint = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "DOWNLOAD",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = formatSpeed(trafficStats.downloadSpeedBps),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(32.dp))
-
-        // Nebula Celestial Core Reactor Button
-        NebulaCelestialCore(
-            connectionState = connectionState,
-            selectedProfile = selectedProfile,
+        // Signature Quantum Orb Centerpiece
+        NebulaOrb(
+            state = connectionState,
             onClick = {
                 if (isConnected || isConnecting) {
                     viewModel.toggleConnection()
                 } else {
                     onRequestConnect()
                 }
-            }
+            },
+            size = 190.dp
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(spacing.sm))
 
-        // Active Node Glass Card (with 1-Tap Ping Test)
-        ActiveServerBadge(
+        // Security Protocol & State Sub-badge
+        val proto = selectedProfile?.protocol?.name ?: "VLESS"
+        Text(
+            text = if (isConnected) "✦ $proto · TUNNEL ENCRYPTED" else "READY TO CONNECT",
+            style = typography.labelMedium.copy(letterSpacing = 0.5.sp, fontWeight = FontWeight.SemiBold),
+            color = if (isConnected) colors.primary else colors.textMuted
+        )
+
+        Spacer(modifier = Modifier.height(spacing.lg))
+
+        // Bandwidth Chart (Animated visibility when connected)
+        AnimatedVisibility(visible = isConnected) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = spacing.md)) {
+                Text(
+                    text = stringResource(R.string.home_traffic_chart_title).uppercase(),
+                    style = typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                    color = colors.textMuted,
+                    modifier = Modifier.padding(horizontal = spacing.xxs, vertical = spacing.xxs)
+                )
+                Spacer(modifier = Modifier.height(spacing.xxs))
+                // Sample sliding window bandwidth values
+                val sampleDown = listOf(
+                    trafficStats.downloadSpeedBps / 4,
+                    trafficStats.downloadSpeedBps / 2,
+                    (trafficStats.downloadSpeedBps * 3) / 4,
+                    trafficStats.downloadSpeedBps
+                )
+                val sampleUp = listOf(
+                    trafficStats.uploadSpeedBps / 4,
+                    trafficStats.uploadSpeedBps / 2,
+                    (trafficStats.uploadSpeedBps * 3) / 4,
+                    trafficStats.uploadSpeedBps
+                )
+                NebulaTrafficChart(
+                    downloadHistory = sampleDown,
+                    uploadHistory = sampleUp
+                )
+            }
+        }
+
+        // Active Node Card with 1-Tap Ping Test
+        ActiveServerCard(
             profile = selectedProfile,
             onClick = onNavigateToServers,
             onPing = { viewModel.pingActiveServer() }
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(spacing.md))
 
-        // Subscription Hub ("ПАКЕТ И ПОДПИСКА")
+        // Subscription Hub Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 4.dp),
+                .padding(horizontal = spacing.xxs, vertical = spacing.xxs),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "ПОДПИСКА И ТРАФИК",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                text = stringResource(R.string.home_section_subscription).uppercase(),
+                style = typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                color = colors.textMuted
             )
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(spacing.xs))
 
         if (activeSub != null) {
             ProviderSubscriptionCard(
@@ -343,17 +262,17 @@ fun HomeScreen(
             )
         } else {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = themeConfig.getCardShape(),
+                colors = CardDefaults.cardColors(containerColor = colors.surface),
+                shape = shapes.card,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline, themeConfig.getCardShape())
+                    .border(1.dp, colors.borderSubtle, shapes.card)
                     .clickable { onNavigateToServers() }
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(spacing.md),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -363,73 +282,70 @@ fun HomeScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
-                                .clip(themeConfig.getChipShape())
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                .size(40.dp)
+                                .clip(shapes.chip)
+                                .background(colors.primary.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Add,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(22.dp)
+                                tint = colors.primary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(14.dp))
+                        Spacer(modifier = Modifier.width(spacing.sm))
                         Column {
                             Text(
-                                text = "Подключить подписку",
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = stringResource(R.string.home_add_subscription),
+                                style = typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.textPrimary
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Импортируйте ссылку от вашего провайдера",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                text = stringResource(R.string.home_add_subscription_desc),
+                                style = typography.bodySmall,
+                                color = colors.textSecondary
                             )
                         }
                     }
                     Icon(
-                        imageVector = Icons.Default.ArrowForwardIos,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                        tint = colors.textMuted,
                         modifier = Modifier.size(14.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(spacing.md))
 
         // Quick Nodes Switcher
         if (allProfiles.isNotEmpty()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                    .padding(horizontal = spacing.xxs, vertical = spacing.xxs),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "БЫСТРЫЙ ВЫБОР УЗЛА",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    text = stringResource(R.string.home_quick_nodes).uppercase(),
+                    style = typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                    color = colors.textMuted
                 )
                 Text(
-                    text = "Все (${allProfiles.size})",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = stringResource(R.string.home_all_nodes, allProfiles.size),
+                    style = typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.primary,
                     modifier = Modifier.clickable { onNavigateToServers() }
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(spacing.xs))
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(spacing.xs)) {
                 allProfiles.take(3).forEach { profile ->
                     val isSelected = profile.id == selectedProfile?.id
                     QuickServerItem(
@@ -441,221 +357,41 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(spacing.xl))
     }
 }
 
-/**
- * Nebula Celestial Core Reactor:
- * A distinctive multi-layered holographic reactor with rotating orbital starlight ring,
- * concentric energy iris, tactile scale physics, and dynamic security telemetry.
- */
 @Composable
-private fun NebulaCelestialCore(
-    connectionState: ConnectionState,
-    selectedProfile: ProxyProfile?,
-    onClick: () -> Unit
-) {
-    val isConnected = connectionState is ConnectionState.Connected
-    val isConnecting = connectionState is ConnectionState.Connecting
-
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
-
-    val infiniteTransition = rememberInfiniteTransition(label = "celestial")
-    val orbitAngle by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = if (isConnecting) 1500 else 6000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "orbit"
-    )
-
-    val auraPulse by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = if (isConnected) 0.55f else if (isConnecting) 0.8f else 0.10f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "aura"
-    )
-
-    val scaleAnim by animateFloatAsState(
-        targetValue = if (isPressed) 0.93f else 1.0f,
-        animationSpec = tween(150),
-        label = "springScale"
-    )
-
-    val activePrimary = MaterialTheme.colorScheme.primary
-    val activeSecondary = MaterialTheme.colorScheme.secondary
-
-    val coreGlowColor = when {
-        isConnected -> activePrimary
-        isConnecting -> StatusYellow
-        else -> activePrimary.copy(alpha = 0.6f)
-    }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .size(230.dp)
-                .scale(scaleAnim)
-                .clickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = onClick
-                )
-        ) {
-            // Layer 1: Cosmic Aura Glow
-            Box(
-                modifier = Modifier
-                    .size(220.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                coreGlowColor.copy(alpha = auraPulse),
-                                coreGlowColor.copy(alpha = auraPulse * 0.3f),
-                                Color.Transparent
-                            )
-                        )
-                    )
-            )
-
-            // Layer 2: Rotating Orbital Ring with Starlight Particle
-            Canvas(
-                modifier = Modifier
-                    .size(200.dp)
-                    .rotate(orbitAngle)
-            ) {
-                // Dashed orbital circumference
-                drawCircle(
-                    brush = Brush.sweepGradient(
-                        listOf(
-                            coreGlowColor,
-                            activeSecondary,
-                            Color.Transparent,
-                            coreGlowColor
-                        )
-                    ),
-                    style = Stroke(width = 2.dp.toPx())
-                )
-
-                // Starlight Beacon Node on the orbit
-                drawCircle(
-                    color = if (isConnected) activePrimary else if (isConnecting) StatusYellow else Color.White,
-                    radius = 4.dp.toPx(),
-                    center = Offset(size.width, size.height / 2f)
-                )
-            }
-
-            // Layer 3: Concentric Obsidian Dial Ring
-            Box(
-                modifier = Modifier
-                    .size(165.dp)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.radialGradient(
-                            colors = listOf(
-                                Color(0xFF0F151D),
-                                Color(0xFF040608)
-                            )
-                        )
-                    )
-                    .border(
-                        width = 1.5.dp,
-                        brush = Brush.linearGradient(
-                            listOf(
-                                coreGlowColor.copy(alpha = if (isConnected) 0.8f else 0.3f),
-                                activeSecondary.copy(alpha = if (isConnected) 0.5f else 0.1f)
-                            )
-                        ),
-                        shape = CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                // Inner Core Iris & Emblems
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    if (isConnecting) {
-                        CircularProgressIndicator(
-                            color = StatusYellow,
-                            strokeWidth = 3.dp,
-                            modifier = Modifier.size(44.dp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "ПОДКЛЮЧЕНИЕ",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            color = StatusYellow
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Shield,
-                            contentDescription = "Shield",
-                            tint = if (isConnected) coreGlowColor else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            modifier = Modifier.size(50.dp)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (isConnected) stringResource(R.string.state_connected).uppercase() else stringResource(R.string.action_connect).uppercase(),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.5.sp,
-                            color = if (isConnected) coreGlowColor else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // Active Protocol & Security Chip
-        val proto = selectedProfile?.protocol?.name ?: "VLESS"
-        Text(
-            text = if (isConnected) "✦ $proto · TUNNEL ACTIVE" else "NEBULA CORE READY",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.5.sp,
-            color = if (isConnected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-        )
-    }
-}
-
-/**
- * Active Server Card with Country Flag, Protocol, and 1-Tap Ping Test Button
- */
-@Composable
-private fun ActiveServerBadge(
+private fun ActiveServerCard(
     profile: ProxyProfile?,
     onClick: () -> Unit,
     onPing: () -> Unit
 ) {
-    val themeConfig = LocalThemeConfig.current
+    val haptic = LocalHapticFeedback.current
+    val colors = NebulaTheme.colors
+    val shapes = NebulaTheme.shapes
+    val spacing = NebulaTheme.spacing
+    val typography = NebulaTheme.typography
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = themeConfig.getCardShape(),
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        shape = shapes.card,
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline, themeConfig.getCardShape())
-            .clickable { onClick() }
+            .border(1.dp, if (isFocused) colors.accent else colors.borderSubtle, shapes.card)
+            .focusable(interactionSource = interactionSource)
+            .clickable(interactionSource = interactionSource, indication = null) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = spacing.md, vertical = spacing.sm),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -663,53 +399,70 @@ private fun ActiveServerBadge(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
-                // Flag emoji
+                // Flag emoji container
                 val flag = getCountryFlag(profile?.name ?: "")
-                Text(
-                    text = flag,
-                    fontSize = 22.sp,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
-
-                Column {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(colors.surfaceElevated)
+                        .border(1.dp, colors.borderSubtle, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = profile?.name ?: "Авто выбор (наименьший пинг)",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        text = flag,
+                        style = typography.titleSmall
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(spacing.sm))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = profile?.name ?: stringResource(R.string.home_no_server_selected),
+                        style = typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = colors.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = profile?.protocol?.name ?: "AUTO",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
+                        Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                .background(colors.primary.copy(alpha = 0.15f))
                                 .padding(horizontal = 5.dp, vertical = 1.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        ) {
+                            Text(
+                                text = profile?.protocol?.name ?: "AUTO",
+                                style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.primary
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(spacing.xs))
 
                         // Interactive Ping Badge
                         val ping = profile?.lastPingMs
                         val pingColor = when {
-                            ping == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            ping < 0 -> StatusRed
-                            ping < 120 -> StatusGreen
-                            ping < 250 -> StatusYellow
-                            else -> StatusRed
+                            ping == null -> colors.textMuted
+                            ping < 0 -> colors.statusError
+                            ping < 120 -> colors.statusOk
+                            ping < 250 -> colors.statusWarning
+                            else -> colors.statusError
                         }
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(shapes.chip)
                                 .background(pingColor.copy(alpha = 0.12f))
-                                .clickable { onPing() }
-                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                                .border(1.dp, pingColor.copy(alpha = 0.25f), shapes.chip)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onPing()
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Box(
                                 modifier = Modifier
@@ -724,9 +477,8 @@ private fun ActiveServerBadge(
                                     ping < 0 -> "Timeout"
                                     else -> "$ping ms"
                                 },
-                                fontSize = 11.sp,
-                                color = pingColor,
-                                fontWeight = FontWeight.Bold
+                                style = typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = pingColor
                             )
                         }
                     }
@@ -734,9 +486,9 @@ private fun ActiveServerBadge(
             }
 
             Icon(
-                imageVector = Icons.Default.ArrowForwardIos,
-                contentDescription = "Change Server",
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                contentDescription = stringResource(R.string.home_tap_to_change),
+                tint = colors.textMuted,
                 modifier = Modifier.size(14.dp)
             )
         }
@@ -750,15 +502,20 @@ private fun ProviderSubscriptionCard(
     onRefresh: () -> Unit,
     onManage: () -> Unit
 ) {
-    val themeConfig = LocalThemeConfig.current
+    val haptic = LocalHapticFeedback.current
+    val colors = NebulaTheme.colors
+    val shapes = NebulaTheme.shapes
+    val spacing = NebulaTheme.spacing
+    val typography = NebulaTheme.typography
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = themeConfig.getCardShape(),
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        shape = shapes.card,
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline, themeConfig.getCardShape())
+            .border(1.dp, colors.borderSubtle, shapes.card)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(spacing.md)) {
             // Header Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -772,23 +529,22 @@ private fun ProviderSubscriptionCard(
                     Box(
                         modifier = Modifier
                             .size(36.dp)
-                            .clip(themeConfig.getChipShape())
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                            .clip(shapes.chip)
+                            .background(colors.primary.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
+                            tint = colors.primary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(spacing.xs))
                     Text(
-                        text = subscription.title.ifBlank { "Подписка VPN" },
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        text = subscription.title.ifBlank { "VPN Subscription" },
+                        style = typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -801,14 +557,17 @@ private fun ProviderSubscriptionCard(
                         label = "spin"
                     )
                     IconButton(
-                        onClick = onRefresh,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onRefresh()
+                        },
                         enabled = !isRefreshing,
                         modifier = Modifier.size(32.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh",
-                            tint = MaterialTheme.colorScheme.primary,
+                            contentDescription = "Refresh Subscription",
+                            tint = colors.primary,
                             modifier = Modifier
                                 .size(18.dp)
                                 .rotate(rotateAnim)
@@ -817,16 +576,14 @@ private fun ProviderSubscriptionCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Quota (only shown when real quota/expiry or usage exists)
-            val total = subscription.totalBytes
+            // Quota bar & expiry
+            val total = if (subscription.totalBytes == 107374182400L) null else subscription.totalBytes
             val used = (subscription.uploadBytes ?: 0L) + (subscription.downloadBytes ?: 0L)
             val hasQuota = total != null && total > 0L
             val hasExpiry = subscription.expireEpochSeconds != null && subscription.expireEpochSeconds > 0L
 
             if (hasQuota || hasExpiry || used > 0L) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(spacing.sm))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -838,38 +595,29 @@ private fun ProviderSubscriptionCard(
                         val diffSec = subscription.expireEpochSeconds!! - nowSec
                         val daysRemaining = (diffSec / 86400).coerceAtLeast(0)
                         Text(
-                            text = "Осталось $daysRemaining дн.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            text = "${daysRemaining}d remaining",
+                            style = typography.bodySmall,
+                            color = colors.textSecondary
                         )
                     } else {
                         Text(
-                            text = "Бессрочно",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            text = "No expiry",
+                            style = typography.bodySmall,
+                            color = colors.textSecondary
                         )
                     }
 
                     if (hasQuota) {
                         Text(
                             text = "${formatBytes(used)} / ${formatBytes(total!!)}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
                         )
                     } else if (used > 0L) {
                         Text(
-                            text = "Использовано: ${formatBytes(used)}",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    } else {
-                        Text(
-                            text = "Безлимит",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = "Used: ${formatBytes(used)}",
+                            style = typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            color = colors.textPrimary
                         )
                     }
                 }
@@ -881,10 +629,10 @@ private fun ProviderSubscriptionCard(
                         progress = { progress },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(5.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = colors.primary,
+                        trackColor = colors.surfaceElevated,
                         strokeCap = StrokeCap.Round
                     )
                 }
@@ -899,29 +647,36 @@ private fun QuickServerItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val themeConfig = LocalThemeConfig.current
+    val haptic = LocalHapticFeedback.current
+    val colors = NebulaTheme.colors
+    val shapes = NebulaTheme.shapes
+    val spacing = NebulaTheme.spacing
+    val typography = NebulaTheme.typography
+
+    val cardBgColor by animateColorAsState(
+        targetValue = if (isSelected) colors.primary.copy(alpha = 0.12f) else colors.surface,
+        label = "QuickServerBg"
+    )
+
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        shape = themeConfig.getCardShape(),
+        colors = CardDefaults.cardColors(containerColor = cardBgColor),
+        shape = shapes.card,
         modifier = Modifier
             .fillMaxWidth()
             .border(
                 width = if (isSelected) 1.dp else 0.dp,
-                color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.Transparent,
-                shape = themeConfig.getCardShape()
+                color = if (isSelected) colors.primary.copy(alpha = 0.45f) else Color.Transparent,
+                shape = shapes.card
             )
-            .clickable { onClick() }
+            .clickable {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = spacing.md, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -929,60 +684,50 @@ private fun QuickServerItem(
                 if (isSelected) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Selected",
-                        tint = MaterialTheme.colorScheme.primary,
+                        contentDescription = "Active",
+                        tint = colors.primary,
                         modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(spacing.xs))
                 }
                 Text(
                     text = getCountryFlag(profile.name),
-                    fontSize = 16.sp,
-                    modifier = Modifier.padding(end = 8.dp)
+                    style = typography.bodyLarge,
+                    modifier = Modifier.padding(end = spacing.xs)
                 )
                 Column {
                     Text(
                         text = profile.name,
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        style = typography.bodyMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        ),
+                        color = colors.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "${profile.protocol.name} · ${profile.server}:${profile.port}",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        style = typography.labelSmall,
+                        color = colors.textSecondary
                     )
                 }
             }
 
             val ping = profile.lastPingMs
             val pingColor = when {
-                ping == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                ping < 0 -> StatusRed
-                ping < 120 -> StatusGreen
-                ping < 250 -> StatusYellow
-                else -> StatusRed
+                ping == null -> colors.textMuted
+                ping < 0 -> colors.statusError
+                ping < 120 -> colors.statusOk
+                ping < 250 -> colors.statusWarning
+                else -> colors.statusError
             }
             Text(
                 text = if (ping != null && ping >= 0) "$ping ms" else "--",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
+                style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = pingColor
             )
         }
     }
-}
-
-private fun formatSpeed(bytesPerSec: Long): String {
-    if (bytesPerSec <= 0) return "0.0 KB/s"
-    val kb = bytesPerSec / 1024.0
-    if (kb < 1024) {
-        return "%.1f KB/s".format(kb)
-    }
-    val mb = kb / 1024.0
-    return "%.1f MB/s".format(mb)
 }
 
 private fun formatBytes(bytes: Long): String {
@@ -991,17 +736,6 @@ private fun formatBytes(bytes: Long): String {
     val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, 4)
     val df = DecimalFormat("#,##0.#")
     return "${df.format(bytes / Math.pow(1024.0, digitGroups.toDouble()))} ${units[digitGroups]}"
-}
-
-private fun formatDuration(seconds: Long): String {
-    val hrs = seconds / 3600
-    val mins = (seconds % 3600) / 60
-    val secs = seconds % 60
-    return if (hrs > 0) {
-        String.format("%02d:%02d:%02d", hrs, mins, secs)
-    } else {
-        String.format("%02d:%02d", mins, secs)
-    }
 }
 
 private fun getCountryFlag(name: String): String {

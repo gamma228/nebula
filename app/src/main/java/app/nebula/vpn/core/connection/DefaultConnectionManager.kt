@@ -109,11 +109,21 @@ class DefaultConnectionManager @Inject constructor(
             activeJob?.cancel()
             activeJob = null
 
-            _state.value = ConnectionState.Disconnecting
+            val wasActive = _state.value is ConnectionState.Connected || _state.value is ConnectionState.Connecting
+            if (wasActive) {
+                _state.value = ConnectionState.Disconnecting
+            }
 
-            // Give stopVpnService up to 3000ms, then force termination
-            withTimeoutOrNull(3000L) {
-                serviceController.stopVpnService(3000L)
+            // Ask VPN service to stop
+            serviceController.stopVpnService(2000L)
+
+            // Wait for service to report disconnected or timeout
+            if (wasActive) {
+                withTimeoutOrNull(2000L) {
+                    while (_state.value !is ConnectionState.Disconnected) {
+                        kotlinx.coroutines.delay(50)
+                    }
+                }
             }
 
             activeProfileId = null

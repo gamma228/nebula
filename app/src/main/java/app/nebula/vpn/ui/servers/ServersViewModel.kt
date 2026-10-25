@@ -96,21 +96,19 @@ class ServersViewModel @Inject constructor(
         viewModelScope.launch {
             var wasRunning = false
             latencyTester.progress.collect { progress ->
-                val newPings = mutableMapOf<String, Long>()
-                progress.currentServerStates.forEach { (id, state) ->
-                    when (state) {
-                        is ServerTestState.Ok -> newPings[id] = state.latencyMs
-                        is ServerTestState.Timeout -> newPings[id] = -1L
-                        is ServerTestState.Error -> newPings[id] = -1L
-                        else -> {}
-                    }
-                }
-                if (newPings.isNotEmpty()) {
-                    _livePingResults.value = _livePingResults.value + newPings
-                }
                 if (wasRunning && !progress.isRunning) {
-                    if (newPings.isNotEmpty()) {
-                        profileRepository.updatePingsBatch(newPings)
+                    val finalPings = mutableMapOf<String, Long>()
+                    progress.currentServerStates.forEach { (id, state) ->
+                        when (state) {
+                            is ServerTestState.Ok -> finalPings[id] = state.latencyMs
+                            is ServerTestState.Timeout -> finalPings[id] = -1L
+                            is ServerTestState.Error -> finalPings[id] = -1L
+                            else -> {}
+                        }
+                    }
+                    if (finalPings.isNotEmpty()) {
+                        _livePingResults.value = _livePingResults.value + finalPings
+                        profileRepository.updatePingsBatch(finalPings)
                     }
                     _isPingingAll.value = false
                     _pingingSubscriptionId.value = null

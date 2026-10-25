@@ -79,10 +79,10 @@ class SubscriptionRepository @Inject constructor(
         val now = System.currentTimeMillis()
         val updated = existing.copy(
             title = existing.title.ifBlank { data.title },
-            uploadBytes = data.uploadBytes ?: existing.uploadBytes,
-            downloadBytes = data.downloadBytes ?: existing.downloadBytes,
-            totalBytes = data.totalBytes ?: existing.totalBytes,
-            expireEpochSeconds = data.expireEpochSeconds ?: existing.expireEpochSeconds,
+            uploadBytes = data.uploadBytes,
+            downloadBytes = data.downloadBytes,
+            totalBytes = data.totalBytes,
+            expireEpochSeconds = data.expireEpochSeconds,
             updatedAt = now,
             autoUpdateIntervalHours = data.updateIntervalHours
         )

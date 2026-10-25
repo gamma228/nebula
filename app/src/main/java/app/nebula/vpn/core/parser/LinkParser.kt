@@ -90,21 +90,24 @@ object LinkParser {
         val userInfo = uri.userInfo
         val host = uri.host
         val port = if (uri.port > 0) uri.port else 443
+        if (host.isBlank() || port !in 1..65535) {
+            return Result.Error(IllegalArgumentException("Invalid VLESS server endpoint: host='$host', port=$port"))
+        }
         val name = decodeFragment(uri.fragment, "VLESS-$host:$port")
 
         val security = uri.getQueryParameter("security") ?: "none"
         val isTls = security.equals("tls", true) || security.equals("reality", true)
-        val sni = uri.getQueryParameter("sni") ?: host
-        val pbk = uri.getQueryParameter("pbk") ?: ""
-        val sid = uri.getQueryParameter("sid") ?: ""
+        val sni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val pbk = uri.getQueryParameter("pbk") ?: uri.getQueryParameter("publicKey") ?: ""
+        val sid = uri.getQueryParameter("sid") ?: uri.getQueryParameter("shortId") ?: ""
         val spx = uri.getQueryParameter("spx") ?: uri.getQueryParameter("spiderX") ?: ""
-        val fp = uri.getQueryParameter("fp") ?: "chrome"
+        val fp = uri.getQueryParameter("fp") ?: uri.getQueryParameter("fingerprint") ?: "chrome"
         val alpnParam = uri.getQueryParameter("alpn")
         val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) }
             ?: (uri.getQueryParameter("allowInsecure")?.let { it == "1" || it.equals("true", true) } ?: false)
 
-        val typeParam = uri.getQueryParameter("type") ?: "tcp"
+        val typeParam = uri.getQueryParameter("type") ?: uri.getQueryParameter("net") ?: "tcp"
         val transportType = when (typeParam.lowercase()) {
             "ws" -> TransportType.WS
             "grpc" -> TransportType.GRPC
@@ -112,12 +115,12 @@ object LinkParser {
             else -> TransportType.TCP
         }
         val path = uri.getQueryParameter("path") ?: ""
-        val hostHeader = uri.getQueryParameter("host") ?: ""
+        val hostHeader = uri.getQueryParameter("host") ?: uri.getQueryParameter("headerType") ?: ""
         val serviceName = uri.getQueryParameter("serviceName") ?: ""
 
         val rawFlow = uri.getQueryParameter("flow") ?: ""
         val flow = when {
-            rawFlow.isNotEmpty() -> rawFlow
+            rawFlow.isNotEmpty() && transportType == TransportType.TCP -> rawFlow
             pbk.isNotEmpty() && transportType == TransportType.TCP -> "xtls-rprx-vision"
             else -> ""
         }
@@ -158,13 +161,20 @@ object LinkParser {
 
         val host = jsonObj["add"]?.jsonPrimitive?.content ?: ""
         val port = jsonObj["port"]?.jsonPrimitive?.content?.toIntOrNull() ?: 443
+        if (host.isBlank() || port !in 1..65535) {
+            return Result.Error(IllegalArgumentException("Invalid VMess server endpoint: host='$host', port=$port"))
+        }
+
         val uuid = jsonObj["id"]?.jsonPrimitive?.content ?: ""
-        val name = jsonObj["ps"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() } ?: "VMess-$host:$port"
+        val name = jsonObj["ps"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() } ?: "VMess-$host:$port"
         val net = jsonObj["net"]?.jsonPrimitive?.content ?: "tcp"
         val path = jsonObj["path"]?.jsonPrimitive?.content ?: ""
         val hostHeader = jsonObj["host"]?.jsonPrimitive?.content ?: ""
         val tlsStr = jsonObj["tls"]?.jsonPrimitive?.content ?: ""
-        val sni = jsonObj["sni"]?.jsonPrimitive?.content ?: host
+        val isTls = tlsStr.equals("tls", true) || tlsStr == "1" || tlsStr.equals("true", true)
+        val sni = jsonObj["sni"]?.jsonPrimitive?.content?.ifBlank { null }
+            ?: hostHeader.ifBlank { null }
+            ?: host
         val alpnStr = jsonObj["alpn"]?.jsonPrimitive?.content ?: ""
         val alpnList = if (alpnStr.isNotEmpty()) alpnStr.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
 
@@ -175,6 +185,17 @@ object LinkParser {
             else -> TransportType.TCP
         }
 
+        val allowInsecure = jsonObj["allowInsecure"]?.jsonPrimitive?.content == "1" ||
+                jsonObj["insecure"]?.jsonPrimitive?.content == "1" ||
+                jsonObj["allowInsecure"]?.jsonPrimitive?.content.equals("true", true) ||
+                jsonObj["skip-cert-verify"]?.jsonPrimitive?.content == "1" ||
+                jsonObj["skip-cert-verify"]?.jsonPrimitive?.content.equals("true", true) ||
+                jsonObj["verify_cert"]?.jsonPrimitive?.content.equals("false", true)
+
+        val encryption = jsonObj["scy"]?.jsonPrimitive?.content?.ifBlank { null }
+            ?: jsonObj["security"]?.jsonPrimitive?.content?.ifBlank { null }
+            ?: "auto"
+
         val profile = ProxyProfile(
             id = UUID.randomUUID().toString(),
             name = name,
@@ -182,10 +203,11 @@ object LinkParser {
             server = host,
             port = port,
             authSecret = uuid,
-            encryption = jsonObj["scy"]?.jsonPrimitive?.content ?: "auto",
+            encryption = encryption,
             tls = TlsConfig(
-                enabled = tlsStr.equals("tls", true),
+                enabled = isTls,
                 serverName = sni,
+                insecure = allowInsecure,
                 alpn = alpnList
             ),
             transport = TransportConfig(
@@ -202,14 +224,18 @@ object LinkParser {
         val password = uri.userInfo
         val host = uri.host
         val port = if (uri.port > 0) uri.port else 443
+        if (host.isBlank() || port !in 1..65535) {
+            return Result.Error(IllegalArgumentException("Invalid Trojan server endpoint: host='$host', port=$port"))
+        }
+
         val name = decodeFragment(uri.fragment, "Trojan-$host:$port")
-        val sni = uri.getQueryParameter("sni") ?: host
+        val sni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
         val alpnParam = uri.getQueryParameter("alpn")
         val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
         val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) }
             ?: (uri.getQueryParameter("allowInsecure")?.let { it == "1" || it.equals("true", true) } ?: false)
 
-        val typeParam = uri.getQueryParameter("type") ?: "tcp"
+        val typeParam = uri.getQueryParameter("type") ?: uri.getQueryParameter("net") ?: "tcp"
         val transportType = when (typeParam.lowercase()) {
             "ws" -> TransportType.WS
             "grpc" -> TransportType.GRPC
@@ -217,7 +243,7 @@ object LinkParser {
             else -> TransportType.TCP
         }
         val path = uri.getQueryParameter("path") ?: ""
-        val hostHeader = uri.getQueryParameter("host") ?: ""
+        val hostHeader = uri.getQueryParameter("host") ?: sni
         val serviceName = uri.getQueryParameter("serviceName") ?: ""
 
         val profile = ProxyProfile(
@@ -268,6 +294,9 @@ object LinkParser {
 
         val host = hostPort.substringBefore(':')
         val port = hostPort.substringAfter(':').toIntOrNull() ?: 8388
+        if (host.isBlank() || port !in 1..65535) {
+            return Result.Error(IllegalArgumentException("Invalid Shadowsocks server endpoint: host='$host', port=$port"))
+        }
         val name = decodeFragment(fragment, "SS-$host:$port")
 
         val profile = ProxyProfile(

@@ -66,7 +66,7 @@ class SettingsDataStore(private val context: Context) {
         context.dataStore.edit { it[KEY_REMOTE_DNS] = url }
     }
 
-    val fakeDnsEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_FAKE_DNS] ?: false }
+    val fakeDnsEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_FAKE_DNS] ?: true }
     suspend fun setFakeDnsEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_FAKE_DNS] = enabled }
     }
