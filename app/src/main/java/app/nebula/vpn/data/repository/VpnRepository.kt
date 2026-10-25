@@ -1,57 +1,60 @@
 package app.nebula.vpn.data.repository
 
-import android.content.Context
-import android.content.Intent
+import app.nebula.vpn.core.connection.ConnectionManager
 import app.nebula.vpn.core.model.ConnectionState
 import app.nebula.vpn.core.model.TrafficStats
-import app.nebula.vpn.vpn.ProxyVpnService
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class VpnRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val profileRepository: ProfileRepository
+    private val connectionManager: ConnectionManager
 ) {
-    private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
-    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val _trafficStats = MutableStateFlow(TrafficStats())
-    val trafficStats: StateFlow<TrafficStats> = _trafficStats.asStateFlow()
+    val connectionState: StateFlow<ConnectionState> = connectionManager.state
+    val trafficStats: StateFlow<TrafficStats> = connectionManager.stats
+    val isUserRequestedDisconnect: Boolean get() = connectionManager.isUserRequestedDisconnect
 
     fun updateState(state: ConnectionState) {
         android.util.Log.i("VpnRepository", "updateState -> $state")
-        _connectionState.value = state
+        when (state) {
+            is ConnectionState.Connected -> connectionManager.onServiceConnected(state.profileName)
+            is ConnectionState.Failed -> connectionManager.onServiceError(state.reason)
+            is ConnectionState.Error -> connectionManager.onServiceError(state.message)
+            is ConnectionState.Disconnected -> connectionManager.onServiceDisconnected()
+            else -> {}
+        }
     }
 
     fun updateStats(stats: TrafficStats) {
-        _trafficStats.value = stats
+        connectionManager.updateStats(stats)
     }
 
     fun startVpn(profileId: String) {
-        val intent = Intent(context, ProxyVpnService::class.java).apply {
-            action = ProxyVpnService.ACTION_START
-            putExtra(ProxyVpnService.EXTRA_PROFILE_ID, profileId)
+        repositoryScope.launch {
+            connectionManager.connect(profileId.ifEmpty { null })
         }
-        context.startForegroundService(intent)
     }
 
     fun switchProfile(profileId: String) {
-        val intent = Intent(context, ProxyVpnService::class.java).apply {
-            action = ProxyVpnService.ACTION_SWITCH
-            putExtra(ProxyVpnService.EXTRA_PROFILE_ID, profileId)
+        repositoryScope.launch {
+            connectionManager.switchServer(profileId)
         }
-        context.startService(intent)
     }
 
     fun stopVpn() {
-        val intent = Intent(context, ProxyVpnService::class.java).apply {
-            action = ProxyVpnService.ACTION_STOP
+        repositoryScope.launch {
+            connectionManager.disconnect()
         }
-        context.startService(intent)
+    }
+
+    fun onVpnRevoked() {
+        connectionManager.onVpnRevoked()
     }
 }

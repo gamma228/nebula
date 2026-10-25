@@ -64,4 +64,12 @@ object AppModule {
     fun provideProxyCore(@ApplicationContext context: Context): ProxyCore {
         return CoreFactory.create(context, useStub = false)
     }
+
+    @Provides
+    @Singleton
+    fun provideVpnServiceController(impl: app.nebula.vpn.core.connection.DefaultVpnServiceController): app.nebula.vpn.core.connection.VpnServiceController = impl
+
+    @Provides
+    @Singleton
+    fun provideConnectionManager(impl: app.nebula.vpn.core.connection.DefaultConnectionManager): app.nebula.vpn.core.connection.ConnectionManager = impl
 }

@@ -283,7 +283,9 @@ class ProxyVpnService : VpnService(), TunProvider {
 
                 vpnRepository.updateState(ConnectionState.Disconnecting)
                 try {
-                    proxyCore.stop()
+                    kotlinx.coroutines.withTimeoutOrNull(3000L) {
+                        proxyCore.stop()
+                    }
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -412,6 +414,7 @@ class ProxyVpnService : VpnService(), TunProvider {
     }
 
     override fun onRevoke() {
+        vpnRepository.onVpnRevoked()
         stopVpnTunnel()
     }
 
