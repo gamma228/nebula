@@ -6,8 +6,12 @@ import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.core.model.Result
 import app.nebula.vpn.core.parser.LinkParser
 import app.nebula.vpn.core.parser.SubscriptionDecoder
+import app.nebula.vpn.core.proxy.BatchTestProgress
+import app.nebula.vpn.core.proxy.LatencyTester
 import app.nebula.vpn.core.proxy.PingTester
 import app.nebula.vpn.core.proxy.PingType
+import app.nebula.vpn.core.proxy.ProbeMethod
+import app.nebula.vpn.core.proxy.ServerTestState
 import app.nebula.vpn.data.database.entity.SubscriptionEntity
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.SettingsRepository
@@ -15,19 +19,15 @@ import app.nebula.vpn.data.repository.SubscriptionRepository
 import app.nebula.vpn.data.repository.VpnRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -36,7 +36,8 @@ class ServersViewModel @Inject constructor(
     private val subscriptionRepository: SubscriptionRepository,
     private val settingsRepository: SettingsRepository,
     private val vpnRepository: VpnRepository,
-    private val pingTester: PingTester
+    private val pingTester: PingTester,
+    private val latencyTester: LatencyTester
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -51,8 +52,13 @@ class ServersViewModel @Inject constructor(
     private val _sortByPing = MutableStateFlow(false)
     val sortByPing: StateFlow<Boolean> = _sortByPing.asStateFlow()
 
-    private val _isPinging = MutableStateFlow(false)
-    val isPinging: StateFlow<Boolean> = _isPinging.asStateFlow()
+    val latencyProgress: StateFlow<BatchTestProgress> = latencyTester.progress
+
+    val isPinging: StateFlow<Boolean> = latencyProgress.map { it.isRunning }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        false
+    )
 
     private val _isPingingAll = MutableStateFlow(false)
     val isPingingAll: StateFlow<Boolean> = _isPingingAll.asStateFlow()
@@ -66,8 +72,16 @@ class ServersViewModel @Inject constructor(
     private val _livePingResults = MutableStateFlow<Map<String, Long>>(emptyMap())
     val livePingResults: StateFlow<Map<String, Long>> = _livePingResults.asStateFlow()
 
-    private val _pingProgress = MutableStateFlow(0f)
-    val pingProgress: StateFlow<Float> = _pingProgress.asStateFlow()
+    val pingProgress: StateFlow<Float> = latencyProgress.map { prog ->
+        if (prog.total > 0) prog.completed.toFloat() / prog.total.toFloat() else 0f
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+
+    private val _probeMethod = MutableStateFlow(ProbeMethod.TCP_HANDSHAKE)
+    val probeMethod: StateFlow<ProbeMethod> = _probeMethod.asStateFlow()
+
+    fun setProbeMethod(method: ProbeMethod) {
+        _probeMethod.value = method
+    }
 
     private val _activePingType = MutableStateFlow(PingType.TCP)
     val activePingType: StateFlow<PingType> = _activePingType.asStateFlow()
@@ -77,6 +91,35 @@ class ServersViewModel @Inject constructor(
         SharingStarted.WhileSubscribed(5000),
         "TCP"
     )
+
+    init {
+        viewModelScope.launch {
+            var wasRunning = false
+            latencyTester.progress.collect { progress ->
+                val newPings = mutableMapOf<String, Long>()
+                progress.currentServerStates.forEach { (id, state) ->
+                    when (state) {
+                        is ServerTestState.Ok -> newPings[id] = state.latencyMs
+                        is ServerTestState.Timeout -> newPings[id] = -1L
+                        is ServerTestState.Error -> newPings[id] = -1L
+                        else -> {}
+                    }
+                }
+                if (newPings.isNotEmpty()) {
+                    _livePingResults.value = _livePingResults.value + newPings
+                }
+                if (wasRunning && !progress.isRunning) {
+                    if (newPings.isNotEmpty()) {
+                        profileRepository.updatePingsBatch(newPings)
+                    }
+                    _isPingingAll.value = false
+                    _pingingSubscriptionId.value = null
+                    _pingingProfileId.value = null
+                }
+                wasRunning = progress.isRunning
+            }
+        }
+    }
 
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
@@ -153,84 +196,53 @@ class ServersViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun pingAllProfiles() {
-        if (_isPingingAll.value) return
-        val type = if (pingMode.value == "HTTP") PingType.HTTP else PingType.TCP
-        viewModelScope.launch(Dispatchers.IO) {
-            _isPingingAll.value = true
-            _isPinging.value = true
+        if (latencyProgress.value.isRunning) return
+        val profiles = allProfiles.value
+        if (profiles.isEmpty()) return
+        _isPingingAll.value = true
+        viewModelScope.launch {
             try {
-                runBatchPing(allProfiles.value, type)
+                latencyTester.testBatch(profiles, _probeMethod.value)
+                _importStatusMessage.value = "Проверка задержки завершена (${profiles.size} серверов)"
             } finally {
                 _isPingingAll.value = false
-                _isPinging.value = false
             }
         }
     }
 
     fun pingSubscriptionProfiles(subscriptionId: String) {
-        if (_pingingSubscriptionId.value != null) return
-        val type = if (pingMode.value == "HTTP") PingType.HTTP else PingType.TCP
+        if (latencyProgress.value.isRunning) return
         val subsProfiles = allProfiles.value.filter { it.subscriptionId == subscriptionId }
-        if (subsProfiles.isNotEmpty()) {
-            viewModelScope.launch(Dispatchers.IO) {
-                _pingingSubscriptionId.value = subscriptionId
-                try {
-                    runBatchPing(subsProfiles, type)
-                } finally {
-                    _pingingSubscriptionId.value = null
-                }
+        if (subsProfiles.isEmpty()) return
+        _pingingSubscriptionId.value = subscriptionId
+        viewModelScope.launch {
+            try {
+                latencyTester.testBatch(subsProfiles, _probeMethod.value)
+                _importStatusMessage.value = "Проверка серверов подписки завершена (${subsProfiles.size} серверов)"
+            } finally {
+                _pingingSubscriptionId.value = null
             }
         }
     }
 
     fun pingSingleProfile(profileId: String) {
-        if (_pingingProfileId.value != null) return
-        viewModelScope.launch(Dispatchers.IO) {
-            _pingingProfileId.value = profileId
+        if (latencyProgress.value.isRunning) return
+        val profile = allProfiles.value.firstOrNull { it.id == profileId } ?: return
+        _pingingProfileId.value = profileId
+        viewModelScope.launch {
             try {
-                val profile = profileRepository.getProfileById(profileId) ?: return@launch
-                val type = if (pingMode.value == "HTTP") PingType.HTTP else PingType.TCP
-                val latency = if (type == PingType.TCP) {
-                    pingTester.pingTcp(profile.server, profile.port)
-                } else {
-                    pingTester.pingHttp()
-                }
-                _livePingResults.value = _livePingResults.value + (profile.id to latency)
-                profileRepository.updatePing(profile.id, latency)
+                latencyTester.testBatch(listOf(profile), _probeMethod.value)
             } finally {
                 _pingingProfileId.value = null
             }
         }
     }
 
-    private suspend fun runBatchPing(profiles: List<ProxyProfile>, type: PingType) {
-        if (profiles.isEmpty()) return
-        _activePingType.value = type
-        _pingProgress.value = 0f
-
-        val total = profiles.size
-        val completed = AtomicInteger(0)
-        val semaphore = Semaphore(8)
-        val results = java.util.concurrent.ConcurrentHashMap<String, Long>()
-
-        profiles.map { profile ->
-            viewModelScope.async(Dispatchers.IO) {
-                semaphore.withPermit {
-                    val latency = if (type == PingType.TCP) {
-                        pingTester.pingTcp(profile.server, profile.port)
-                    } else {
-                        pingTester.pingHttp()
-                    }
-                    results[profile.id] = latency
-                    _livePingResults.value = _livePingResults.value + (profile.id to latency)
-                    val done = completed.incrementAndGet()
-                    _pingProgress.value = done.toFloat() / total.toFloat()
-                }
-            }
-        }.awaitAll()
-
-        profileRepository.updatePingsBatch(results)
-        _importStatusMessage.value = "Проверка пинга (${if (type == PingType.TCP) "TCP" else "HTTP"}) завершена ($total серверов)"
+    fun cancelPing() {
+        latencyTester.cancel()
+        _isPingingAll.value = false
+        _pingingSubscriptionId.value = null
+        _pingingProfileId.value = null
     }
 
     fun toggleSortByPing() {

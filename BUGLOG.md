@@ -36,3 +36,33 @@ The VPN does not disconnect reliably when the disconnect button is pressed: the 
   - `disconnect while Connecting cancels in-flight job and finishes in Disconnected` -> PASS
   - `disconnect has 3 second timeout and forces termination if service hangs` -> PASS
   - `rapid 100 connect-disconnect cycles do not deadlock` -> PASS
+
+
+---
+
+## D2: Server Latency Tests That Never Hang
+
+### Problem Description
+When the user tapped "Check latency" or "Ping all", the entire application froze and stopped responding. Additionally, tapping the ping button on an individual subscription was pinging all servers across all subscriptions simultaneously, locking up the UI until all socket connections completed or timed out (often taking minutes). There was no cancellation button, no live progress reporting, and no graceful handling of offline/hanging endpoints.
+
+### Root Cause Analysis
+1. **Unbounded Blocking Network Calls**: Previous ping implementations performed synchronous socket handshakes on IO without strict worker pooling, exhausting thread pools and starving UI coroutines when multiple endpoints were offline.
+2. **Subscription Isolation Defect**: The subscription-level ping trigger mistakenly fell through to full-catalog ping or broadcasted global ping state to all subscriptions.
+3. **Absence of Cancellation Token & Dual Timeouts**: Once started, a test could not be cancelled. Sockets relied on default operating system TCP timeouts (often 30+ seconds per attempt) rather than short bounded timeouts.
+4. **Room Transaction Locking on UI Flow**: Database writes for ping results were performed per-item during the ping loop rather than batched at completion, inducing database contention.
+
+### Invariant Fix
+1. **`DefaultLatencyTester` with Bounded Concurrency**: Enforced `Semaphore(6)` concurrency limit, preventing socket pool exhaustion and ensuring smooth non-blocking execution.
+2. **Dual Timeout Enforcement**: Every probe is wrapped in both a coroutine-level `withTimeout(5000L)` and socket-level `soTimeout` / `connectTimeout = 5000ms`. In addition, a global batch timeout (`withTimeoutOrNull(30000L)`) bounds total execution.
+3. **Structured Cancellation**: Implemented `cancel()` which immediately aborts active coroutine jobs, cleans up sockets, and safely sets all in-flight probes to `ServerTestState.Timeout`.
+4. **Reactive Live Progress & Strict Subscription Scope**:
+   - Exposed `StateFlow<BatchTestProgress>` streaming completed/total counts and individual server states (`Pending`, `Testing`, `Ok(ms)`, `Timeout`, `Error`).
+   - `pingSubscriptionProfiles(subscriptionId)` strictly filters and tests only servers belonging to the target subscription.
+   - Live UI displays progress bar, server spinners, and a one-tap Cancel (`X`) button.
+5. **Selectable Probing Strategies**: Added `ProbeMethod` support for `TCP_HANDSHAKE`, `TLS_HANDSHAKE` (with SNI negotiation), and `HTTP_GET` (generate_204).
+6. **Batched Persistence**: Results are collected in-memory during testing and committed in a single batch transaction (`profileRepository.updatePingsBatch`) once the run finishes.
+
+### Automated Verification Proof
+- `LatencyTesterTest`:
+  - `hung servers trigger timeout without stalling queue` -> PASS
+  - `cancel aborts in-flight batch and leaves no server in Testing state` -> PASS

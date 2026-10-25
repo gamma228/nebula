@@ -29,6 +29,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
@@ -80,6 +81,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nebula.vpn.R
 import app.nebula.vpn.core.model.ProxyProfile
+import app.nebula.vpn.core.proxy.BatchTestProgress
+import app.nebula.vpn.core.proxy.ProbeMethod
+import app.nebula.vpn.core.proxy.ServerTestState
 import app.nebula.vpn.data.database.entity.SubscriptionEntity
 import app.nebula.vpn.ui.theme.EmeraldGreen
 import app.nebula.vpn.ui.theme.StatusGreen
@@ -105,6 +109,8 @@ fun ServersScreen(
     val pingingSubscriptionId by viewModel.pingingSubscriptionId.collectAsState()
     val pingingProfileId by viewModel.pingingProfileId.collectAsState()
     val pingProgress by viewModel.pingProgress.collectAsState()
+    val latencyProgress by viewModel.latencyProgress.collectAsState()
+    val probeMethod by viewModel.probeMethod.collectAsState()
     val sortByPing by viewModel.sortByPing.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val statusMessage by viewModel.importStatusMessage.collectAsState()
@@ -339,15 +345,64 @@ fun ServersScreen(
                 }
             }
 
-            if (isPingingAll) {
-                LinearProgressIndicator(
-                    progress = { pingProgress },
+            if (latencyProgress.isRunning) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp)),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = EmeraldGreen
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Проверка задержки: ${latencyProgress.completed} / ${latencyProgress.total}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                LinearProgressIndicator(
+                                    progress = { if (latencyProgress.total > 0) latencyProgress.completed.toFloat() / latencyProgress.total.toFloat() else 0f },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = EmeraldGreen,
+                                    trackColor = MaterialTheme.colorScheme.surface
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        IconButton(
+                            onClick = { viewModel.cancelPing() },
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Отмена проверки",
+                                tint = StatusRed,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(4.dp))
             }
 
@@ -368,7 +423,48 @@ fun ServersScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Protocol and Probe Mode Selectors Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Probe Method Selector Chips
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Тест:",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+                    listOf(
+                        ProbeMethod.TCP_HANDSHAKE to "TCP",
+                        ProbeMethod.TLS_HANDSHAKE to "TLS",
+                        ProbeMethod.HTTP_GET to "HTTP"
+                    ).forEach { (method, label) ->
+                        val isSelected = probeMethod == method
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.setProbeMethod(method) },
+                            label = { Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = EmeraldGreen.copy(alpha = 0.2f),
+                                selectedLabelColor = EmeraldGreen,
+                                containerColor = MaterialTheme.colorScheme.surface,
+                                labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Protocol Filter Chips
             val protocols = listOf("Все", "VLESS", "VMess", "Trojan", "Shadowsocks", "Hysteria2")
@@ -416,6 +512,7 @@ fun ServersScreen(
                         isExpanded = isExpanded,
                         isPinging = (pingingSubscriptionId == sub.id),
                         pingingProfileId = pingingProfileId,
+                        serverStates = latencyProgress.currentServerStates,
                         onToggleExpand = { expandedSubs[sub.id] = !isExpanded },
                         onPingSubscription = { viewModel.pingSubscriptionProfiles(sub.id) },
                         onPingProfile = { viewModel.pingSingleProfile(it) },
@@ -442,10 +539,12 @@ fun ServersScreen(
                     }
 
                     items(customProfiles, key = { it.id }) { profile ->
+                        val testState = latencyProgress.currentServerStates[profile.id]
                         ServerItemCard(
                             profile = profile,
                             isSelected = profile.id == selectedId,
-                            isPinging = (pingingProfileId == profile.id),
+                            isPinging = (pingingProfileId == profile.id || testState is ServerTestState.Testing),
+                            serverTestState = testState,
                             onSelect = { viewModel.selectProfile(profile.id) },
                             onToggleFavorite = { viewModel.toggleFavorite(profile.id) },
                             onDelete = { viewModel.deleteProfile(profile.id) },
@@ -471,6 +570,7 @@ private fun SubscriptionAccordion(
     isExpanded: Boolean,
     isPinging: Boolean = false,
     pingingProfileId: String? = null,
+    serverStates: Map<String, ServerTestState> = emptyMap(),
     onToggleExpand: () -> Unit,
     onPingSubscription: () -> Unit,
     onPingProfile: (String) -> Unit,
@@ -690,10 +790,12 @@ private fun SubscriptionAccordion(
                 ) {
                     profiles.forEach { profile ->
                         val isSelected = profile.id == selectedId
+                        val testState = serverStates[profile.id]
                         ServerItemCard(
                             profile = profile,
                             isSelected = isSelected,
-                            isPinging = (pingingProfileId == profile.id),
+                            isPinging = (pingingProfileId == profile.id || testState is ServerTestState.Testing),
+                            serverTestState = testState,
                             onSelect = { onSelectProfile(profile.id) },
                             onToggleFavorite = { onToggleFavorite(profile.id) },
                             onDelete = { onDeleteProfile(profile.id) },
@@ -711,6 +813,7 @@ private fun ServerItemCard(
     profile: ProxyProfile,
     isSelected: Boolean,
     isPinging: Boolean = false,
+    serverTestState: ServerTestState? = null,
     onSelect: () -> Unit,
     onToggleFavorite: () -> Unit,
     onDelete: () -> Unit,
@@ -793,23 +896,44 @@ private fun ServerItemCard(
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // Clickable Ping Badge for Single Server
-                val ping = profile.lastPingMs
-                val pingColor = when {
-                    ping == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    ping < 0 -> StatusRed
-                    ping < 120 -> StatusGreen
-                    ping < 250 -> StatusYellow
-                    else -> StatusRed
+                val (displayText, pingColor) = when {
+                    serverTestState is ServerTestState.Ok -> {
+                        val ms = serverTestState.latencyMs
+                        val col = when {
+                            ms < 120 -> StatusGreen
+                            ms < 300 -> StatusYellow
+                            else -> StatusRed
+                        }
+                        "$ms ms" to col
+                    }
+                    serverTestState is ServerTestState.Timeout -> "Таймаут" to StatusRed
+                    serverTestState is ServerTestState.Error -> "Ошибка" to StatusRed
+                    else -> {
+                        val ping = profile.lastPingMs
+                        val col = when {
+                            ping == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            ping < 0 -> StatusRed
+                            ping < 120 -> StatusGreen
+                            ping < 250 -> StatusYellow
+                            else -> StatusRed
+                        }
+                        val text = when {
+                            ping == null -> "--"
+                            ping < 0 -> "Таймаут"
+                            else -> "$ping ms"
+                        }
+                        text to col
+                    }
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
                         .background(pingColor.copy(alpha = 0.12f))
-                        .clickable(enabled = !isPinging) { onPing() }
+                        .clickable(enabled = !isPinging && serverTestState !is ServerTestState.Testing) { onPing() }
                         .padding(horizontal = 6.dp, vertical = 4.dp)
                 ) {
-                    if (isPinging) {
+                    if (isPinging || serverTestState is ServerTestState.Testing) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(10.dp),
                             strokeWidth = 1.5.dp,
@@ -831,11 +955,7 @@ private fun ServerItemCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = when {
-                                ping == null -> "--"
-                                ping < 0 -> "Таймаут"
-                                else -> "$ping ms"
-                            },
+                            text = displayText,
                             fontSize = 11.sp,
                             color = pingColor,
                             fontWeight = FontWeight.Bold

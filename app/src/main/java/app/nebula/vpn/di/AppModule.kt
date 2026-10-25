@@ -72,4 +72,12 @@ object AppModule {
     @Provides
     @Singleton
     fun provideConnectionManager(impl: app.nebula.vpn.core.connection.DefaultConnectionManager): app.nebula.vpn.core.connection.ConnectionManager = impl
+
+    @Provides
+    @Singleton
+    fun provideLatencyProbe(impl: app.nebula.vpn.core.proxy.DefaultLatencyProbe): app.nebula.vpn.core.proxy.LatencyProbe = impl
+
+    @Provides
+    @Singleton
+    fun provideLatencyTester(impl: app.nebula.vpn.core.proxy.DefaultLatencyTester): app.nebula.vpn.core.proxy.LatencyTester = impl
 }
