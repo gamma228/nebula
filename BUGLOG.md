@@ -143,3 +143,49 @@ Users reported connecting successfully to proxy nodes, but traffic was not circu
   - Short Connection Burst: Increased from 352.1 req/s to 571.9 req/s (+62.4%)
   - Throughput: 600.6 MB/s download, 378.7 MB/s upload
 - Comprehensive architectural report written in `docs/bench/BENCHMARK_REPORT.md`.
+
+---
+
+## [D5] ROUTING UI REDESIGN & SMART RULE ENGINE
+
+### Symptoms & Root Cause
+1. **Unusable Long-Scrolling UI**: Routing was buried inside Settings sub-navigation with a single long-scrolling column that hid primary actions and lacked dense list ergonomics.
+2. **Missing Multi-Select & Bulk Actions**: Users could not batch-select, batch-delete, or batch-change rule actions (Proxy/Direct/Block).
+3. **No Rule Shadowing / Conflict Detection**: When broad wildcard or suffix rules preceded specific domains or subnets, the latter were silently shadowed with no visual warning.
+4. **Manual Rule Entry Friction**: Adding multiple rules required repetitive dialog entries; no intelligent multi-line parser existed to parse mixed formats (domains, suffixes, CIDRs, package names).
+5. **Absence of Route Trace Simulation**: Users had no tool to test which rule and outbound traffic would take before actually sending packets.
+
+### Invariant Fix
+1. **Material 3 Redesigned Architecture**:
+   - Elevated Routing to top-level Bottom Navigation item (`[Home | Servers | Routing | Tools | Settings]`).
+   - Built sticky segmented tabs: `[Rules | Apps | Presets | Test]` with live rule count badges.
+   - Pinned live search field directly below tabs for instant multi-field filtering.
+2. **Dense List & Interactive Controls (Rules Tab)**:
+   - Compact row layout displaying priority index, type icon, rule value, action chip (Electric Violet / Status Green / Status Red), and enable/disable switch.
+   - Filter chips: `[All | Proxy | Direct | Block | Domain | IP | App]`.
+   - Multi-select action banner with bulk delete, bulk action change, and select all/clear.
+   - Undo snackbar for rule deletions (`undoLastDelete`).
+   - Integrated `RuleConflictDetector` providing live visual amber warning badges for shadowed rules.
+3. **Smart Rule Engine & Persistent FAB**:
+   - Anchored FAB opening modern `ModalBottomSheet` with zero hidden dropdowns.
+   - Implemented `SmartRuleParser` auto-detecting domains, dot-suffixes (`.ru`), IPv4 CIDRs (`192.168.1.0/24`, `1.1.1.1`), and Android package names from multi-line clipboard inputs.
+4. **Apps Tab & Preset Engine**:
+   - Pinned routing mode selector (`Global` / `Bypass Selected` / `Forward Selected`) with clear visual descriptions.
+   - Searchable application list with app icons, package names, checkboxes, and bulk actions (`Select All`, `Invert`, `Clear All`, `Mass Import`).
+   - Presets Tab providing 1-tap application for `Russia Direct`, `Block Ads & Trackers`, and `Socials via Proxy`.
+5. **Interactive Route Trace Simulator (Test Tab)**:
+   - Live query testing against current rule set in priority order, displaying matched rule type, value, action, and resulting outbound destination (`select`, `direct`, `block`).
+6. **Complete Localization Parity**:
+   - 35 new string keys added across all 5 languages (`en`, `ru`, `uk`, `zh-CN`, `de`) with `StringsParityTest` 100% green.
+
+### Automated Verification Proof
+- `StringsParityTest`: 100% key parity verified across English, Russian, Ukrainian, Simplified Chinese, and German.
+- `RoutingEngineTest`:
+  - `testSmartRuleParserDetectsDomainsSuffixesIpsAndPackages`: PASS
+  - `testRuleConflictDetectorIdentifiesShadowedRules`: PASS
+- Live Emulator Verification (`emulator-5554`):
+  - Bottom navigation 5-tab transition: Verified
+  - Segmented tab switching `[Rules | Apps | Presets | Test]`: Verified
+  - Add Rule bottom sheet & Smart Paste toggle: Verified
+  - Route Trace Simulator with `yandex.ru` -> `direct (Direct Bypass)`: Verified
+  - Visual evidence saved to `screen_routing_new.png`, `screen_add_rule_sheet.png`, `screen_smart_paste.png`, `screen_routing_apps.png`, `screen_routing_presets.png`, `screen_routing_test.png`, `screen_routing_trace_res.png`.

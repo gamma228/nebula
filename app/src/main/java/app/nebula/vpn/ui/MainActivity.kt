@@ -395,18 +395,18 @@ class MainActivity : AppCompatActivity() {
         val appearanceViewModel: AppearanceViewModel = hiltViewModel()
         val settingsViewModel: SettingsViewModel = hiltViewModel()
 
-        // 3 primary bottom bar tabs (INCY-style: Home, Servers, Settings)
+        // Primary bottom bar tabs (Home, Servers, Routing, Tools, Settings)
         val bottomBarScreens = listOf(
             Screen.Home,
             Screen.Servers,
+            Screen.Routing,
+            Screen.Tools,
             Screen.Settings
         )
 
         // Handle Back navigation for sub-screens
         val isSubScreen = currentScreen in listOf(
-            Screen.Routing,
             Screen.Doctor,
-            Screen.Tools,
             Screen.Appearance
         )
 
@@ -423,14 +423,10 @@ class MainActivity : AppCompatActivity() {
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ) {
                     bottomBarScreens.forEach { screen ->
-                        val isSelected = when (currentScreen) {
-                            Screen.Home -> screen is Screen.Home
-                            Screen.Servers -> screen is Screen.Servers
-                            else -> screen is Screen.Settings
-                        }
+                        val isSelected = currentScreen == screen
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
-                            label = { Text(stringResource(screen.titleRes), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                            label = { Text(stringResource(screen.titleRes), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) },
                             selected = isSelected,
                             onClick = { currentScreen = screen },
                             colors = NavigationBarItemDefaults.colors(
@@ -453,13 +449,6 @@ class MainActivity : AppCompatActivity() {
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Sub-screen header with Back button
                     if (isSubScreen) {
-                        val subTitle = when (currentScreen) {
-                            Screen.Routing -> "Прокси по приложениям"
-                            Screen.Appearance -> "Оформление"
-                            Screen.Doctor -> "Connection Doctor"
-                            Screen.Tools -> "Журнал и инструменты"
-                            else -> ""
-                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -476,7 +465,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = subTitle,
+                                text = stringResource(currentScreen.titleRes),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface

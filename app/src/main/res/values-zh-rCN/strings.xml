@@ -106,4 +106,58 @@
     <string name="onboarding_preset_global_proxy">全局严格代理（Strict）</string>
     <string name="onboarding_get_started">即刻启程</string>
     <string name="onboarding_skip">跳过向导</string>
+
+    <!-- Routing Redesign Strings (D5) -->
+    <string name="routing_tab_rules">规则</string>
+    <string name="routing_tab_apps">应用</string>
+    <string name="routing_tab_presets">预设</string>
+    <string name="routing_tab_test">测试</string>
+
+    <string name="filter_all">全部</string>
+    <string name="filter_proxy">代理</string>
+    <string name="filter_direct">直连</string>
+    <string name="filter_block">拦截</string>
+    <string name="filter_domain">域名</string>
+    <string name="filter_ip">IP</string>
+    <string name="filter_app">应用</string>
+
+    <string name="search_rules_apps">搜索规则、域名、应用…</string>
+    <string name="selected_count">已选择 %d 项</string>
+    <string name="delete_selected">删除</string>
+    <string name="undo">撤消</string>
+    <string name="rule_deleted">规则已删除</string>
+    <string name="rule_shadowed_warning">被遮蔽：此规则永远无法到达</string>
+
+    <string name="smart_paste_title">智能规则导入</string>
+    <string name="smart_paste_hint">粘贴域名、后缀 (.ru)、IP CIDR 或软件包（每行一个）…</string>
+    <string name="smart_paste_import_btn">导入识别的规则</string>
+    <string name="rule_type">类型</string>
+    <string name="rule_action">操作</string>
+    <string name="rule_value">值</string>
+
+    <string name="preset_russia_direct">俄罗斯直连</string>
+    <string name="preset_russia_direct_desc">直连俄罗斯服务 (.ru, .su, .рф)</string>
+    <string name="preset_block_ads">拦截广告与追踪器</string>
+    <string name="preset_block_ads_desc">拦截 DoubleClick、广告网络和遥测</string>
+    <string name="preset_socials_proxy">社交媒体走代理</string>
+    <string name="preset_socials_proxy_desc">将 Instagram、X/Twitter 和 Facebook 路由至代理</string>
+    <string name="preset_apply_btn">应用预设</string>
+    <string name="preset_applied">预设已成功应用</string>
+
+    <string name="test_route_title">路由跟踪模拟器</string>
+    <string name="test_route_desc">输入域名、IP 或软件包名称以模拟其路由出站</string>
+    <string name="test_route_btn">测试路由</string>
+    <string name="test_input_placeholder">例如 youtube.com 或 1.1.1.1</string>
+
+    <string name="app_mode_global">全局模式</string>
+    <string name="app_mode_global_desc">所有应用流量均通过 VPN 隧道路由</string>
+    <string name="app_mode_bypass">绕过选中应用</string>
+    <string name="app_mode_bypass_desc">选中的应用直接连接，不经过 VPN</string>
+    <string name="app_mode_forward">仅代理选中</string>
+    <string name="app_mode_forward_desc">仅选中的应用使用 VPN；其他应用直连</string>
+    <string name="app_select_all">全选</string>
+    <string name="app_clear_all">清除全部</string>
+    <string name="app_invert">反选</string>
+    <string name="app_mass_import">批量导入软件包</string>
+
 </resources>

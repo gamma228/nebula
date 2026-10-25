@@ -106,4 +106,58 @@
     <string name="onboarding_preset_global_proxy">Proxy All Traffic (Strict)</string>
     <string name="onboarding_get_started">Get Started</string>
     <string name="onboarding_skip">Skip</string>
+
+    <!-- Routing Redesign Strings (D5) -->
+    <string name="routing_tab_rules">Rules</string>
+    <string name="routing_tab_apps">Apps</string>
+    <string name="routing_tab_presets">Presets</string>
+    <string name="routing_tab_test">Test</string>
+
+    <string name="filter_all">All</string>
+    <string name="filter_proxy">Proxy</string>
+    <string name="filter_direct">Direct</string>
+    <string name="filter_block">Block</string>
+    <string name="filter_domain">Domain</string>
+    <string name="filter_ip">IP</string>
+    <string name="filter_app">App</string>
+
+    <string name="search_rules_apps">Search rules, domains, apps…</string>
+    <string name="selected_count">%d selected</string>
+    <string name="delete_selected">Delete</string>
+    <string name="undo">Undo</string>
+    <string name="rule_deleted">Rule deleted</string>
+    <string name="rule_shadowed_warning">Shadowed: this rule is never reached</string>
+
+    <string name="smart_paste_title">Smart Rule Import</string>
+    <string name="smart_paste_hint">Paste domains, suffixes (.ru), IP CIDRs, or packages (one per line)…</string>
+    <string name="smart_paste_import_btn">Import Detected Rules</string>
+    <string name="rule_type">Type</string>
+    <string name="rule_action">Action</string>
+    <string name="rule_value">Value</string>
+
+    <string name="preset_russia_direct">Russia Direct</string>
+    <string name="preset_russia_direct_desc">Bypasses Russian services (.ru, .su, .рф)</string>
+    <string name="preset_block_ads">Block Ads &amp; Trackers</string>
+    <string name="preset_block_ads_desc">Blocks DoubleClick, Google AdServices, and telemetry</string>
+    <string name="preset_socials_proxy">Socials via Proxy</string>
+    <string name="preset_socials_proxy_desc">Routes Instagram, X/Twitter, and Facebook via VPN</string>
+    <string name="preset_apply_btn">Apply Preset</string>
+    <string name="preset_applied">Preset applied successfully</string>
+
+    <string name="test_route_title">Route Trace Simulator</string>
+    <string name="test_route_desc">Enter a domain, IP, or package name to trace its routing outbound</string>
+    <string name="test_route_btn">Trace Route</string>
+    <string name="test_input_placeholder">e.g. youtube.com or 1.1.1.1</string>
+
+    <string name="app_mode_global">Global</string>
+    <string name="app_mode_global_desc">All app traffic is routed through the VPN tunnel</string>
+    <string name="app_mode_bypass">Bypass Selected</string>
+    <string name="app_mode_bypass_desc">Selected apps connect directly without VPN</string>
+    <string name="app_mode_forward">Forward Selected</string>
+    <string name="app_mode_forward_desc">Only selected apps use VPN; all others connect directly</string>
+    <string name="app_select_all">Select All</string>
+    <string name="app_clear_all">Clear All</string>
+    <string name="app_invert">Invert</string>
+    <string name="app_mass_import">Mass Import Packages</string>
+
 </resources>

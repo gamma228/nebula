@@ -30,6 +30,12 @@ class RoutingRepository @Inject constructor(
         ruleDao.deleteRuleById(id)
     }
 
+    suspend fun deleteRules(ids: Set<String>) {
+        for (id in ids) {
+            ruleDao.deleteRuleById(id)
+        }
+    }
+
     suspend fun updateRulesOrder(orderedRules: List<RoutingRule>) {
         val updated = orderedRules.mapIndexed { index, rule ->
             rule.copy(priority = index).toEntity()

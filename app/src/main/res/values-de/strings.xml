@@ -106,4 +106,58 @@
     <string name="onboarding_preset_global_proxy">Gesamten Datenverkehr leiten (Strikt)</string>
     <string name="onboarding_get_started">Jetzt starten</string>
     <string name="onboarding_skip">Überspringen</string>
+
+    <!-- Routing Redesign Strings (D5) -->
+    <string name="routing_tab_rules">Regeln</string>
+    <string name="routing_tab_apps">Apps</string>
+    <string name="routing_tab_presets">Voreinstellungen</string>
+    <string name="routing_tab_test">Test</string>
+
+    <string name="filter_all">Alle</string>
+    <string name="filter_proxy">Proxy</string>
+    <string name="filter_direct">Direkt</string>
+    <string name="filter_block">Blockieren</string>
+    <string name="filter_domain">Domain</string>
+    <string name="filter_ip">IP</string>
+    <string name="filter_app">App</string>
+
+    <string name="search_rules_apps">Regeln, Domains, Apps suchen…</string>
+    <string name="selected_count">%d ausgewählt</string>
+    <string name="delete_selected">Löschen</string>
+    <string name="undo">Rückgängig</string>
+    <string name="rule_deleted">Regel gelöscht</string>
+    <string name="rule_shadowed_warning">Überdeckt: Diese Regel wird nie erreicht</string>
+
+    <string name="smart_paste_title">Intelligenter Regelimport</string>
+    <string name="smart_paste_hint">Domains, Suffixe (.ru), IP-CIDRs oder Pakete einfügen (eines pro Zeile)…</string>
+    <string name="smart_paste_import_btn">Erkannte Regeln importieren</string>
+    <string name="rule_type">Typ</string>
+    <string name="rule_action">Aktion</string>
+    <string name="rule_value">Wert</string>
+
+    <string name="preset_russia_direct">Russland Direkt</string>
+    <string name="preset_russia_direct_desc">Leitet russische Dienste direkt (.ru, .su, .рф)</string>
+    <string name="preset_block_ads">Werbung &amp; Tracker blockieren</string>
+    <string name="preset_block_ads_desc">Blockiert DoubleClick, Werbenetzwerke und Telemetrie</string>
+    <string name="preset_socials_proxy">Soziale Netzwerke über Proxy</string>
+    <string name="preset_socials_proxy_desc">Leitet Instagram, X/Twitter und Facebook über Proxy</string>
+    <string name="preset_apply_btn">Voreinstellung anwenden</string>
+    <string name="preset_applied">Voreinstellung erfolgreich angewendet</string>
+
+    <string name="test_route_title">Routing-Trace-Simulator</string>
+    <string name="test_route_desc">Domain, IP oder Paketnamen eingeben, um das Routing zu testen</string>
+    <string name="test_route_btn">Route testen</string>
+    <string name="test_input_placeholder">z.B. youtube.com oder 1.1.1.1</string>
+
+    <string name="app_mode_global">Global</string>
+    <string name="app_mode_global_desc">Der gesamte App-Verkehr wird über den VPN-Tunnel geleitet</string>
+    <string name="app_mode_bypass">Ausgewählte umgehen</string>
+    <string name="app_mode_bypass_desc">Ausgewählte Apps verbinden sich direkt ohne VPN</string>
+    <string name="app_mode_forward">Nur ausgewählte weiterleiten</string>
+    <string name="app_mode_forward_desc">Nur ausgewählte Apps nutzen VPN; alle anderen direkt</string>
+    <string name="app_select_all">Alle auswählen</string>
+    <string name="app_clear_all">Alle abwählen</string>
+    <string name="app_invert">Invertieren</string>
+    <string name="app_mass_import">Pakete massenhaft importieren</string>
+
 </resources>

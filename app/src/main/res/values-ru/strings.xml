@@ -106,4 +106,58 @@
     <string name="onboarding_preset_global_proxy">Проксировать весь интернет (Строгий)</string>
     <string name="onboarding_get_started">Начать работу</string>
     <string name="onboarding_skip">Пропустить</string>
+
+    <!-- Routing Redesign Strings (D5) -->
+    <string name="routing_tab_rules">Правила</string>
+    <string name="routing_tab_apps">Приложения</string>
+    <string name="routing_tab_presets">Пресеты</string>
+    <string name="routing_tab_test">Тест</string>
+
+    <string name="filter_all">Все</string>
+    <string name="filter_proxy">Прокси</string>
+    <string name="filter_direct">Прямой</string>
+    <string name="filter_block">Блок</string>
+    <string name="filter_domain">Домен</string>
+    <string name="filter_ip">IP</string>
+    <string name="filter_app">Приложение</string>
+
+    <string name="search_rules_apps">Поиск правил, доменов, приложений…</string>
+    <string name="selected_count">Выбрано: %d</string>
+    <string name="delete_selected">Удалить</string>
+    <string name="undo">Отменить</string>
+    <string name="rule_deleted">Правило удалено</string>
+    <string name="rule_shadowed_warning">Затенено: это правило никогда не сработает</string>
+
+    <string name="smart_paste_title">Умный импорт правил</string>
+    <string name="smart_paste_hint">Вставьте домены, суффиксы (.ru), IP CIDR или пакеты (по одному на строку)…</string>
+    <string name="smart_paste_import_btn">Импортировать распознанные правила</string>
+    <string name="rule_type">Тип</string>
+    <string name="rule_action">Действие</string>
+    <string name="rule_value">Значение</string>
+
+    <string name="preset_russia_direct">Россия напрямую</string>
+    <string name="preset_russia_direct_desc">Направляет российские сервисы напрямую (.ru, .su, .рф)</string>
+    <string name="preset_block_ads">Блокировка рекламы</string>
+    <string name="preset_block_ads_desc">Блокирует DoubleClick, рекламные сети и телеметрию</string>
+    <string name="preset_socials_proxy">Соцсети через прокси</string>
+    <string name="preset_socials_proxy_desc">Маршрутизирует Instagram, X/Twitter и Facebook через VPN</string>
+    <string name="preset_apply_btn">Применить пресет</string>
+    <string name="preset_applied">Пресет успешно применен</string>
+
+    <string name="test_route_title">Симулятор маршрутизации</string>
+    <string name="test_route_desc">Введите домен, IP или имя пакета для проверки маршрута</string>
+    <string name="test_route_btn">Проверить маршрут</string>
+    <string name="test_input_placeholder">например youtube.com или 1.1.1.1</string>
+
+    <string name="app_mode_global">Все сети</string>
+    <string name="app_mode_global_desc">Трафик всех приложений направляется через VPN</string>
+    <string name="app_mode_bypass">Обход выбранных</string>
+    <string name="app_mode_bypass_desc">Выбранные приложения работают напрямую в обход VPN</string>
+    <string name="app_mode_forward">Только выбранные</string>
+    <string name="app_mode_forward_desc">Только выбранные приложения используют VPN; остальные напрямую</string>
+    <string name="app_select_all">Выбрать все</string>
+    <string name="app_clear_all">Сбросить</string>
+    <string name="app_invert">Инвертировать</string>
+    <string name="app_mass_import">Массовый ввод пакетов</string>
+
 </resources>
