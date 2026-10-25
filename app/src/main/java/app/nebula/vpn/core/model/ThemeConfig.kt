@@ -26,15 +26,15 @@ enum class BackgroundType {
 
 @Serializable
 data class ThemeConfig(
-    val presetId: String = "oled_crimson",
+    val presetId: String = "emerald_cyber",
     val mode: ThemeMode = ThemeMode.AMOLED,
-    val primaryColorHex: String = "#E60049",   // Crimson Red
-    val accentColorHex: String = "#8A2BE2",    // Electric Violet
-    val surfaceColorHex: String = "#121217",   // Slate Grey
-    val backgroundColorHex: String = "#050508", // Deep Black
-    val cornerRadiusDp: Int = 16,
-    val buttonShape: ButtonShape = ButtonShape.SQUIRCLE,
-    val neonBordersEnabled: Boolean = true,
+    val primaryColorHex: String = "#00D084",   // Soft Emerald
+    val accentColorHex: String = "#06B6D4",    // Cool Mint Cyan
+    val surfaceColorHex: String = "#13171C",   // Dark Muted Slate
+    val backgroundColorHex: String = "#090C0E", // Pure OLED Dark
+    val cornerRadiusDp: Int = 18,
+    val buttonShape: ButtonShape = ButtonShape.ROUNDED,
+    val neonBordersEnabled: Boolean = false,
     val glassBlurEnabled: Boolean = true,
     val reduceMotion: Boolean = false,
     val hapticFeedbackEnabled: Boolean = true,

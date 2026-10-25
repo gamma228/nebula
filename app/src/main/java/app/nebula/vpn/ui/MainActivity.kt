@@ -11,24 +11,32 @@ import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AltRoute
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -40,14 +48,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
@@ -61,6 +71,7 @@ import app.nebula.vpn.core.parser.LinkParser
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.RoutingRepository
 import app.nebula.vpn.data.repository.SettingsRepository
+import app.nebula.vpn.data.repository.SubscriptionRepository
 import app.nebula.vpn.data.repository.ThemeRepository
 import app.nebula.vpn.data.repository.VpnRepository
 import app.nebula.vpn.ui.appearance.AppearanceScreen
@@ -77,6 +88,7 @@ import app.nebula.vpn.ui.servers.ServersScreen
 import app.nebula.vpn.ui.servers.ServersViewModel
 import app.nebula.vpn.ui.settings.SettingsScreen
 import app.nebula.vpn.ui.settings.SettingsViewModel
+import app.nebula.vpn.ui.theme.EmeraldGreen
 import app.nebula.vpn.ui.theme.NebulaTheme
 import app.nebula.vpn.ui.tools.ToolsScreen
 import app.nebula.vpn.ui.tools.ToolsViewModel
@@ -87,13 +99,13 @@ import java.util.UUID
 import javax.inject.Inject
 
 sealed class Screen(val index: Int, val titleRes: Int, val icon: ImageVector) {
-    object Home : Screen(0, R.string.nav_home, Icons.Default.Home)
+    object Home : Screen(0, R.string.nav_home, Icons.Default.Shield)
     object Servers : Screen(1, R.string.nav_servers, Icons.Default.Dns)
-    object Routing : Screen(2, R.string.nav_routing, Icons.Default.AltRoute)
-    object Doctor : Screen(3, R.string.nav_doctor, Icons.Default.MedicalServices)
-    object Tools : Screen(4, R.string.nav_tools, Icons.Default.Build)
-    object Appearance : Screen(5, R.string.nav_appearance, Icons.Default.Palette)
-    object Settings : Screen(6, R.string.nav_settings, Icons.Default.Settings)
+    object Settings : Screen(2, R.string.nav_settings, Icons.Default.Settings)
+    object Routing : Screen(3, R.string.nav_routing, Icons.Default.AltRoute)
+    object Doctor : Screen(4, R.string.nav_doctor, Icons.Default.MedicalServices)
+    object Tools : Screen(5, R.string.nav_tools, Icons.Default.Build)
+    object Appearance : Screen(6, R.string.nav_appearance, Icons.Default.Palette)
 }
 
 @AndroidEntryPoint
@@ -107,6 +119,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var profileRepository: ProfileRepository
+
+    @Inject
+    lateinit var subscriptionRepository: SubscriptionRepository
 
     @Inject
     lateinit var routingRepository: RoutingRepository
@@ -130,6 +145,7 @@ class MainActivity : ComponentActivity() {
     ) { /* handled */ }
 
     private var pendingImportProfileState = mutableStateOf<ProxyProfile?>(null)
+    private var pendingImportSubscriptionUrl = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -164,7 +180,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val activeTheme by themeRepository.activeTheme.collectAsState(
-                initial = ThemeRepository.PRESET_OLED_CRIMSON
+                initial = ThemeRepository.PRESET_EMERALD_CYBER
             )
             val isOnboardingDone by settingsRepository.onboardingDone.collectAsState(
                 initial = true
@@ -210,34 +226,79 @@ class MainActivity : ComponentActivity() {
                     MainNavigationContent()
                 }
 
-                // Deep link confirmation dialog
-                val pendingProfile = pendingImportProfileState.value
-                if (pendingProfile != null) {
+                // Import Single Server Confirmation Dialog
+                val pending = pendingImportProfileState.value
+                if (pending != null) {
                     AlertDialog(
                         onDismissRequest = { pendingImportProfileState.value = null },
                         title = { Text(stringResource(R.string.add_profile)) },
                         text = {
-                            Text("Import profile \"${pendingProfile.name}\" (${pendingProfile.protocol.name}) from external link?")
+                            Column {
+                                Text("Название: ${pending.name}")
+                                Text("Протокол: ${pending.protocol.name}")
+                                Text("Адрес: ${pending.server}:${pending.port}")
+                            }
                         },
                         confirmButton = {
                             TextButton(onClick = {
                                 lifecycleScope.launch {
-                                    profileRepository.saveProfile(pendingProfile)
-                                    settingsRepository.setSelectedProfileId(pendingProfile.id)
+                                    profileRepository.saveProfile(pending)
+                                    settingsRepository.setSelectedProfileId(pending.id)
                                     Toast.makeText(
                                         this@MainActivity,
-                                        "Profile \"${pendingProfile.name}\" imported!",
+                                        "Импортирован: ${pending.name}",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                     pendingImportProfileState.value = null
                                 }
                             }) {
-                                Text("Import")
+                                Text("Импортировать")
                             }
                         },
                         dismissButton = {
                             TextButton(onClick = { pendingImportProfileState.value = null }) {
-                                Text("Cancel")
+                                Text("Отмена")
+                            }
+                        }
+                    )
+                }
+
+                // Import Subscription Confirmation Dialog
+                val pendingSub = pendingImportSubscriptionUrl.value
+                if (pendingSub != null) {
+                    AlertDialog(
+                        onDismissRequest = { pendingImportSubscriptionUrl.value = null },
+                        title = { Text("Импортировать подписку?") },
+                        text = {
+                            Text("Загрузить конфигурацию и серверы по ссылке:\n$pendingSub")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val url = pendingSub
+                                pendingImportSubscriptionUrl.value = null
+                                lifecycleScope.launch {
+                                    val res = subscriptionRepository.addSubscription(url)
+                                    if (res is Result.Success) {
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Подписка добавлена: ${res.data.title}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    } else if (res is Result.Error) {
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Ошибка загрузки: ${res.exception.message}",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
+                            }) {
+                                Text("Загрузить")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingImportSubscriptionUrl.value = null }) {
+                                Text("Отмена")
                             }
                         }
                     )
@@ -255,10 +316,14 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         val uri: Uri? = intent?.data
         if (uri != null) {
-            val link = uri.toString()
-            val parsed = LinkParser.parse(link)
-            if (parsed is Result.Success) {
-                pendingImportProfileState.value = parsed.data
+            val link = uri.toString().trim()
+            if (link.startsWith("http://", ignoreCase = true) || link.startsWith("https://", ignoreCase = true)) {
+                pendingImportSubscriptionUrl.value = link
+            } else {
+                val parsed = LinkParser.parse(link)
+                if (parsed is Result.Success) {
+                    pendingImportProfileState.value = parsed.data
+                }
             }
         }
     }
@@ -286,15 +351,26 @@ class MainActivity : ComponentActivity() {
         val appearanceViewModel: AppearanceViewModel = hiltViewModel()
         val settingsViewModel: SettingsViewModel = hiltViewModel()
 
-        val screens = listOf(
+        // 3 primary bottom bar tabs (INCY-style: Home, Servers, Settings)
+        val bottomBarScreens = listOf(
             Screen.Home,
             Screen.Servers,
+            Screen.Settings
+        )
+
+        // Handle Back navigation for sub-screens
+        val isSubScreen = currentScreen in listOf(
             Screen.Routing,
             Screen.Doctor,
             Screen.Tools,
-            Screen.Appearance,
-            Screen.Settings
+            Screen.Appearance
         )
+
+        if (isSubScreen) {
+            BackHandler {
+                currentScreen = Screen.Settings
+            }
+        }
 
         Scaffold(
             bottomBar = {
@@ -302,18 +378,23 @@ class MainActivity : ComponentActivity() {
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface
                 ) {
-                    screens.forEach { screen ->
+                    bottomBarScreens.forEach { screen ->
+                        val isSelected = when (currentScreen) {
+                            Screen.Home -> screen is Screen.Home
+                            Screen.Servers -> screen is Screen.Servers
+                            else -> screen is Screen.Settings
+                        }
                         NavigationBarItem(
                             icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
-                            label = { Text(stringResource(screen.titleRes)) },
-                            selected = currentScreen.index == screen.index,
+                            label = { Text(stringResource(screen.titleRes), fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                            selected = isSelected,
                             onClick = { currentScreen = screen },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
-                                unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                selectedIconColor = EmeraldGreen,
+                                selectedTextColor = EmeraldGreen,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                indicatorColor = EmeraldGreen.copy(alpha = 0.15f)
                             )
                         )
                     }
@@ -325,20 +406,64 @@ class MainActivity : ComponentActivity() {
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                when (currentScreen) {
-                    is Screen.Home -> HomeScreen(
-                        viewModel = homeViewModel,
-                        onNavigateToServers = { currentScreen = Screen.Servers }
-                    )
-                    is Screen.Servers -> ServersScreen(
-                        viewModel = serversViewModel,
-                        onOpenQrScanner = { showQrScanner = true }
-                    )
-                    is Screen.Routing -> RoutingScreen(viewModel = routingViewModel)
-                    is Screen.Doctor -> DoctorScreen(viewModel = doctorViewModel)
-                    is Screen.Tools -> ToolsScreen(viewModel = toolsViewModel)
-                    is Screen.Appearance -> AppearanceScreen(viewModel = appearanceViewModel)
-                    is Screen.Settings -> SettingsScreen(viewModel = settingsViewModel)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Sub-screen header with Back button
+                    if (isSubScreen) {
+                        val subTitle = when (currentScreen) {
+                            Screen.Routing -> "Прокси по приложениям"
+                            Screen.Appearance -> "Оформление"
+                            Screen.Doctor -> "Connection Doctor"
+                            Screen.Tools -> "Журнал и инструменты"
+                            else -> ""
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            IconButton(onClick = { currentScreen = Screen.Settings }) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowBack,
+                                    contentDescription = "Back",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = subTitle,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
+                    // Content
+                    Box(modifier = Modifier.weight(1f)) {
+                        when (currentScreen) {
+                            is Screen.Home -> HomeScreen(
+                                viewModel = homeViewModel,
+                                onNavigateToServers = { currentScreen = Screen.Servers }
+                            )
+                            is Screen.Servers -> ServersScreen(
+                                viewModel = serversViewModel,
+                                onOpenQrScanner = { showQrScanner = true }
+                            )
+                            is Screen.Routing -> RoutingScreen(viewModel = routingViewModel)
+                            is Screen.Doctor -> DoctorScreen(viewModel = doctorViewModel)
+                            is Screen.Tools -> ToolsScreen(viewModel = toolsViewModel)
+                            is Screen.Appearance -> AppearanceScreen(viewModel = appearanceViewModel)
+                            is Screen.Settings -> SettingsScreen(
+                                viewModel = settingsViewModel,
+                                onNavigateToRouting = { currentScreen = Screen.Routing },
+                                onNavigateToAppearance = { currentScreen = Screen.Appearance },
+                                onNavigateToDoctor = { currentScreen = Screen.Doctor },
+                                onNavigateToTools = { currentScreen = Screen.Tools }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -347,23 +472,28 @@ class MainActivity : ComponentActivity() {
                     onDismissRequest = { showQrScanner = false },
                     onQrCodeScanned = { scannedContent ->
                         showQrScanner = false
-                        val parsed = LinkParser.parse(scannedContent)
-                        if (parsed is Result.Success) {
-                            lifecycleScope.launch {
-                                profileRepository.saveProfile(parsed.data)
-                                settingsRepository.setSelectedProfileId(parsed.data.id)
+                        val trimmed = scannedContent.trim()
+                        if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+                            pendingImportSubscriptionUrl.value = trimmed
+                        } else {
+                            val parsed = LinkParser.parse(trimmed)
+                            if (parsed is Result.Success) {
+                                lifecycleScope.launch {
+                                    profileRepository.saveProfile(parsed.data)
+                                    settingsRepository.setSelectedProfileId(parsed.data.id)
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Импортирован: ${parsed.data.name}",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            } else {
                                 Toast.makeText(
                                     this@MainActivity,
-                                    "Imported: ${parsed.data.name}",
+                                    "Неизвестный формат QR-кода",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
-                        } else {
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Invalid QR code format",
-                                Toast.LENGTH_SHORT
-                            ).show()
                         }
                     }
                 )

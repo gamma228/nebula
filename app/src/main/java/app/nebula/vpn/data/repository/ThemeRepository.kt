@@ -19,6 +19,18 @@ class ThemeRepository @Inject constructor(
     private val json = Json { ignoreUnknownKeys = true }
 
     companion object {
+        val PRESET_EMERALD_CYBER = ThemeConfig(
+            presetId = "emerald_cyber",
+            mode = ThemeMode.AMOLED,
+            primaryColorHex = "#00D084",
+            accentColorHex = "#06B6D4",
+            surfaceColorHex = "#13171C",
+            backgroundColorHex = "#090C0E",
+            buttonShape = ButtonShape.ROUNDED,
+            cornerRadiusDp = 18,
+            neonBordersEnabled = false
+        )
+
         val PRESET_OLED_CRIMSON = ThemeConfig(
             presetId = "oled_crimson",
             mode = ThemeMode.AMOLED,
@@ -61,10 +73,10 @@ class ThemeRepository @Inject constructor(
             try {
                 json.decodeFromString<ThemeConfig>(jsonStr)
             } catch (e: Exception) {
-                PRESET_OLED_CRIMSON
+                PRESET_EMERALD_CYBER
             }
         } else {
-            PRESET_OLED_CRIMSON
+            PRESET_EMERALD_CYBER
         }
     }
 

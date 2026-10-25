@@ -4,11 +4,13 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import app.nebula.vpn.core.crypto.SecretBox
+import app.nebula.vpn.core.model.AppRoutingMode
 import app.nebula.vpn.core.model.Result
+import app.nebula.vpn.core.model.ThemeConfig
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.RoutingRepository
 import app.nebula.vpn.data.repository.SettingsRepository
+import app.nebula.vpn.data.repository.ThemeRepository
 import app.nebula.vpn.data.repository.VpnRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +25,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val profileRepository: ProfileRepository,
     private val routingRepository: RoutingRepository,
+    private val themeRepository: ThemeRepository,
     private val vpnRepository: VpnRepository
 ) : ViewModel() {
 
@@ -36,6 +39,36 @@ class SettingsViewModel @Inject constructor(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
         false
+    )
+
+    val bypassLanEnabled: StateFlow<Boolean> = settingsRepository.bypassLan.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        true
+    )
+
+    val bootAutostartEnabled: StateFlow<Boolean> = settingsRepository.bootAutostartEnabled.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        false
+    )
+
+    val remoteDnsUrl: StateFlow<String> = settingsRepository.remoteDnsUrl.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        "https://dns.google/dns-query"
+    )
+
+    val routingMode: StateFlow<AppRoutingMode> = settingsRepository.routingMode.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        AppRoutingMode.GLOBAL
+    )
+
+    val activeTheme: StateFlow<ThemeConfig> = themeRepository.activeTheme.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        ThemeRepository.PRESET_EMERALD_CYBER
     )
 
     val biometricLockEnabled: StateFlow<Boolean> = settingsRepository.biometricLockEnabled.stateIn(
@@ -68,6 +101,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun setBypassLan(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setBypassLan(enabled)
+        }
+    }
+
+    fun setBootAutostart(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setBootAutostartEnabled(enabled)
+        }
+    }
+
+    fun setRemoteDns(url: String) {
+        viewModelScope.launch {
+            settingsRepository.setRemoteDnsUrl(url)
+        }
+    }
+
     fun setBiometricLock(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setBiometricLockEnabled(enabled)
@@ -93,18 +144,6 @@ class SettingsViewModel @Inject constructor(
             vpnRepository.stopVpn()
             profileRepository.deleteAll()
             settingsRepository.clearAll()
-        }
-    }
-
-    fun exportEncryptedBackup(password: CharArray): Result<String> {
-        return try {
-            val profiles = profileRepository.allProfiles
-            // Serialize and encrypt with password
-            val plain = "{\"profiles_count\": 0}" // Placeholder for backup payload
-            val encrypted = SecretBox.encryptWithPassword(plain, password)
-            Result.Success(encrypted)
-        } catch (e: Exception) {
-            Result.Error(e)
         }
     }
 }

@@ -29,10 +29,10 @@ fun NebulaTheme(
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
 
-    val primary = parseColor(config.primaryColorHex, CrimsonRed)
-    val accent = parseColor(config.accentColorHex, ElectricViolet)
-    val surface = if (config.mode == ThemeMode.AMOLED) Color.Black else parseColor(config.surfaceColorHex, SlateGrey)
-    val background = if (config.mode == ThemeMode.AMOLED) Color.Black else parseColor(config.backgroundColorHex, DeepBlack)
+    val primary = parseColor(config.primaryColorHex, EmeraldGreen)
+    val accent = parseColor(config.accentColorHex, MintTeal)
+    val surface = if (config.mode == ThemeMode.AMOLED) Color(0xFF13171C) else parseColor(config.surfaceColorHex, SlateGrey)
+    val background = if (config.mode == ThemeMode.AMOLED) Color(0xFF090C0E) else parseColor(config.backgroundColorHex, DeepBlack)
 
     val colorScheme = if (isDark) {
         darkColorScheme(

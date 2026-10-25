@@ -49,6 +49,14 @@ class ProfileRepository @Inject constructor(
         profileDao.deleteProfileById(id)
     }
 
+    suspend fun deleteProfilesBySubscription(subId: String) {
+        profileDao.deleteProfilesBySubscription(subId)
+    }
+
+    suspend fun getProfilesBySubscription(subId: String): List<ProxyProfile> {
+        return profileDao.getProfilesBySubscription(subId).map { it.toModel() }
+    }
+
     suspend fun deleteAll() {
         profileDao.deleteAllProfiles()
     }

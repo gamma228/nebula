@@ -1,10 +1,18 @@
 package app.nebula.vpn.ui.servers
 
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,42 +22,68 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nebula.vpn.R
 import app.nebula.vpn.core.model.ProxyProfile
+import app.nebula.vpn.data.database.entity.SubscriptionEntity
+import app.nebula.vpn.ui.theme.EmeraldGreen
 import app.nebula.vpn.ui.theme.StatusGreen
 import app.nebula.vpn.ui.theme.StatusRed
 import app.nebula.vpn.ui.theme.StatusYellow
+import java.text.DecimalFormat
 
 @Composable
 fun ServersScreen(
@@ -57,19 +91,160 @@ fun ServersScreen(
     onOpenQrScanner: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val profiles by viewModel.profiles.collectAsState()
+    val subscriptions by viewModel.subscriptions.collectAsState()
+    val allProfiles by viewModel.allProfiles.collectAsState()
+    val filteredProfiles by viewModel.filteredProfiles.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    val selectedProtocol by viewModel.selectedProtocolFilter.collectAsState()
     val selectedId by viewModel.selectedProfileId.collectAsState()
     val favoriteOnly by viewModel.filterFavoriteOnly.collectAsState()
+    val isImporting by viewModel.isImporting.collectAsState()
+    val statusMessage by viewModel.importStatusMessage.collectAsState()
+
+    val context = LocalContext.current
+    var showAddDialog by remember { mutableStateOf(false) }
+    var inputUrlText by remember { mutableStateOf("") }
+
+    // Map to track expanded state of subscription cards
+    val expandedSubs = remember { mutableStateMapOf<String, Boolean>() }
+
+    LaunchedEffect(statusMessage) {
+        statusMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearStatusMessage()
+        }
+    }
+
+    // Add Subscription / Server Modal Dialog
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isImporting) showAddDialog = false },
+            title = {
+                Text(
+                    text = "Добавить подключение",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Вставьте ссылку на подписку (https://...) или ссылку на сервер (vless://, vmess://, trojan://, ss://, hy2://):",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    OutlinedTextField(
+                        value = inputUrlText,
+                        onValueChange = { inputUrlText = it },
+                        placeholder = { Text("https://... или vless://...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3,
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = clipboard.primaryClip
+                                    if (clip != null && clip.itemCount > 0) {
+                                        inputUrlText = clip.getItemAt(0).text?.toString() ?: ""
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
+                            }
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable {
+                                showAddDialog = false
+                                onOpenQrScanner()
+                            }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = null,
+                            tint = EmeraldGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "Сканировать QR-код",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    if (isImporting) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            CircularProgressIndicator(
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Загрузка и парсинг...",
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (inputUrlText.isNotBlank()) {
+                            viewModel.importContent(inputUrlText) { success, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                if (success) {
+                                    inputUrlText = ""
+                                    showAddDialog = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isImporting && inputUrlText.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldGreen)
+                ) {
+                    Text("Импортировать")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddDialog = false },
+                    enabled = !isImporting
+                ) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
 
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onOpenQrScanner,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
+                onClick = { showAddDialog = true },
+                containerColor = EmeraldGreen,
+                contentColor = Color.Black,
+                shape = CircleShape
             ) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR")
+                Icon(Icons.Default.Add, contentDescription = "Add Server or Subscription", modifier = Modifier.size(28.dp))
             }
         },
         containerColor = Color.Transparent,
@@ -81,66 +256,152 @@ fun ServersScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            // Header & Search
-            Text(
-                text = stringResource(R.string.profiles_title),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(top = 16.dp, bottom = 12.dp)
-            )
-
+            // Header with Counter and Action Buttons
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.onSearchQueryChanged(it) },
-                    placeholder = { Text("Search profiles…") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.weight(1f)
-                )
+                Column {
+                    Text(
+                        text = "Серверы",
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        text = "${allProfiles.size} серверов · ${subscriptions.size} провайдеров",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
 
-                Spacer(modifier = Modifier.width(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { viewModel.refreshAllSubscriptions() },
+                        enabled = !isImporting
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh All",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
 
-                IconButton(
-                    onClick = { viewModel.toggleFavoriteFilter() },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(MaterialTheme.colorScheme.surface)
-                ) {
-                    Icon(
-                        imageVector = if (favoriteOnly) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = "Filter Favorites",
-                        tint = if (favoriteOnly) StatusYellow else MaterialTheme.colorScheme.onSurface
+                    IconButton(
+                        onClick = { viewModel.toggleFavoriteFilter() }
+                    ) {
+                        Icon(
+                            imageVector = if (favoriteOnly) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = "Filter Favorites",
+                            tint = if (favoriteOnly) StatusYellow else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+            // Search Bar
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.onSearchQueryChanged(it) },
+                placeholder = { Text("Поиск серверов...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedBorderColor = EmeraldGreen.copy(alpha = 0.5f),
+                    unfocusedBorderColor = Color.Transparent
+                ),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Protocol Filter Chips
+            val protocols = listOf("Все", "VLESS", "VMess", "Trojan", "Shadowsocks", "Hysteria2")
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp)
+            ) {
+                items(protocols) { proto ->
+                    val isSelected = (proto == "Все" && selectedProtocol == null) ||
+                            (selectedProtocol != null && proto.equals(selectedProtocol, ignoreCase = true))
+
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = {
+                            viewModel.setProtocolFilter(if (proto == "Все") null else proto)
+                        },
+                        label = { Text(proto, fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = EmeraldGreen,
+                            selectedLabelColor = Color.Black,
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            labelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        ),
+                        shape = RoundedCornerShape(10.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Profile List
+            // Main Server & Subscription List
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(profiles, key = { it.id }) { profile ->
-                    val isSelected = profile.id == selectedId
-                    ProfileCard(
-                        profile = profile,
-                        isSelected = isSelected,
-                        onSelect = { viewModel.selectProfile(profile.id) },
-                        onToggleFavorite = { viewModel.toggleFavorite(profile.id) },
-                        onDelete = { viewModel.deleteProfile(profile.id) }
+                // 1. Subscription Groups
+                items(subscriptions, key = { it.id }) { sub ->
+                    val isExpanded = expandedSubs[sub.id] ?: true
+                    val subProfiles = filteredProfiles.filter { it.subscriptionId == sub.id }
+
+                    SubscriptionAccordion(
+                        subscription = sub,
+                        profiles = subProfiles,
+                        selectedId = selectedId,
+                        isExpanded = isExpanded,
+                        onToggleExpand = { expandedSubs[sub.id] = !isExpanded },
+                        onRefresh = { viewModel.refreshSubscription(sub.id) },
+                        onDelete = { viewModel.deleteSubscription(sub.id) },
+                        onSelectProfile = { viewModel.selectProfile(it) },
+                        onToggleFavorite = { viewModel.toggleFavorite(it) },
+                        onDeleteProfile = { viewModel.deleteProfile(it) }
                     )
+                }
+
+                // 2. Standalone / Custom Servers (no subscriptionId)
+                val customProfiles = filteredProfiles.filter { it.subscriptionId == null }
+                if (customProfiles.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "ПОЛЬЗОВАТЕЛЬСКИЕ СЕРВЕРЫ (${customProfiles.size})",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    items(customProfiles, key = { it.id }) { profile ->
+                        ServerItemCard(
+                            profile = profile,
+                            isSelected = profile.id == selectedId,
+                            onSelect = { viewModel.selectProfile(profile.id) },
+                            onToggleFavorite = { viewModel.toggleFavorite(profile.id) },
+                            onDelete = { viewModel.deleteProfile(profile.id) }
+                        )
+                    }
+                }
+
+                // Bottom padding for FAB
+                item {
+                    Spacer(modifier = Modifier.height(72.dp))
                 }
             }
         }
@@ -148,7 +409,198 @@ fun ServersScreen(
 }
 
 @Composable
-private fun ProfileCard(
+private fun SubscriptionAccordion(
+    subscription: SubscriptionEntity,
+    profiles: List<ProxyProfile>,
+    selectedId: String?,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onRefresh: () -> Unit,
+    onDelete: () -> Unit,
+    onSelectProfile: (String) -> Unit,
+    onToggleFavorite: (String) -> Unit,
+    onDeleteProfile: (String) -> Unit
+) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Удалить подписку?") },
+            text = { Text("Все ${profiles.size} серверов из подписки «${subscription.title}» будут удалены.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDelete()
+                        showDeleteConfirm = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = StatusRed)
+                ) {
+                    Text("Удалить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Header Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { onToggleExpand() }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(EmeraldGreen.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = EmeraldGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = subscription.title.ifBlank { "Подписка" },
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${profiles.size}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldGreen,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(EmeraldGreen.copy(alpha = 0.15f))
+                                    .padding(horizontal = 6.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onRefresh, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    IconButton(onClick = onToggleExpand, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = "Toggle",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+
+            // Quota Bar
+            val total = subscription.totalBytes ?: (20L * 1024 * 1024 * 1024)
+            val used = (subscription.uploadBytes ?: 0L) + (subscription.downloadBytes ?: 0L)
+            val progress = if (total > 0) (used.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0f
+
+            val daysRemaining = if (subscription.expireEpochSeconds != null) {
+                val nowSec = System.currentTimeMillis() / 1000
+                val diffSec = subscription.expireEpochSeconds - nowSec
+                (diffSec / 86400).coerceAtLeast(0)
+            } else {
+                30L
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Осталось $daysRemaining дн.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = "${formatBytes(used)} / ${formatBytes(total)}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp)),
+                color = EmeraldGreen,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                strokeCap = StrokeCap.Round
+            )
+
+            // Inner Profiles List
+            AnimatedVisibility(visible = isExpanded) {
+                Column(
+                    modifier = Modifier.padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    profiles.forEach { profile ->
+                        val isSelected = profile.id == selectedId
+                        ServerItemCard(
+                            profile = profile,
+                            isSelected = isSelected,
+                            onSelect = { onSelectProfile(profile.id) },
+                            onToggleFavorite = { onToggleFavorite(profile.id) },
+                            onDelete = { onDeleteProfile(profile.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ServerItemCard(
     profile: ProxyProfile,
     isSelected: Boolean,
     onSelect: () -> Unit,
@@ -158,12 +610,12 @@ private fun ProfileCard(
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                EmeraldGreen.copy(alpha = 0.12f)
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surfaceVariant
             }
         ),
-        shape = MaterialTheme.shapes.medium,
+        shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onSelect() }
@@ -171,7 +623,7 @@ private fun ProfileCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -179,80 +631,126 @@ private fun ProfileCard(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.weight(1f)
             ) {
+                // Radio / Active icon
                 if (isSelected) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Active",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        tint = EmeraldGreen,
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                 }
 
-                Column {
+                // Country flag
+                Text(
+                    text = getCountryFlag(profile.name),
+                    fontSize = 18.sp,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = profile.name,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = profile.protocol.name,
-                            fontSize = 11.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary,
+                            color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "${profile.server}:${profile.port}",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Ping badge
+                // Ping Badge
                 val ping = profile.lastPingMs
                 val pingColor = when {
                     ping == null -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    ping < 100 -> StatusGreen
+                    ping < 120 -> StatusGreen
                     ping < 250 -> StatusYellow
                     else -> StatusRed
                 }
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(pingColor)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = if (ping != null) "$ping ms" else "--",
                     fontSize = 11.sp,
                     color = pingColor,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 6.dp)
+                    fontWeight = FontWeight.Medium
                 )
 
-                IconButton(onClick = onToggleFavorite, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onToggleFavorite, modifier = Modifier.size(28.dp)) {
                     Icon(
                         imageVector = if (profile.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                         contentDescription = "Favorite",
-                        tint = if (profile.isFavorite) StatusYellow else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                        modifier = Modifier.size(18.dp)
+                        tint = if (profile.isFavorite) StatusYellow else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Delete",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                        modifier = Modifier.size(18.dp)
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
         }
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, 4)
+    val df = DecimalFormat("#,##0.#")
+    return "${df.format(bytes / Math.pow(1024.0, digitGroups.toDouble()))} ${units[digitGroups]}"
+}
+
+private fun getCountryFlag(name: String): String {
+    val lower = name.lowercase()
+    return when {
+        lower.contains("герман") || lower.contains("germany") || lower.contains(" de") || lower.contains("_de") -> "🇩🇪"
+        lower.contains("нидерланд") || lower.contains("netherlands") || lower.contains(" nl") || lower.contains("_nl") || lower.contains("амстердам") -> "🇳🇱"
+        lower.contains("сша") || lower.contains("usa") || lower.contains("united states") || lower.contains(" us") || lower.contains("_us") -> "🇺🇸"
+        lower.contains("росси") || lower.contains("russia") || lower.contains(" ru") || lower.contains("_ru") || lower.contains("москва") -> "🇷🇺"
+        lower.contains("финлянд") || lower.contains("finland") || lower.contains(" fi") || lower.contains("_fi") -> "🇫🇮"
+        lower.contains("швеци") || lower.contains("sweden") || lower.contains(" se") || lower.contains("_se") -> "🇸🇪"
+        lower.contains("латви") || lower.contains("latvia") || lower.contains(" lv") || lower.contains("_lv") -> "🇱🇻"
+        lower.contains("турци") || lower.contains("turkey") || lower.contains(" tr") || lower.contains("_tr") -> "🇹🇷"
+        lower.contains("казах") || lower.contains("kazakhstan") || lower.contains(" kz") || lower.contains("_kz") -> "🇰🇿"
+        lower.contains("япон") || lower.contains("japan") || lower.contains(" jp") || lower.contains("_jp") -> "🇯🇵"
+        lower.contains("сингапур") || lower.contains("singapore") || lower.contains(" sg") || lower.contains("_sg") -> "🇸🇬"
+        lower.contains("франци") || lower.contains("france") || lower.contains(" fr") || lower.contains("_fr") -> "🇫🇷"
+        lower.contains("британ") || lower.contains("uk") || lower.contains("gb") || lower.contains("лондон") -> "🇬🇧"
+        else -> "🌐"
     }
 }

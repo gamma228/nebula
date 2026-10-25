@@ -6,17 +6,22 @@ import app.nebula.vpn.core.model.ConnectionState
 import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.core.model.ThemeConfig
 import app.nebula.vpn.core.model.TrafficStats
+import app.nebula.vpn.data.database.entity.SubscriptionEntity
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.SettingsRepository
+import app.nebula.vpn.data.repository.SubscriptionRepository
 import app.nebula.vpn.data.repository.ThemeRepository
 import app.nebula.vpn.data.repository.VpnRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -24,6 +29,7 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val vpnRepository: VpnRepository,
     private val profileRepository: ProfileRepository,
+    private val subscriptionRepository: SubscriptionRepository,
     private val settingsRepository: SettingsRepository,
     private val themeRepository: ThemeRepository
 ) : ViewModel() {
@@ -33,13 +39,37 @@ class HomeViewModel @Inject constructor(
     val activeTheme: StateFlow<ThemeConfig> = themeRepository.activeTheme.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        ThemeRepository.PRESET_OLED_CRIMSON
+        ThemeRepository.PRESET_EMERALD_CYBER
     )
 
     private val _selectedProfile = MutableStateFlow<ProxyProfile?>(null)
     val selectedProfile: StateFlow<ProxyProfile?> = _selectedProfile.asStateFlow()
 
+    val allProfiles: StateFlow<List<ProxyProfile>> = profileRepository.allProfiles.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
+    )
+
+    val activeSubscription: StateFlow<SubscriptionEntity?> = combine(
+        _selectedProfile,
+        subscriptionRepository.allSubscriptions
+    ) { profile, subs ->
+        if (profile?.subscriptionId != null) {
+            subs.find { it.id == profile.subscriptionId } ?: subs.firstOrNull()
+        } else {
+            subs.firstOrNull()
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val _isRefreshingSubscription = MutableStateFlow(false)
+    val isRefreshingSubscription: StateFlow<Boolean> = _isRefreshingSubscription.asStateFlow()
+
+    private val _connectionDurationSeconds = MutableStateFlow(0L)
+    val connectionDurationSeconds: StateFlow<Long> = _connectionDurationSeconds.asStateFlow()
+
     init {
+        // Collect selected profile changes
         viewModelScope.launch {
             settingsRepository.selectedProfileId.collect { id ->
                 if (id != null) {
@@ -49,6 +79,47 @@ class HomeViewModel @Inject constructor(
                     _selectedProfile.value = all.firstOrNull()
                 }
             }
+        }
+
+        // Connection duration timer
+        viewModelScope.launch {
+            var connectedStartTime = 0L
+            while (isActive) {
+                when (connectionState.value) {
+                    is ConnectionState.Connected -> {
+                        if (connectedStartTime == 0L) {
+                            connectedStartTime = System.currentTimeMillis()
+                        }
+                        val elapsed = (System.currentTimeMillis() - connectedStartTime) / 1000
+                        _connectionDurationSeconds.value = elapsed
+                    }
+                    else -> {
+                        connectedStartTime = 0L
+                        _connectionDurationSeconds.value = 0L
+                    }
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    fun selectProfile(id: String) {
+        viewModelScope.launch {
+            settingsRepository.setSelectedProfileId(id)
+            val profile = profileRepository.getProfileById(id)
+            _selectedProfile.value = profile
+            if (connectionState.value is ConnectionState.Connected) {
+                vpnRepository.startVpn(id)
+            }
+        }
+    }
+
+    fun refreshActiveSubscription() {
+        val sub = activeSubscription.value ?: return
+        viewModelScope.launch {
+            _isRefreshingSubscription.value = true
+            subscriptionRepository.refreshSubscription(sub.id)
+            _isRefreshingSubscription.value = false
         }
     }
 

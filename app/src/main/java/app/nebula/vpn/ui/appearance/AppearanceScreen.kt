@@ -74,21 +74,28 @@ fun AppearanceScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 PresetCard(
-                    title = "OLED Crimson",
+                    title = "Emerald",
+                    color = Color(0xFF00D084),
+                    isSelected = theme.presetId == "emerald_cyber",
+                    onClick = { viewModel.applyPreset("emerald_cyber") },
+                    modifier = Modifier.weight(1f)
+                )
+                PresetCard(
+                    title = "Crimson",
                     color = Color(0xFFE60049),
                     isSelected = theme.presetId == "oled_crimson",
                     onClick = { viewModel.applyPreset("oled_crimson") },
                     modifier = Modifier.weight(1f)
                 )
                 PresetCard(
-                    title = "Cyber Violet",
+                    title = "Violet",
                     color = Color(0xFF8A2BE2),
                     isSelected = theme.presetId == "cyber_violet",
                     onClick = { viewModel.applyPreset("cyber_violet") },
                     modifier = Modifier.weight(1f)
                 )
                 PresetCard(
-                    title = "Monochrome",
+                    title = "Mono",
                     color = Color(0xFFFFFFFF),
                     isSelected = theme.presetId == "monochrome",
                     onClick = { viewModel.applyPreset("monochrome") },

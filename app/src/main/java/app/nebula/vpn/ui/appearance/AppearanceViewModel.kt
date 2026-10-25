@@ -33,15 +33,17 @@ class AppearanceViewModel @Inject constructor(
     val activeTheme: StateFlow<ThemeConfig> = themeRepository.activeTheme.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        ThemeRepository.PRESET_OLED_CRIMSON
+        ThemeRepository.PRESET_EMERALD_CYBER
     )
 
     fun applyPreset(presetId: String) {
         viewModelScope.launch {
             val preset = when (presetId) {
+                "emerald_cyber" -> ThemeRepository.PRESET_EMERALD_CYBER
                 "cyber_violet" -> ThemeRepository.PRESET_CYBER_VIOLET
                 "monochrome" -> ThemeRepository.PRESET_MONOCHROME
-                else -> ThemeRepository.PRESET_OLED_CRIMSON
+                "oled_crimson" -> ThemeRepository.PRESET_OLED_CRIMSON
+                else -> ThemeRepository.PRESET_EMERALD_CYBER
             }
             themeRepository.setActiveTheme(preset)
         }
