@@ -14,7 +14,7 @@ interface ConnectionManager {
     suspend fun switchServer(profileId: String)
     suspend fun reconnect()
 
-    fun onServiceConnected(profileName: String)
+    fun onServiceConnected(profileName: String, isDegraded: Boolean = false, warning: String? = null)
     fun onServiceError(message: String)
     fun onServiceDisconnected()
     fun updateStats(stats: TrafficStats)

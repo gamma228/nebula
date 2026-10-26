@@ -214,4 +214,15 @@
     <string name="appearance_shape_rounded">Капсула (Заокруглення)</string>
     <string name="appearance_shape_sharp">Гострий (Технічний)</string>
     <string name="appearance_display_mode">Режим відображення</string>
+    <string name="settings_ipv6_title">Увімкнути IPv6</string>
+    <string name="settings_ipv6_desc">Маршрутизувати IPv6 через проксі (вимкніть, якщо провайдер блокує IPv6)</string>
+    <string name="settings_block_quic_title">Блокувати QUIC (UDP 443)</string>
+    <string name="settings_block_quic_desc">Примусовий перехід на TCP HTTP/2 для YouTube та сайтів при уповільненні UDP</string>
+    <string name="state_connected_degraded">Підключено (Немає доступу до мережі)</string>
+    <string name="doctor_check_telegram">Пряме з\'єднання з Telegram DC</string>
+    <string name="doctor_check_youtube">Доступність YouTube по HTTPS</string>
+    <string name="doctor_check_ipv6_route">Стратегія маршрутизації IPv6</string>
+    <string name="doctor_check_quic_block">Блокування QUIC проти цензури</string>
+    <string name="doctor_fix_ipv6">Вимкнути IPv6</string>
+    <string name="doctor_fix_quic">Блокувати QUIC</string>
 </resources>

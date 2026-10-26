@@ -82,6 +82,8 @@ fun SettingsScreen(
     val bypassLan by viewModel.bypassLanEnabled.collectAsState()
     val bootAutostart by viewModel.bootAutostartEnabled.collectAsState()
     val remoteDns by viewModel.remoteDnsUrl.collectAsState()
+    val ipv6Enabled by viewModel.ipv6Enabled.collectAsState()
+    val blockQuic by viewModel.blockQuic.collectAsState()
     val routingMode by viewModel.routingMode.collectAsState()
     val activeTheme by viewModel.activeTheme.collectAsState()
     val biometricLock by viewModel.biometricLockEnabled.collectAsState()
@@ -430,6 +432,24 @@ fun SettingsScreen(
             title = stringResource(R.string.dns_title),
             value = if (fakeDns) "Fake-DNS" else "Standard",
             onClick = { showTunnelDialog = true }
+        )
+        SettingSwitchCard(
+            icon = Icons.Default.Shield,
+            iconTint = MintTeal,
+            iconBg = MintTeal.copy(alpha = 0.15f),
+            title = stringResource(R.string.settings_block_quic_title),
+            subtitle = stringResource(R.string.settings_block_quic_desc),
+            checked = blockQuic,
+            onCheckedChange = { viewModel.setBlockQuic(it) }
+        )
+        SettingSwitchCard(
+            icon = Icons.Default.Security,
+            iconTint = Color(0xFF3B82F6),
+            iconBg = Color(0xFF3B82F6).copy(alpha = 0.15f),
+            title = stringResource(R.string.settings_ipv6_title),
+            subtitle = stringResource(R.string.settings_ipv6_desc),
+            checked = ipv6Enabled,
+            onCheckedChange = { viewModel.setIpv6Enabled(it) }
         )
 
         // SECTION: ДИАГНОСТИКА И ЛОГИ

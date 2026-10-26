@@ -89,7 +89,9 @@ fun HomeScreen(
     val shapes = NebulaTheme.shapes
     val typography = NebulaTheme.typography
 
+    val connectedState = connectionState as? ConnectionState.Connected
     val isConnected = connectionState is ConnectionState.Connected
+    val isDegraded = connectedState?.isDegraded == true
     val isConnecting = connectionState is ConnectionState.Connecting || connectionState is ConnectionState.Reconnecting
     val scrollState = rememberScrollState()
 
@@ -134,6 +136,7 @@ fun HomeScreen(
 
             // Connection State Pill Badge
             val (statusText, statusBg, statusFg) = when {
+                isConnected && isDegraded -> Triple(stringResource(R.string.state_connected_degraded), colors.statusWarning.copy(alpha = 0.15f), colors.statusWarning)
                 isConnected -> Triple(stringResource(R.string.state_connected), colors.statusOk.copy(alpha = 0.15f), colors.statusOk)
                 isConnecting -> Triple(stringResource(R.string.state_connecting), colors.statusWarning.copy(alpha = 0.15f), colors.statusWarning)
                 else -> Triple(stringResource(R.string.state_disconnected), colors.surfaceElevated, colors.textMuted)
@@ -190,9 +193,17 @@ fun HomeScreen(
         // Security Protocol & State Sub-badge
         val proto = selectedProfile?.protocol?.name ?: "VLESS"
         Text(
-            text = if (isConnected) "✦ $proto · TUNNEL ENCRYPTED" else "READY TO CONNECT",
+            text = when {
+                isConnected && isDegraded -> "✦ $proto · NO TRAFFIC (CHECK DOCTOR)"
+                isConnected -> "✦ $proto · TUNNEL ENCRYPTED"
+                else -> "READY TO CONNECT"
+            },
             style = typography.labelMedium.copy(letterSpacing = 0.5.sp, fontWeight = FontWeight.SemiBold),
-            color = if (isConnected) colors.primary else colors.textMuted
+            color = when {
+                isConnected && isDegraded -> colors.statusWarning
+                isConnected -> colors.primary
+                else -> colors.textMuted
+            }
         )
 
         Spacer(modifier = Modifier.height(spacing.lg))

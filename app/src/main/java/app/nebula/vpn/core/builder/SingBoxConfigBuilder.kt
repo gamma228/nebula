@@ -41,7 +41,9 @@ object SingBoxConfigBuilder {
         val fakeDnsEnabled: Boolean = true,
         val killSwitchEnabled: Boolean = false,
         val mtu: Int = 1500,
-        val localPortMixedInbound: Int? = null // Optional local SOCKS/HTTP inbound
+        val localPortMixedInbound: Int? = null, // Optional local SOCKS/HTTP inbound
+        val ipv6Enabled: Boolean = false,
+        val blockQuic: Boolean = true
     )
 
     fun build(config: BuildConfig): String {
@@ -160,6 +162,17 @@ object SingBoxConfigBuilder {
                             put("server", "dns-local")
                         })
                     }
+                    // Android Private DNS popular domains resolve through remote proxy DoH
+                    add(buildJsonObject {
+                        putJsonArray("domain") {
+                            add(JsonPrimitive("dns.google"))
+                            add(JsonPrimitive("1dot1dot1dot1.cloudflare-dns.com"))
+                            add(JsonPrimitive("cloudflare-dns.com"))
+                            add(JsonPrimitive("one.one.one.one"))
+                            add(JsonPrimitive("dns.alidns.com"))
+                        }
+                        put("server", "dns-remote-doh")
+                    })
                     // FakeIP for all other traffic when enabled
                     if (config.fakeDnsEnabled) {
                         add(buildJsonObject {
@@ -170,7 +183,7 @@ object SingBoxConfigBuilder {
                         })
                     }
                 }
-                put("strategy", "prefer_ipv4")
+                put("strategy", if (config.ipv6Enabled) "prefer_ipv4" else "ipv4_only")
             }
 
             // 3. Inbounds
@@ -180,7 +193,9 @@ object SingBoxConfigBuilder {
                     put("tag", "tun-in")
                     putJsonArray("address") {
                         add(JsonPrimitive("172.19.0.1/30"))
-                        add(JsonPrimitive("fdfe:dcba:9876::1/126"))
+                        if (config.ipv6Enabled) {
+                            add(JsonPrimitive("fdfe:dcba:9876::1/126"))
+                        }
                     }
                     put("mtu", config.mtu)
                     put("auto_route", true)
@@ -277,6 +292,21 @@ object SingBoxConfigBuilder {
                         put("action", "sniff")
                     })
 
+                    // Block/Reject QUIC (UDP 443) to force fast TCP HTTP/2 fallback on filtered networks
+                    if (config.blockQuic) {
+                        add(buildJsonObject {
+                            put("protocol", "quic")
+                            put("action", "reject")
+                        })
+                        add(buildJsonObject {
+                            put("network", "udp")
+                            putJsonArray("port") {
+                                add(JsonPrimitive(443))
+                            }
+                            put("action", "reject")
+                        })
+                    }
+
                     // Intercept DNS
                     add(buildJsonObject {
                         put("protocol", "dns")
@@ -293,6 +323,23 @@ object SingBoxConfigBuilder {
                     add(buildJsonObject {
                         put("ip_is_private", true)
                         put("outbound", "direct")
+                    })
+
+                    // Route Telegram direct IP ranges through proxy
+                    add(buildJsonObject {
+                        putJsonArray("ip_cidr") {
+                            add(JsonPrimitive("91.108.4.0/22"))
+                            add(JsonPrimitive("91.108.8.0/22"))
+                            add(JsonPrimitive("91.108.12.0/22"))
+                            add(JsonPrimitive("91.108.16.0/22"))
+                            add(JsonPrimitive("91.108.20.0/22"))
+                            add(JsonPrimitive("91.108.56.0/22"))
+                            add(JsonPrimitive("149.154.160.0/20"))
+                            add(JsonPrimitive("149.154.164.0/22"))
+                            add(JsonPrimitive("149.154.168.0/22"))
+                            add(JsonPrimitive("149.154.172.0/22"))
+                        }
+                        put("outbound", finalTarget)
                     })
 
                     // Per-App routing rules (at the sing-box route layer)
@@ -376,10 +423,20 @@ object SingBoxConfigBuilder {
                     for (a in alpnToUse) add(JsonPrimitive(a))
                 }
             }
-            val fp = tls.utlsFingerprint.ifEmpty { "chrome" }
-            putJsonObject("utls") {
-                put("enabled", true)
-                put("fingerprint", fp)
+            val rawFp = tls.utlsFingerprint.trim().lowercase()
+            val supportedFp = setOf("chrome", "firefox", "edge", "safari", "360", "qq", "ios", "android", "random", "randomized")
+            val fpToUse = when {
+                rawFp in supportedFp -> rawFp
+                rawFp in setOf("unsafe", "none", "off", "disable", "disabled") -> null
+                tls.realityPublicKey.isNotEmpty() -> "chrome"
+                rawFp.isEmpty() -> "chrome"
+                else -> null
+            }
+            if (fpToUse != null) {
+                putJsonObject("utls") {
+                    put("enabled", true)
+                    put("fingerprint", fpToUse)
+                }
             }
             if (tls.realityPublicKey.isNotEmpty()) {
                 putJsonObject("reality") {

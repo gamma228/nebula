@@ -214,4 +214,15 @@
     <string name="appearance_shape_rounded">Капсула (Скругление)</string>
     <string name="appearance_shape_sharp">Острый (Технический)</string>
     <string name="appearance_display_mode">Режим отображения</string>
+    <string name="settings_ipv6_title">Включить IPv6</string>
+    <string name="settings_ipv6_desc">Маршрутизировать IPv6 через прокси (отключите, если провайдер блокирует IPv6)</string>
+    <string name="settings_block_quic_title">Блокировать QUIC (UDP 443)</string>
+    <string name="settings_block_quic_desc">Принудительный переход на TCP HTTP/2 для YouTube и сайтов при замедлении UDP</string>
+    <string name="state_connected_degraded">Подключено (Нет доступа в сеть)</string>
+    <string name="doctor_check_telegram">Прямое соединение с Telegram DC</string>
+    <string name="doctor_check_youtube">Доступность YouTube по HTTPS</string>
+    <string name="doctor_check_ipv6_route">Стратегия маршрутизации IPv6</string>
+    <string name="doctor_check_quic_block">Блокировка QUIC против цензуры</string>
+    <string name="doctor_fix_ipv6">Отключить IPv6</string>
+    <string name="doctor_fix_quic">Блокировать QUIC</string>
 </resources>

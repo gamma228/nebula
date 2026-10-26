@@ -214,4 +214,15 @@
     <string name="appearance_shape_rounded">Capsule (Rounded)</string>
     <string name="appearance_shape_sharp">Sharp (Technical)</string>
     <string name="appearance_display_mode">Display Mode</string>
+    <string name="settings_ipv6_title">Enable IPv6</string>
+    <string name="settings_ipv6_desc">Route IPv6 traffic through proxy (disable if ISP or proxy drops IPv6)</string>
+    <string name="settings_block_quic_title">Block QUIC (UDP 443)</string>
+    <string name="settings_block_quic_desc">Force TCP HTTP/2 fallback for YouTube and streaming to bypass ISP throttling</string>
+    <string name="state_connected_degraded">Connected (No Internet)</string>
+    <string name="doctor_check_telegram">Telegram Direct IP Handshake</string>
+    <string name="doctor_check_youtube">YouTube HTTPS Reachability</string>
+    <string name="doctor_check_ipv6_route">IPv6 Routing Strategy</string>
+    <string name="doctor_check_quic_block">QUIC (UDP 443) Anti-Censorship</string>
+    <string name="doctor_fix_ipv6">Disable IPv6</string>
+    <string name="doctor_fix_quic">Block QUIC</string>
 </resources>

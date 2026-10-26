@@ -52,9 +52,12 @@ object SubscriptionDecoder {
 
         // Parse line-by-line
         val profiles = mutableListOf<ProxyProfile>()
+        var titleFromComment: String? = null
         for (line in decodedText.lines()) {
             val candidate = line.trim()
-            if (candidate.isNotEmpty()) {
+            if (candidate.startsWith("# profile-title:", ignoreCase = true)) {
+                titleFromComment = candidate.substringAfter(":").trim()
+            } else if (candidate.isNotEmpty() && !candidate.startsWith("#")) {
                 val parsed = LinkParser.parse(candidate)
                 if (parsed is Result.Success) {
                     profiles.add(parsed.data)
@@ -70,7 +73,7 @@ object SubscriptionDecoder {
         return Result.Success(
             SubscriptionResult(
                 profiles = profiles,
-                title = metadata.title,
+                title = metadata.title ?: titleFromComment,
                 uploadBytes = metadata.uploadBytes,
                 downloadBytes = metadata.downloadBytes,
                 totalBytes = metadata.totalBytes,

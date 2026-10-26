@@ -24,6 +24,8 @@ class SettingsRepository @Inject constructor(
     val onboardingDone: Flow<Boolean> = dataStore.onboardingDone
     val bootAutostartEnabled: Flow<Boolean> = dataStore.bootAutostartEnabled
     val pingMode: Flow<String> = dataStore.pingMode
+    val ipv6Enabled: Flow<Boolean> = dataStore.ipv6Enabled
+    val blockQuic: Flow<Boolean> = dataStore.blockQuic
 
     suspend fun setSelectedProfileId(id: String?) = dataStore.setSelectedProfileId(id)
     suspend fun setRoutingMode(mode: AppRoutingMode) = dataStore.setRoutingMode(mode)
@@ -39,5 +41,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setOnboardingDone(done: Boolean) = dataStore.setOnboardingDone(done)
     suspend fun setBootAutostartEnabled(enabled: Boolean) = dataStore.setBootAutostartEnabled(enabled)
     suspend fun setPingMode(mode: String) = dataStore.setPingMode(mode)
+    suspend fun setIpv6Enabled(enabled: Boolean) = dataStore.setIpv6Enabled(enabled)
+    suspend fun setBlockQuic(enabled: Boolean) = dataStore.setBlockQuic(enabled)
     suspend fun clearAll() = dataStore.clearAll()
 }

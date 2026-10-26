@@ -33,10 +33,19 @@ object LinkParser {
                 val schemeIndex = withoutFrag.indexOf("://")
                 val afterScheme = if (schemeIndex >= 0) withoutFrag.substring(schemeIndex + 3) else withoutFrag
                 val queryStr = if (afterScheme.contains("?")) afterScheme.substringAfter("?") else ""
-                val authority = afterScheme.substringBefore("?")
+                var authority = afterScheme.substringBefore("?")
+                while (authority.endsWith("/")) {
+                    authority = authority.substring(0, authority.length - 1)
+                }
 
-                val userInfo = if (authority.contains("@")) authority.substringBeforeLast("@") else ""
+                val rawUserInfo = if (authority.contains("@")) authority.substringBeforeLast("@") else ""
                 val hostPort = if (authority.contains("@")) authority.substringAfterLast("@") else authority
+
+                val userInfo = try {
+                    URLDecoder.decode(rawUserInfo, "UTF-8")
+                } catch (_: Exception) {
+                    rawUserInfo
+                }
 
                 val host: String
                 val port: Int
@@ -104,8 +113,7 @@ object LinkParser {
         val fp = uri.getQueryParameter("fp") ?: uri.getQueryParameter("fingerprint") ?: "chrome"
         val alpnParam = uri.getQueryParameter("alpn")
         val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
-        val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) }
-            ?: (uri.getQueryParameter("allowInsecure")?.let { it == "1" || it.equals("true", true) } ?: false)
+        val insecure = isAllowInsecure(uri)
 
         val typeParam = uri.getQueryParameter("type") ?: uri.getQueryParameter("net") ?: "tcp"
         val transportType = when (typeParam.lowercase()) {
@@ -230,10 +238,10 @@ object LinkParser {
 
         val name = decodeFragment(uri.fragment, "Trojan-$host:$port")
         val sni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val fp = uri.getQueryParameter("fp")?.ifBlank { null } ?: uri.getQueryParameter("fingerprint")?.ifBlank { null } ?: "chrome"
         val alpnParam = uri.getQueryParameter("alpn")
         val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
-        val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) }
-            ?: (uri.getQueryParameter("allowInsecure")?.let { it == "1" || it.equals("true", true) } ?: false)
+        val insecure = isAllowInsecure(uri)
 
         val typeParam = uri.getQueryParameter("type") ?: uri.getQueryParameter("net") ?: "tcp"
         val transportType = when (typeParam.lowercase()) {
@@ -257,7 +265,8 @@ object LinkParser {
                 enabled = true,
                 serverName = sni,
                 insecure = insecure,
-                alpn = alpnList
+                alpn = alpnList,
+                utlsFingerprint = fp
             ),
             transport = TransportConfig(
                 type = transportType,
@@ -318,7 +327,8 @@ object LinkParser {
         val port = if (uri.port > 0) uri.port else 443
         val name = decodeFragment(uri.fragment, "Hy2-$host:$port")
         val sni = uri.getQueryParameter("sni") ?: host
-        val insecure = uri.getQueryParameter("insecure")?.let { it == "1" || it.equals("true", true) } ?: false
+        val fp = uri.getQueryParameter("fp")?.ifBlank { null } ?: uri.getQueryParameter("fingerprint")?.ifBlank { null } ?: "chrome"
+        val insecure = isAllowInsecure(uri)
         val alpnParam = uri.getQueryParameter("alpn")
         val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
 
@@ -333,10 +343,19 @@ object LinkParser {
                 enabled = true,
                 serverName = sni,
                 insecure = insecure,
-                alpn = alpnList
+                alpn = alpnList,
+                utlsFingerprint = fp
             )
         )
         return Result.Success(profile)
+    }
+
+    private fun isAllowInsecure(uri: SimpleUri): Boolean {
+        val keys = listOf("insecure", "allowInsecure", "allow_insecure", "skip-cert-verify")
+        return keys.any { key ->
+            val v = uri.getQueryParameter(key)
+            v == "1" || v.equals("true", true)
+        }
     }
 
     private fun decodeFragment(fragment: String?, default: String): String {

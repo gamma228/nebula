@@ -214,4 +214,15 @@
     <string name="appearance_shape_rounded">Kapsel (Abgerundet)</string>
     <string name="appearance_shape_sharp">Scharf (Technisch)</string>
     <string name="appearance_display_mode">Anzeigemodus</string>
+    <string name="settings_ipv6_title">IPv6 aktivieren</string>
+    <string name="settings_ipv6_desc">IPv6-Verkehr über Proxy leiten (deaktivieren, falls Provider IPv6 blockiert)</string>
+    <string name="settings_block_quic_title">QUIC blockieren (UDP 443)</string>
+    <string name="settings_block_quic_desc">TCP HTTP/2 für YouTube und Streaming erzwingen, um UDP-Drosselung zu umgehen</string>
+    <string name="state_connected_degraded">Verbunden (Kein Internet)</string>
+    <string name="doctor_check_telegram">Direkte Telegram DC-Verbindung</string>
+    <string name="doctor_check_youtube">YouTube HTTPS-Erreichbarkeit</string>
+    <string name="doctor_check_ipv6_route">IPv6-Routing-Strategie</string>
+    <string name="doctor_check_quic_block">QUIC-Zensurschutz (UDP 443)</string>
+    <string name="doctor_fix_ipv6">IPv6 deaktivieren</string>
+    <string name="doctor_fix_quic">QUIC blockieren</string>
 </resources>

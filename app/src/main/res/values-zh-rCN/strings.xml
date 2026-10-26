@@ -214,4 +214,15 @@
     <string name="appearance_shape_rounded">全胶囊圆角</string>
     <string name="appearance_shape_sharp">直角边缘 (科技感)</string>
     <string name="appearance_display_mode">显示模式</string>
+    <string name="settings_ipv6_title">启用 IPv6</string>
+    <string name="settings_ipv6_desc">通过代理路由 IPv6 流量（若运营商或节点阻断 IPv6 请关闭）</string>
+    <string name="settings_block_quic_title">阻止 QUIC (UDP 443)</string>
+    <string name="settings_block_quic_desc">强制 YouTube 及流媒体使用 TCP HTTP/2，绕过运营商 UDP 443 限制</string>
+    <string name="state_connected_degraded">已连接（无互联网访问）</string>
+    <string name="doctor_check_telegram">Telegram 数据中心直接连接</string>
+    <string name="doctor_check_youtube">YouTube HTTPS 可用性</string>
+    <string name="doctor_check_ipv6_route">IPv6 路由策略</string>
+    <string name="doctor_check_quic_block">QUIC 防审查阻断</string>
+    <string name="doctor_fix_ipv6">禁用 IPv6</string>
+    <string name="doctor_fix_quic">阻断 QUIC</string>
 </resources>

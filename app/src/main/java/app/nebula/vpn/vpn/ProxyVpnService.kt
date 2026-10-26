@@ -67,6 +67,7 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     private var stateCollectorJob: Job? = null
     private var statsCollectorJob: Job? = null
+    private var probeJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -134,6 +135,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                     val remoteDns = settingsRepository.remoteDnsUrl.first()
                     val fakeDns = settingsRepository.fakeDnsEnabled.first()
                     val killSwitch = settingsRepository.killSwitchEnabled.first()
+                    val ipv6 = settingsRepository.ipv6Enabled.first()
+                    val blockQuic = settingsRepository.blockQuic.first()
 
                     cachedRoutingMode = routingMode
                     cachedTargetPackages = targetPackages
@@ -147,7 +150,10 @@ class ProxyVpnService : VpnService(), TunProvider {
                             targetPackages = targetPackages,
                             remoteDnsUrl = remoteDns,
                             fakeDnsEnabled = fakeDns,
-                            killSwitchEnabled = killSwitch
+                            killSwitchEnabled = killSwitch,
+                            localPortMixedInbound = 2080,
+                            ipv6Enabled = ipv6,
+                            blockQuic = blockQuic
                         )
                     )
                     android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile.name}, config length=${configJson.length}")
@@ -175,6 +181,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                                         title = "Connected: $name",
                                         content = "Protected via sing-box core"
                                     )
+                                    launchConnectivityProbe(name, startT)
                                 }
                                 is ConnectionState.Error -> {
                                     vpnRepository.updateState(state)
@@ -240,6 +247,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                         val remoteDns = settingsRepository.remoteDnsUrl.first()
                         val fakeDns = settingsRepository.fakeDnsEnabled.first()
                         val killSwitch = settingsRepository.killSwitchEnabled.first()
+                        val ipv6 = settingsRepository.ipv6Enabled.first()
+                        val blockQuic = settingsRepository.blockQuic.first()
 
                         val configJson = SingBoxConfigBuilder.build(
                             SingBoxConfigBuilder.BuildConfig(
@@ -250,7 +259,10 @@ class ProxyVpnService : VpnService(), TunProvider {
                                 targetPackages = targetPackages,
                                 remoteDnsUrl = remoteDns,
                                 fakeDnsEnabled = fakeDns,
-                                killSwitchEnabled = killSwitch
+                                killSwitchEnabled = killSwitch,
+                                localPortMixedInbound = 2080,
+                                ipv6Enabled = ipv6,
+                                blockQuic = blockQuic
                             )
                         )
                         proxyCore.reloadConfig(configJson)
@@ -268,6 +280,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                         title = "Connected: ${targetProfile.name}",
                         content = "Protected via sing-box core"
                     )
+                    launchConnectivityProbe(targetProfile.name, startT)
                     android.util.Log.i("ProxyVpnService", "Hot-switch completed successfully to ${targetProfile.name}")
 
                 } catch (e: Exception) {
@@ -296,6 +309,8 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     private suspend fun stopVpnTunnelInternal() {
         android.util.Log.i("ProxyVpnService", "Stopping VPN tunnel internally...")
+        probeJob?.cancel()
+        probeJob = null
         stateCollectorJob?.cancel()
         stateCollectorJob = null
         statsCollectorJob?.cancel()
@@ -369,12 +384,14 @@ class ProxyVpnService : VpnService(), TunProvider {
             builder.addAddress("172.19.0.1", 30)
         }
 
-        // Add IPv6 addresses
+        // Add IPv6 addresses if configured
+        var hasIpv6Address = false
         val inet6Addresses = options.inet6Address
         if (inet6Addresses != null) {
             while (inet6Addresses.hasNext()) {
                 val prefix = inet6Addresses.next()
                 builder.addAddress(prefix.address(), prefix.prefix())
+                hasIpv6Address = true
             }
         }
 
@@ -393,38 +410,38 @@ class ProxyVpnService : VpnService(), TunProvider {
                 builder.addRoute("0.0.0.0", 0)
             }
 
-            val inet6Routes = options.inet6RouteAddress
-            var hasIpv6Route = false
-            if (inet6Routes != null) {
-                while (inet6Routes.hasNext()) {
-                    val prefix = inet6Routes.next()
-                    builder.addRoute(prefix.address(), prefix.prefix())
-                    hasIpv6Route = true
+            // Only add IPv6 routes if an IPv6 address was configured (default OFF for v2rayNG parity)
+            if (hasIpv6Address) {
+                val inet6Routes = options.inet6RouteAddress
+                var hasIpv6Route = false
+                if (inet6Routes != null) {
+                    while (inet6Routes.hasNext()) {
+                        val prefix = inet6Routes.next()
+                        builder.addRoute(prefix.address(), prefix.prefix())
+                        hasIpv6Route = true
+                    }
                 }
-            }
-            if (!hasIpv6Route) {
-                builder.addRoute("::", 0)
+                if (!hasIpv6Route) {
+                    builder.addRoute("::", 0)
+                }
             }
         }
 
-        // Add DNS Servers
-        var hasDns = false
+        // Add DNS Servers - public reliable DNS servers with DoH detour through proxy
+        builder.addDnsServer("1.1.1.1")
+        builder.addDnsServer("8.8.8.8")
         try {
             val dnsServers = options.dnsServerAddress
             if (dnsServers != null) {
                 while (dnsServers.hasNext()) {
                     val dns = dnsServers.next()
-                    if (dns.isNotBlank()) {
+                    if (dns.isNotBlank() && dns != "1.1.1.1" && dns != "8.8.8.8") {
                         builder.addDnsServer(dns)
-                        hasDns = true
                     }
                 }
             }
         } catch (e: Exception) {
             android.util.Log.w("ProxyVpnService", "Error reading dnsServerAddress: ${e.message}")
-        }
-        if (!hasDns) {
-            builder.addDnsServer("172.19.0.2")
         }
 
         // Apply Split Tunneling synchronously before establish()
@@ -523,5 +540,74 @@ class ProxyVpnService : VpnService(), TunProvider {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
+    }
+
+    private fun launchConnectivityProbe(profileName: String, startT: Long) {
+        probeJob?.cancel()
+        probeJob = serviceScope.launch(Dispatchers.IO) {
+            kotlinx.coroutines.delay(1200)
+            if (vpnRepository.connectionState.value !is ConnectionState.Connected) return@launch
+
+            val ok = probeProxyConnectivity()
+            if (vpnRepository.connectionState.value !is ConnectionState.Connected) return@launch
+
+            if (!ok) {
+                android.util.Log.w("ProxyVpnService", "Active probe failed: node $profileName dropped test packets")
+                vpnRepository.updateState(
+                    ConnectionState.Connected(
+                        profileName = profileName,
+                        connectedAt = startT,
+                        isDegraded = true,
+                        warning = "No internet access through proxy"
+                    )
+                )
+                startForegroundNotification(
+                    title = "Connected: $profileName (No Internet)",
+                    content = "Proxy is not routing data. Open Doctor to diagnose."
+                )
+            } else {
+                android.util.Log.i("ProxyVpnService", "Active probe succeeded: node $profileName verified healthy")
+                vpnRepository.updateState(
+                    ConnectionState.Connected(
+                        profileName = profileName,
+                        connectedAt = startT,
+                        isDegraded = false,
+                        warning = null
+                    )
+                )
+                startForegroundNotification(
+                    title = "Connected: $profileName",
+                    content = "Protected via sing-box core"
+                )
+            }
+        }
+    }
+
+    private fun probeProxyConnectivity(): Boolean {
+        val proxy = java.net.Proxy(java.net.Proxy.Type.HTTP, java.net.InetSocketAddress("127.0.0.1", 2080))
+        val testUrls = listOf(
+            "http://cp.cloudflare.com/generate_204",
+            "http://connectivitycheck.gstatic.com/generate_204"
+        )
+        for (urlStr in testUrls) {
+            try {
+                val url = java.net.URL(urlStr)
+                val conn = url.openConnection(proxy) as java.net.HttpURLConnection
+                conn.connectTimeout = 3000
+                conn.readTimeout = 3000
+                conn.instanceFollowRedirects = false
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
+                try {
+                    val code = conn.responseCode
+                    if (code in 200..399) return true
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (e: Exception) {
+                android.util.Log.d("ProxyVpnService", "Probe url $urlStr failed via proxy: ${e.message}")
+            }
+        }
+        return false
     }
 }

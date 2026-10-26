@@ -31,6 +31,8 @@ class SettingsDataStore(private val context: Context) {
         private val KEY_ONBOARDING_DONE = booleanPreferencesKey("onboarding_done")
         private val KEY_BOOT_AUTOSTART = booleanPreferencesKey("boot_autostart")
         private val KEY_PING_MODE = stringPreferencesKey("ping_mode")
+        private val KEY_IPV6_ENABLED = booleanPreferencesKey("ipv6_enabled")
+        private val KEY_BLOCK_QUIC = booleanPreferencesKey("block_quic")
     }
 
     val selectedProfileId: Flow<String?> = context.dataStore.data.map { it[KEY_SELECTED_PROFILE_ID] }
@@ -116,6 +118,16 @@ class SettingsDataStore(private val context: Context) {
     val pingMode: Flow<String> = context.dataStore.data.map { it[KEY_PING_MODE] ?: "TCP" }
     suspend fun setPingMode(mode: String) {
         context.dataStore.edit { it[KEY_PING_MODE] = mode }
+    }
+
+    val ipv6Enabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_IPV6_ENABLED] ?: false }
+    suspend fun setIpv6Enabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_IPV6_ENABLED] = enabled }
+    }
+
+    val blockQuic: Flow<Boolean> = context.dataStore.data.map { it[KEY_BLOCK_QUIC] ?: true }
+    suspend fun setBlockQuic(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_BLOCK_QUIC] = enabled }
     }
 
     suspend fun clearAll() {

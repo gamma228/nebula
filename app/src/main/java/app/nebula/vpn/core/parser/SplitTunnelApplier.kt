@@ -33,8 +33,14 @@ object SplitTunnelApplier {
 
         when (mode) {
             AppRoutingMode.GLOBAL -> {
-                // No per-app restrictions; tunnels everything except the app itself
-                // (sing-box protects its own sockets via VpnService.protect)
+                // Disallow own package to eliminate kernel loopback for app's internal probes/traffic
+                try {
+                    packageManager.getPackageInfo(ownPackageName, 0)
+                    builder.addDisallowedApplication(ownPackageName)
+                    applied.add(ownPackageName)
+                } catch (e: PackageManager.NameNotFoundException) {
+                    missing.add(ownPackageName)
+                }
             }
             AppRoutingMode.FORWARD_APPS -> {
                 // Whitelist: ONLY addAllowedApplication
@@ -56,8 +62,9 @@ object SplitTunnelApplier {
                 }
             }
             AppRoutingMode.BYPASS_APPS -> {
-                // Blacklist: ONLY addDisallowedApplication
-                for (pkg in targetPackages) {
+                // Blacklist: ONLY addDisallowedApplication (including own package)
+                val packagesToDisallow = (targetPackages + ownPackageName).distinct()
+                for (pkg in packagesToDisallow) {
                     try {
                         packageManager.getPackageInfo(pkg, 0)
                         builder.addDisallowedApplication(pkg)

@@ -33,6 +33,18 @@ class SettingsViewModel @Inject constructor(
         false
     )
 
+    val ipv6Enabled: StateFlow<Boolean> = settingsRepository.ipv6Enabled.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        false
+    )
+
+    val blockQuic: StateFlow<Boolean> = settingsRepository.blockQuic.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        true
+    )
+
     val fakeDnsEnabled: StateFlow<Boolean> = settingsRepository.fakeDnsEnabled.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
@@ -102,6 +114,18 @@ class SettingsViewModel @Inject constructor(
     fun setKillSwitch(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setKillSwitchEnabled(enabled)
+        }
+    }
+
+    fun setIpv6Enabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setIpv6Enabled(enabled)
+        }
+    }
+
+    fun setBlockQuic(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setBlockQuic(enabled)
         }
     }
 

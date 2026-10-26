@@ -155,4 +155,38 @@ class LinkParserTest {
         val profile = (result as Result.Success).data
         assertEquals("Flow must be stripped for non-TCP transport", "", profile.tls.flow)
     }
+
+    @Test
+    fun testParseHysteria2WithTrailingSlashAuthorityAndAllowInsecure() {
+        val link = "hysteria2://u63SxILNwtrQZ7Y1ZrFaZfsA@8.211.175.236:8443/?allowInsecure=1#Japan-Shibuya"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals(8443, profile.port)
+        assertEquals("8.211.175.236", profile.server)
+        assertTrue("allowInsecure=1 must set insecure to true", profile.tls.insecure)
+    }
+
+    @Test
+    fun testParseHysteria2WithUrlEncodedPassword() {
+        val link = "hysteria2://gf1%3Agfhysteria2024@185.156.44.99:443?allowInsecure=1&sni=css.rbxcdn.com#Romania"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("Password must be URL-decoded", "gf1:gfhysteria2024", profile.authSecret)
+        assertTrue(profile.tls.insecure)
+        assertEquals("css.rbxcdn.com", profile.tls.serverName)
+    }
+
+    @Test
+    fun testParseTrojanWithFingerprintAndAllowInsecure() {
+        val link = "trojan://humanity@141.193.213.172:443?path=%2Fassignment&security=tls&insecure=0&host=www.calmlunch.com&type=ws&allowInsecure=1&sni=www.calmlunch.com&fp=android#Paris"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("android", profile.tls.utlsFingerprint)
+        assertTrue("allowInsecure=1 must set insecure to true", profile.tls.insecure)
+        assertEquals("www.calmlunch.com", profile.transport.host)
+        assertEquals("/assignment", profile.transport.path)
+    }
 }

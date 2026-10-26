@@ -34,3 +34,24 @@ Nebula includes third-party software components licensed under open-source licen
 
 ## 7. SnakeYAML Engine / Kaml (YAML parsing for Clash profiles)
 - License: Apache License 2.0
+
+## 8. v2rayNG (Behavioral & Architecture Reference)
+- Copyright: (c) 2dust and v2rayNG contributors
+- License: GNU General Public License v3.0 (GPL-3.0)
+- Repository: https://github.com/2dust/v2rayNG
+
+## 9. Xray-core
+- Copyright: (c) XTLS and Xray-core contributors
+- License: Mozilla Public License 2.0 (MPL-2.0)
+- Repository: https://github.com/XTLS/Xray-core
+
+## 10. AndroidLibXrayLite
+- Copyright: (c) 2dust and contributors
+- License: GNU General Public License v3.0 (GPL-3.0)
+- Repository: https://github.com/2dust/AndroidLibXrayLite
+
+## 11. hev-socks5-tunnel
+- Copyright: (c) Heiher <r@heiher.info>
+- License: MIT License
+- Repository: https://github.com/heiher/hev-socks5-tunnel
+

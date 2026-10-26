@@ -24,7 +24,7 @@ class VpnRepository @Inject constructor(
     fun updateState(state: ConnectionState) {
         android.util.Log.i("VpnRepository", "updateState -> $state")
         when (state) {
-            is ConnectionState.Connected -> connectionManager.onServiceConnected(state.profileName)
+            is ConnectionState.Connected -> connectionManager.onServiceConnected(state.profileName, state.isDegraded, state.warning)
             is ConnectionState.Failed -> connectionManager.onServiceError(state.reason)
             is ConnectionState.Error -> connectionManager.onServiceError(state.message)
             is ConnectionState.Disconnected -> connectionManager.onServiceDisconnected()

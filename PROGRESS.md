@@ -111,6 +111,16 @@
   - **Accessibility Compliance:** Numerical WCAG AA contrast audit verified (all text >= 4.5:1, graphical borders >= 3.0:1), minimum 48dp touch targets on all interactive elements, TalkBack content descriptions, and `reduceMotion` toggle integration.
   - **Test Suite Status:** 100% green (`./gradlew.bat testDebugUnitTest`, 30 tasks, `StringsParityTest` verified across `en`, `ru`, `uk`, `zh-CN`, `de`).
 
+- [x] **Phase 16: Functional Parity with v2rayNG on Real-World Subscriptions (D8)**
+  - **Parity Oracle & Core Decision:** Downloaded official v2rayNG v2.3.11 x86_64 APK and analyzed source code (`docs/PARITY.md`). Documented core architectural decision (`docs/CORE_DECISION.md`) retaining sing-box v1.14.4 as the primary core.
+  - **Frozen Snapshot Fixture:** Created `app/src/test/resources/fixtures/black_ss_all_rus_20261026.txt` (63 nodes: 15 Hysteria 2, 3 VMess, 45 Trojan) from `https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_SS%2BAll_RUS.txt`.
+  - **Parser Hardening:** Fixed trailing slashes in Hysteria 2 authority URLs; added percent-decoding for passwords; standardized `isAllowInsecure(uri)` across `insecure`, `allowInsecure`, `allow_insecure`, and `skip-cert-verify`; mapped `fp=unsafe` / `none` to disable uTLS, preventing sing-box crashes.
+  - **DPI/TSPU Circumvention (IPv6 & QUIC):** Added `ipv6Enabled` (default OFF) and `blockQuic` (default ON) toggles to Settings; configured DNS strategy to `ipv4_only` when IPv6 is disabled; injected top-level QUIC reject rule (`port: [443], network: ["udp"], action: "reject"`) to force immediate TCP HTTP/2 fallback; embedded official Telegram datacenter CIDRs.
+  - **Connection Doctor Diagnostics & 1-Click Fixes:** Added live automated checks for Telegram DC handshake, YouTube HTTPS handshake, IPv6 route strategy, and QUIC blocking, with 1-click corrective action buttons.
+  - **State Truth & Probing:** Added active HTTP probe via local mixed inbound (`127.0.0.1:2080`) to `cp.cloudflare.com/generate_204`; updated `ConnectionState.Connected` with `isDegraded` flag to warn users if packets drop.
+  - **5-Language Parity:** Added 11 new keys across `en`, `ru`, `uk`, `zh-CN`, and `de` localization files (`StringsParityTest` 100% passing).
+  - **Automated Proof:** 100% of snapshot nodes validated against `sing-box.exe check -c` via `SnapshotParityTest.kt`; 30/30 unit test tasks passing.
+
 ## Core Artifact Details
 - **Sing-box Tag:** `v1.14.4`
 - **Commit:** `c005f35300ce76427dc285481ec5695f5b179cd2`

@@ -164,12 +164,17 @@ class DefaultConnectionManager @Inject constructor(
         connect(lastId)
     }
 
-    override fun onServiceConnected(profileName: String) {
+    override fun onServiceConnected(profileName: String, isDegraded: Boolean, warning: String?) {
         if (!_userRequestedDisconnect) {
             if (connectionStartTime == 0L) {
                 connectionStartTime = System.currentTimeMillis()
             }
-            _state.value = ConnectionState.Connected(profileName, connectionStartTime)
+            _state.value = ConnectionState.Connected(
+                profileName = profileName,
+                connectedAt = connectionStartTime,
+                isDegraded = isDegraded,
+                warning = warning
+            )
         }
     }
 

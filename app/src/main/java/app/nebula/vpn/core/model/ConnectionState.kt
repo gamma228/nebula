@@ -3,7 +3,12 @@ package app.nebula.vpn.core.model
 sealed interface ConnectionState {
     data object Disconnected : ConnectionState
     data object Connecting : ConnectionState
-    data class Connected(val profileName: String, val connectedAt: Long = System.currentTimeMillis()) : ConnectionState
+    data class Connected(
+        val profileName: String,
+        val connectedAt: Long = System.currentTimeMillis(),
+        val isDegraded: Boolean = false,
+        val warning: String? = null
+    ) : ConnectionState
     data object Reconnecting : ConnectionState
     data object Disconnecting : ConnectionState
     data class Failed(val reason: String, val timestamp: Long = System.currentTimeMillis()) : ConnectionState

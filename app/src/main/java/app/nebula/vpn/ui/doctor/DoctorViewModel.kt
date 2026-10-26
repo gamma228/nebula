@@ -30,7 +30,8 @@ data class DiagnosticCheckItem(
     val title: String,
     val isPassed: Boolean,
     val details: String,
-    val canFix: Boolean = false
+    val canFix: Boolean = false,
+    val fixActionId: String? = null
 )
 
 data class DiagnosticVerdict(
@@ -176,17 +177,75 @@ class DoctorViewModel @Inject constructor(
                 )
             )
 
-            // 7. IPv6 Shielding
+            // 7. Telegram Direct DC Reachability
+            var tgPassed = false
+            var tgLatency = -1L
+            val tgStart = System.currentTimeMillis()
+            try {
+                Socket().use { s ->
+                    s.tcpNoDelay = true
+                    s.soTimeout = 2500
+                    s.connect(InetSocketAddress("149.154.167.51", 443), 2500)
+                }
+                tgLatency = System.currentTimeMillis() - tgStart
+                tgPassed = true
+            } catch (e: Exception) {
+                tgPassed = false
+            }
             results.add(
                 DiagnosticCheckItem(
-                    title = "Защита от утечек IPv6",
-                    isPassed = true,
-                    details = "Маршрутизация IPv6 заблокирована локальным черным пулом (fdfe:dcba:9876::1/126)",
+                    title = "Прямое соединение с Telegram DC",
+                    isPassed = tgPassed,
+                    details = if (tgPassed) "Telegram DC 149.154.167.51:443 доступен ($tgLatency ms)" else "Telegram DC недоступен напрямую через текущую сеть",
                     canFix = false
                 )
             )
 
-            // 8. UDP Connectivity (DNS port 53 probe)
+            // 8. YouTube HTTPS Handshake
+            val ytCode = getResponseCode("https://www.youtube.com/generate_204", timeoutMs = 3000)
+            val ytPassed = ytCode in 200..399
+            results.add(
+                DiagnosticCheckItem(
+                    title = "Доступность YouTube по HTTPS",
+                    isPassed = ytPassed,
+                    details = if (ytPassed) "YouTube отвечает (HTTP $ytCode)" else "YouTube не отвечает (заблокирован или тайм-аут)",
+                    canFix = false
+                )
+            )
+
+            // 9. IPv6 Routing Strategy Check
+            val isIpv6On = settingsRepository.ipv6Enabled.first()
+            results.add(
+                DiagnosticCheckItem(
+                    title = "Стратегия маршрутизации IPv6",
+                    isPassed = !isIpv6On,
+                    details = if (!isIpv6On) {
+                        "IPv6 отключен (рекомендуется для РФ; предотвращает зависания при отсутствии IPv6 у провайдера/сервера)"
+                    } else {
+                        "IPv6 включен. В мобильных сетях и у большинства провайдеров РФ это приводит к сбоям и зависаниям"
+                    },
+                    canFix = isIpv6On,
+                    fixActionId = if (isIpv6On) "DISABLE_IPV6" else null
+                )
+            )
+
+            // 10. QUIC (UDP 443) Anti-Censorship Check
+            val isQuicBlocked = settingsRepository.blockQuic.first()
+            results.add(
+                DiagnosticCheckItem(
+                    title = "Блокировка QUIC против цензуры",
+                    isPassed = isQuicBlocked,
+                    details = if (isQuicBlocked) {
+                        "QUIC (UDP 443) блокируется: браузеры и YouTube принудительно используют быстрый TCP HTTP/2"
+                    } else {
+                        "QUIC разрешен. ТСПУ часто замедляет или отбрасывает пакеты UDP 443, вызывая зависание видео"
+                    },
+                    canFix = !isQuicBlocked,
+                    fixActionId = if (!isQuicBlocked) "BLOCK_QUIC" else null
+                )
+            )
+
+            // 11. UDP Connectivity (DNS port 53 probe)
             var udpPassed = false
             try {
                 Socket().use { s ->
@@ -199,7 +258,7 @@ class DoctorViewModel @Inject constructor(
             }
             results.add(
                 DiagnosticCheckItem(
-                    title = "UDP/QUIC проходимость",
+                    title = "UDP/QUIC проходимость (порт 53)",
                     isPassed = udpPassed,
                     details = if (udpPassed) "Порт 53/UDP и транспорт доступны" else "Транспортный порт недоступен или фильтруется",
                     canFix = false
@@ -276,6 +335,21 @@ class DoctorViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             -1
+        }
+    }
+
+    fun applyFix(fixActionId: String) {
+        viewModelScope.launch {
+            when (fixActionId) {
+                "DISABLE_IPV6" -> {
+                    settingsRepository.setIpv6Enabled(false)
+                    runDiagnostics()
+                }
+                "BLOCK_QUIC" -> {
+                    settingsRepository.setBlockQuic(true)
+                    runDiagnostics()
+                }
+            }
         }
     }
 

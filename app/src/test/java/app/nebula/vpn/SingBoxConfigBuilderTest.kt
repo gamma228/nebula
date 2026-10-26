@@ -249,6 +249,68 @@ class SingBoxConfigBuilderTest {
         validateWithDesktopSingBox(config, "test-dns-robust.json")
     }
 
+    @Test
+    fun testIpv6DisabledByDefaultForcesIpv4OnlyDnsAndZeroIpv6Address() {
+        val profile = ProxyProfile(
+            id = "test-node",
+            name = "Node",
+            protocol = ProtocolType.TROJAN,
+            server = "1.2.3.4",
+            port = 443,
+            authSecret = "secret"
+        )
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile,
+                ipv6Enabled = false
+            )
+        )
+        assertTrue("DNS strategy must be ipv4_only when IPv6 disabled", config.contains("\"strategy\": \"ipv4_only\""))
+        assertTrue("TUN address must contain 172.19.0.1/30", config.contains("\"172.19.0.1/30\""))
+        org.junit.Assert.assertFalse("TUN address must NOT contain IPv6 address when disabled", config.contains("fdfe:dcba:9876::1/126"))
+        validateWithDesktopSingBox(config, "test-ipv6-disabled.json")
+    }
+
+    @Test
+    fun testBlockQuicRejectsUdpPort443() {
+        val profile = ProxyProfile(
+            id = "test-node",
+            name = "Node",
+            protocol = ProtocolType.TROJAN,
+            server = "1.2.3.4",
+            port = 443,
+            authSecret = "secret"
+        )
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile,
+                blockQuic = true
+            )
+        )
+        assertTrue("Config must contain UDP 443 reject rule", config.contains("\"action\": \"reject\""))
+        validateWithDesktopSingBox(config, "test-block-quic.json")
+    }
+
+    @Test
+    fun testTelegramCidrsRoutedToProxy() {
+        val profile = ProxyProfile(
+            id = "test-node",
+            name = "Node",
+            protocol = ProtocolType.TROJAN,
+            server = "1.2.3.4",
+            port = 443,
+            authSecret = "secret"
+        )
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile
+            )
+        )
+        assertTrue("Config must route Telegram CIDRs through proxy", config.contains("91.108.56.0/22"))
+        assertTrue("Config must route Telegram CIDRs through proxy", config.contains("149.154.160.0/20"))
+        validateWithDesktopSingBox(config, "test-telegram-cidr.json")
+    }
+
     private fun validateWithDesktopSingBox(configJson: String, tempFileName: String) {
         val singBoxBin = File("C:/Users/User/tools/sing-box.exe")
         if (singBoxBin.exists()) {

@@ -185,6 +185,26 @@ fun DoctorScreen(
                                 color = colors.textSecondary
                             )
                         }
+
+                        if (check.canFix && check.fixActionId != null) {
+                            Spacer(modifier = Modifier.width(spacing.xs))
+                            Button(
+                                onClick = { viewModel.applyFix(check.fixActionId) },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.primary.copy(alpha = 0.2f)),
+                                shape = shapes.button,
+                                modifier = Modifier.defaultMinSize(minHeight = 36.dp)
+                            ) {
+                                Text(
+                                    text = when (check.fixActionId) {
+                                        "DISABLE_IPV6" -> stringResource(R.string.doctor_fix_ipv6)
+                                        "BLOCK_QUIC" -> stringResource(R.string.doctor_fix_quic)
+                                        else -> stringResource(R.string.fix_issue)
+                                    },
+                                    style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = colors.primary
+                                )
+                            }
+                        }
                     }
                 }
             }

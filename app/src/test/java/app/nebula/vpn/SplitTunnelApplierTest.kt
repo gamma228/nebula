@@ -37,10 +37,30 @@ class SplitTunnelApplierTest {
     }
 
     @Test
+    fun testGlobalModeDisallowsOwnPackage() {
+        val builder = mockk<VpnService.Builder>(relaxed = true)
+        val pm = mockk<PackageManager>()
+        every { pm.getPackageInfo("app.nebula.vpn", 0) } returns PackageInfo()
+
+        val result = SplitTunnelApplier.apply(
+            builder = builder,
+            packageManager = pm,
+            ownPackageName = "app.nebula.vpn",
+            mode = AppRoutingMode.GLOBAL,
+            targetPackages = emptyList()
+        )
+
+        verify(exactly = 1) { builder.addDisallowedApplication("app.nebula.vpn") }
+        verify(exactly = 0) { builder.addAllowedApplication(any()) }
+        assertEquals(listOf("app.nebula.vpn"), result.appliedPackages)
+    }
+
+    @Test
     fun testBypassAppsOnlyCallsAddDisallowedApplication() {
         val builder = mockk<VpnService.Builder>(relaxed = true)
         val pm = mockk<PackageManager>()
         every { pm.getPackageInfo("com.android.chrome", 0) } returns PackageInfo()
+        every { pm.getPackageInfo("app.nebula.vpn", 0) } returns PackageInfo()
 
         val result = SplitTunnelApplier.apply(
             builder = builder,
@@ -51,9 +71,10 @@ class SplitTunnelApplierTest {
         )
 
         verify(exactly = 1) { builder.addDisallowedApplication("com.android.chrome") }
+        verify(exactly = 1) { builder.addDisallowedApplication("app.nebula.vpn") }
         verify(exactly = 0) { builder.addAllowedApplication(any()) }
 
-        assertEquals(listOf("com.android.chrome"), result.appliedPackages)
+        assertEquals(listOf("com.android.chrome", "app.nebula.vpn"), result.appliedPackages)
         assertTrue(result.missingPackages.isEmpty())
     }
 

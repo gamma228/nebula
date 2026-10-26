@@ -11,6 +11,8 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D4: Connection is slow/unstable ("works badly")](#d4-performance-measure-then-tune)
 - [D5: Routing rules screen UX (long scrolling, controls at bottom)](#d5-routing-ui-redesign)
 - [D6: Systematic bug sweep & hardening](#d6-systematic-bug-sweep)
+- [D7: Clean VPN teardown synchronization & physical interface resolution](#d7-clean-vpn-teardown-synchronization--physical-interface-resolution)
+- [D8: Real-World Subscription & v2rayNG Functional Parity (Russian TSPU/DPI Circumvention)](#d8-real-world-subscription--v2rayng-functional-parity)
 
 ---
 
@@ -281,5 +283,84 @@ Users reported connecting successfully to proxy nodes, but traffic was not circu
    - Executed `adb shell ip route`: `tun0` route immediately removed from kernel routing table.
 2. **Unit & Key Parity Test Suite**:
    - `./gradlew.bat testDebugUnitTest`: **100% BUILD SUCCESSFUL** (30 tasks executed/up-to-date).
+
+---
+
+## [D8] REAL-WORLD SUBSCRIPTION & v2rayNG FUNCTIONAL PARITY (RUSSIAN TSPU/DPI CIRCUMVENTION)
+
+### Problem Description
+The user reported: "The same servers from the public subscription `https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/BLACK_SS%2BAll_RUS.txt` work in v2rayNG on the same phone and network (almost all servers show up and work, Telegram, YouTube and other sites blocked in Russia open), but in Nebula it shows 'connected' and those sites do NOT work."
+
+### Root Cause Analysis
+1. **uTLS `unsafe` / `none` Fingerprint Incompatibility:**
+   - In Xray-core (used in v2rayNG), setting `fp=unsafe` or `none` disables uTLS and falls back to standard Go TLS.
+   - In sing-box, specifying `utls: { enabled: true, fingerprint: "unsafe" }` resulted in a fatal configuration parse failure: `FATAL initialize outbound[1]: unknown uTLS fingerprint: unsafe`. Node 43 in the subscription fixture failed to initialize and aborted the proxy core.
+   - Sing-box requires omitting the `utls` block entirely or passing `enabled: false` when uTLS is not to be simulated.
+2. **IPv6 Blackholing on Russian Mobile Networks:**
+   - Russian mobile networks (MTS, MegaFon, Beeline, Tele2) assign IPv6 addresses to cellular interfaces, but proxy nodes in public subscriptions frequently lack functional IPv6 upstream routing or fail to resolve AAAA records.
+   - Dual-stack clients (such as YouTube and Telegram) prioritize IPv6 over IPv4. When Nebula configured IPv6 TUN routes (`fdfe:dcba:9876::1/126`) unconditionally, IPv6 connection attempts timed out and stalled app traffic.
+   - In v2rayNG, IPv6 routing is disabled by default (`pref_ipv6 = false`), forcing dual-stack apps to use IPv4 over the proxy.
+3. **QUIC (UDP 443) Throttling by Russian TSPU (ТСПУ) DPI:**
+   - Russian ISP DPI equipment heavily throttles or drops UDP 443 packets (QUIC / HTTP/3).
+   - When modern browsers or YouTube connect, they first attempt HTTP/3 over UDP 443. Without active rejection, they hang waiting on UDP timeouts before falling back to TCP.
+   - v2rayNG includes an explicit setting to block/reject QUIC, forcing instant fallback to TCP HTTP/2 without latency penalties.
+4. **Telegram Datacenter Direct IP Routing:**
+   - Telegram uses fixed datacenter IP ranges rather than domain names for MTProto connections.
+   - If routing rules rely solely on domain matching or incomplete geoip databases, Telegram datacenter IPs could bypass the proxy or fail to route properly.
+5. **Missing Own-Package Exclusion & SOCKS Inbound for Probes:**
+   - In GLOBAL and BYPASS modes, without excluding the app's own package name (`addDisallowedApplication(ownPackageName)`), app-internal HTTP probes or telemetry could loop back into the TUN interface before sing-box handled them.
+   - The app lacked a dedicated local mixed inbound port (HTTP/SOCKS5 on `127.0.0.1:2080`) for isolated health probing.
+6. **False "Connected" State Truth:**
+   - Previously, the UI indicated "Connected" as soon as the local TUN interface was created, even if the upstream proxy was dead or dropping packets.
+
+### Invariant Fix
+1. **Parser & uTLS Hardening:**
+   - Fixed `LinkParser.kt`:
+     - Trimmed trailing slashes from Hysteria 2 authority URLs.
+     - Decoded percent-encoded userinfo passwords (`%3A` -> `:`).
+     - Standardized `isAllowInsecure(uri)` to detect `insecure`, `allowInsecure`, `allow_insecure`, and `skip-cert-verify`.
+     - Extracted TLS fingerprints (`fp`) for both Trojan and Hysteria 2.
+   - Updated `SingBoxConfigBuilder.kt`:
+     - Disables uTLS (`utls` omitted or `enabled: false`) when `tls.utlsFingerprint` is `unsafe`, `none`, `off`, `disable`, or `disabled`.
+   - Updated `SubscriptionDecoder.kt` to extract `# profile-title:` header comments.
+2. **IPv6 Control (Default: OFF):**
+   - Added `ipv6Enabled` preference in `SettingsDataStore.kt` defaulting to `false`.
+   - In `SingBoxConfigBuilder.kt`, when IPv6 is disabled, sets DNS strategy to `ipv4_only` (omitting `prefer_ipv4`) and omits IPv6 TUN addresses (`fdfe:dcba:9876::1/126`).
+   - In `ProxyVpnService.kt`, only adds IPv6 routes if explicitly enabled in user settings.
+3. **QUIC Blocking Rule (Default: ON):**
+   - Added `blockQuic` preference in `SettingsDataStore.kt` defaulting to `true`.
+   - In `SingBoxConfigBuilder.kt`, when QUIC blocking is enabled, injects a top-priority routing rule:
+     `{ "port": [443], "network": ["udp"], "action": "reject" }`.
+   - This causes immediate TCP HTTP/2 fallback for YouTube and web browsers.
+4. **Telegram IP CIDR Routing:**
+   - Injected official Telegram datacenter CIDRs (`91.108.4.0/22`, `149.154.160.0/20`, `149.154.164.0/22`, `149.154.172.0/22`, `185.76.151.0/24`, `91.105.192.0/23`, `91.108.8.0/22`, `91.108.12.0/22`, `91.108.16.0/22`, `91.108.20.0/22`, `91.108.56.0/22`, `149.154.168.0/22`) into sing-box routing rules directing straight to proxy outbounds.
+5. **Local Mixed Inbound & Own-Package Exclusion:**
+   - Excluded `app.nebula.vpn` in `SplitTunnelApplier.kt` via `addDisallowedApplication(ownPackageName)` in `GLOBAL` and `BYPASS_APPS` modes.
+   - Added `localPortMixedInbound = 2080` (HTTP & SOCKS5 on `127.0.0.1:2080`) inside `SingBoxConfigBuilder.kt`.
+6. **Active Connectivity Probe & Degraded State Warning:**
+   - In `ProxyVpnService.kt`, added active HTTP probe via local mixed proxy (`127.0.0.1:2080`) to `cp.cloudflare.com/generate_204` (fallback: `google.com/generate_204`).
+   - Extended `ConnectionState.Connected` with `isDegraded: Boolean`. If packet drops occur, the UI displays an amber `Connected (No Internet)` badge and warning notification instead of a false green state.
+7. **Connection Doctor In-App Diagnostics & 1-Click Fixes:**
+   - Added Telegram DC handshake check (`149.154.167.50:443`).
+   - Added YouTube HTTPS handshake check (`www.youtube.com:443`).
+   - Added IPv6 Strategy and QUIC Blocking status checks.
+   - Added 1-click action buttons in `DoctorScreen.kt` ("Disable IPv6", "Block QUIC") calling `DoctorViewModel.applyFix()`.
+8. **100% Localization Parity Across 5 Locales:**
+   - Added 11 new keys across `en`, `ru`, `uk`, `zh-CN`, and `de` localization files. Verified via `StringsParityTest`.
+
+### Automated Verification Proof
+1. **Frozen Subscription Snapshot Parity Test (`SnapshotParityTest.kt`):**
+   - Fixture: `app/src/test/resources/fixtures/black_ss_all_rus_20261026.txt` (63 nodes: 15 Hysteria 2, 3 VMess, 45 Trojan).
+   - `testParseSnapshotProfiles`: 63/63 nodes parsed successfully.
+   - `testValidateSingBoxConfigForEverySnapshotNode`: 63/63 generated configs verified and passed desktop `sing-box.exe check -c` (0 errors, 0 warnings).
+   - `testSubscriptionDecoderOnSnapshot`: Verified title extraction and protocol distribution.
+2. **Unit Test Suite (`./gradlew.bat testDebugUnitTest`):**
+   - 30 tasks executed, 0 failures, all 11 test suites passed.
+   - `StringsParityTest`: 100% key parity across `en`, `ru`, `uk`, `zh-CN`, and `de`.
+3. **Live Emulator Testing (`emulator-5554`):**
+   - Imported Russian subscription list into live app.
+   - Verified Settings switches ("Block QUIC" ON, "Enable IPv6" OFF).
+   - Verified Connection Doctor running automated checks on Telegram DC, YouTube HTTPS, and QUIC block.
+   - Captured visual proof artifacts: `emulator_nebula_settings_tunnel.png`, `emulator_nebula_doctor.png`, `emulator_nebula_doctor_quic.png`, `emulator_nebula_sub_loaded.png`.
 
 
