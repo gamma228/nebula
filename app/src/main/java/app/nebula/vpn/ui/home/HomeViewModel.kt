@@ -71,7 +71,25 @@ class HomeViewModel @Inject constructor(
     private val _connectionDurationSeconds = MutableStateFlow(0L)
     val connectionDurationSeconds: StateFlow<Long> = _connectionDurationSeconds.asStateFlow()
 
+    private val _downloadHistory = MutableStateFlow<List<Long>>(List(30) { 0L })
+    val downloadHistory: StateFlow<List<Long>> = _downloadHistory.asStateFlow()
+
+    private val _uploadHistory = MutableStateFlow<List<Long>>(List(30) { 0L })
+    val uploadHistory: StateFlow<List<Long>> = _uploadHistory.asStateFlow()
+
     init {
+        // Collect traffic stats to feed rolling 30-second waveform history
+        viewModelScope.launch {
+            trafficStats.collect { stats ->
+                if (connectionState.value is ConnectionState.Connected) {
+                    _downloadHistory.value = (_downloadHistory.value.drop(1) + stats.downloadSpeedBps)
+                    _uploadHistory.value = (_uploadHistory.value.drop(1) + stats.uploadSpeedBps)
+                } else {
+                    _downloadHistory.value = List(30) { 0L }
+                    _uploadHistory.value = List(30) { 0L }
+                }
+            }
+        }
         // Collect selected profile changes
         viewModelScope.launch {
             settingsRepository.selectedProfileId.collect { id ->

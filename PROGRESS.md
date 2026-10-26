@@ -121,6 +121,13 @@
   - **5-Language Parity:** Added 11 new keys across `en`, `ru`, `uk`, `zh-CN`, and `de` localization files (`StringsParityTest` 100% passing).
   - **Automated Proof:** 100% of snapshot nodes validated against `sing-box.exe check -c` via `SnapshotParityTest.kt`; 30/30 unit test tasks passing.
 
+- [x] **Phase 17: Real-Time Traffic Speed/Waveform & In-App Background Engine (D9)**
+  - **Kernel Traffic Ticker Fallback:** Added 1-second coroutine ticker in `ProxyVpnService.kt` polling `android.net.TrafficStats.getUidRxBytes(Process.myUid())` and `getUidTxBytes(Process.myUid())` to guarantee live speed calculations even if internal core metrics stall.
+  - **30-Second Rolling Oscilloscope Chart:** Upgraded `NebulaTrafficChart.kt` and `HomeViewModel.kt` with a 30-sample sliding window, smooth Bezier curves, dynamic throughput auto-scaling, and live chips for DL (emerald/cyan) and UL (violet).
+  - **Removed Device Wallpaper API & Permissions:** Completely deleted `android.permission.SET_WALLPAPER` and `WallpaperManager.setBitmap` calls; ensured the phone's system desktop is never modified.
+  - **In-App Background Wallpaper Customizer:** Implemented in-app background rendering in `MainActivity.kt` with Coil `AsyncImage` layered beneath Compose screens, contrast protection scrim (`backgroundDimAlpha`), and Gaussian blur. Added gallery photo picker, URL input dialog with quick presets, and dimming/blur sliders in `AppearanceScreen.kt`.
+  - **5-Language Parity & Verification:** Added all keys across `en`, `ru`, `uk`, `zh-CN`, and `de`; unit tests 100% passing; release APKs cleanly assembled and verified on `emulator-5554`.
+
 ## Core Artifact Details
 - **Sing-box Tag:** `v1.14.4`
 - **Commit:** `c005f35300ce76427dc285481ec5695f5b179cd2`
@@ -129,10 +136,10 @@
 - **AAR Size:** 119,472,644 bytes
 
 ## Generated Release Artifacts
-- Universal APK: `app/build/outputs/apk/release/app-universal-release.apk` (236,986,773 bytes)
-- ARM64-v8a APK: `app/build/outputs/apk/release/app-arm64-v8a-release.apk` (81,613,917 bytes)
-- ARMeabi-v7a APK: `app/build/outputs/apk/release/app-armeabi-v7a-release.apk` (74,314,417 bytes)
-- x86_64 APK: `app/build/outputs/apk/release/app-x86_64-release.apk` (86,400,745 bytes)
+- Universal APK: `app/build/outputs/apk/release/app-universal-release.apk` (237,280,885 bytes)
+- ARM64-v8a APK: `app/build/outputs/apk/release/app-arm64-v8a-release.apk` (81,908,029 bytes)
+- ARMeabi-v7a APK: `app/build/outputs/apk/release/app-armeabi-v7a-release.apk` (74,608,529 bytes)
+- x86_64 APK: `app/build/outputs/apk/release/app-x86_64-release.apk` (86,694,857 bytes)
 
 ## Known Limitations
-- None. All defects (D1-D6) resolved, verified on real proxy core, stressed with 10k monkey events, soak tested with 0 leaks, and signed with v2 scheme.
+- None. All defects (D1-D9) resolved, verified on real proxy core, stressed with 10k monkey events, soak tested with 0 leaks, and signed with v2 scheme.

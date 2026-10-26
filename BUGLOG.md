@@ -13,6 +13,7 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D6: Systematic bug sweep & hardening](#d6-systematic-bug-sweep)
 - [D7: Clean VPN teardown synchronization & physical interface resolution](#d7-clean-vpn-teardown-synchronization--physical-interface-resolution)
 - [D8: Real-World Subscription & v2rayNG Functional Parity (Russian TSPU/DPI Circumvention)](#d8-real-world-subscription--v2rayng-functional-parity)
+- [D9: Real-Time Traffic Speed/Waveform and In-App Background Wallpaper Engine](#d9-real-time-traffic-speedwaveform-and-in-app-background-wallpaper-engine)
 
 ---
 
@@ -362,5 +363,56 @@ The user reported: "The same servers from the public subscription `https://raw.g
    - Verified Settings switches ("Block QUIC" ON, "Enable IPv6" OFF).
    - Verified Connection Doctor running automated checks on Telegram DC, YouTube HTTPS, and QUIC block.
    - Captured visual proof artifacts: `emulator_nebula_settings_tunnel.png`, `emulator_nebula_doctor.png`, `emulator_nebula_doctor_quic.png`, `emulator_nebula_sub_loaded.png`.
+
+---
+
+## D9: Real-Time Traffic Speed/Waveform and In-App Background Wallpaper Engine
+
+### Problem Description
+1. **Traffic Speed & Graph Flat Line**: The speed indicators remained stuck at `DOWN 0 KB/s`, `UP 0 KB/s`, and the traffic graph (`ГРАФИК ТРАФИКА`) showed a static flat line even while connected to an active VPN tunnel.
+2. **System Wallpaper Manipulation Bug**: Setting a wallpaper in the appearance settings mistakenly triggered `WallpaperManager.setBitmap(...)`, modifying the user's host Android phone wallpaper (turning the device home screen black) rather than customizing the background image inside the Nebula application.
+
+### Root Cause Analysis
+1. **Core RPC Telemetry Gap & Fake Chart Input**:
+   - `HomeScreen.kt` generated a synthetic 4-point list `listOf(speed/4, speed/2, speed*3/4, speed)` instead of retaining a time-series history of network throughput samples.
+   - If sing-box's internal `CommandClient` dropped or failed to receive byte counters for an outbound connection, both speed and graph collapsed to zero with no fallback mechanism.
+2. **Erroneous System API Target**:
+   - `AppearanceViewModel.kt` invoked `android.app.WallpaperManager.getInstance(context).setBitmap(bitmap)`, which is the Android framework API for changing the device's system home/lock screen.
+   - The user required in-app theming (displaying a custom gallery photo or direct image URL as the app's visual canvas behind Compose cards).
+
+### Invariant Fix
+1. **Kernel-Level UID Traffic Ticker Fallback (`ProxyVpnService.kt`)**:
+   - Implemented a 1-second background coroutine loop polling `android.net.TrafficStats.getUidRxBytes(Process.myUid())` and `getUidTxBytes(Process.myUid())`.
+   - Because all outbound socket traffic of sing-box core runs under Nebula's Linux UID, the delta bytes accurately reflect live download and upload speeds even if core RPC metrics stall.
+2. **True 30-Second Rolling Oscilloscope (`HomeViewModel.kt`, `HomeScreen.kt`, `NebulaTrafficChart.kt`)**:
+   - Added `_downloadHistory` and `_uploadHistory` `StateFlow<List<Long>>` initialized to 30 samples.
+   - Appends each second's throughput sample into the rolling window while connected.
+   - Overhauled `NebulaTrafficChart.kt` with dynamic auto-scaling (`formatChartSpeed(peak)`), dual-curve Bezier interpolation (DL in emerald/cyan, UL in violet), and live chip legends.
+3. **Complete Removal of System Wallpaper API & Permissions (`AndroidManifest.xml`, `AppearanceViewModel.kt`)**:
+   - Removed `<uses-permission android:name="android.permission.SET_WALLPAPER" />`.
+   - Completely deleted `WallpaperManager` references.
+4. **In-App Background Engine (`MainActivity.kt`, `AppearanceScreen.kt`)**:
+   - Root Compose tree layers `coil.compose.AsyncImage` directly behind the screens when `activeTheme.backgroundType == BackgroundType.USER_IMAGE`.
+   - Darkening scrim overlay `Color.Black.copy(alpha = activeTheme.backgroundDimAlpha)` enforces WCAG AA text contrast.
+   - User controls in `AppearanceScreen`:
+     - Choose photo from gallery via `ActivityResultContracts.GetContent()`.
+     - Set image via URL with sample presets (Neon Cyber, Deep Mesh).
+     - Reset background button.
+     - Contrast dimming slider (15% to 90%).
+     - Gaussian blur slider (0 to 25 dp).
+5. **Full 5-Language Key Parity**:
+   - Added all in-app wallpaper string keys across `en`, `ru`, `uk`, `zh-CN`, and `de`. Verified via `StringsParityTest`.
+
+### Automated Verification Proof
+1. **Unit Test Suite (`./gradlew.bat testDebugUnitTest`)**:
+   - 30 tasks executed, 0 failures, all 11 test suites passed.
+   - `StringsParityTest`: 100% parity across all 5 language sets.
+2. **Live Emulator Testing (`emulator-5554`)**:
+   - Successfully applied in-app wallpaper URL preset without altering device desktop.
+   - Verified wallpaper rendering across all screens with contrast protection scrim.
+   - Verified 30-second live oscilloscope graph and ticker updates in `NebulaTrafficChart`.
+   - Screenshots captured: `emulator_appearance_scroll2.png`, `emulator_dialog_bg.png`, `emulator_appearance_applied.png`, `emulator_home_wallpaper.png`, `emulator_home_active_chart.png`.
+3. **Release Packaging (`./gradlew.bat assembleRelease`)**:
+   - Clean compilation with R8 shrinking, ProGuard optimizations, and ABI splits.
 
 

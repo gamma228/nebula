@@ -154,6 +154,20 @@ BUILD SUCCESSFUL
 - `emulator_nebula_doctor.png`: Connection Doctor running live automated diagnostics on API 34 emulator.
 - `emulator_nebula_doctor_quic.png`: Connection Doctor verifying QUIC block and Telegram/YouTube accessibility checks.
 - `emulator_nebula_sub_loaded.png`: Servers screen displaying imported nodes from the Russian subscription list.
+- `emulator_appearance_scroll2.png`: Appearance screen displaying In-App Background controls (Gallery, Link/URL).
+- `emulator_dialog_bg.png`: Background Image URL dialog with quick presets (Neon Cyber, Deep Mesh).
+- `emulator_appearance_applied.png`: In-App Background active preview, Reset button, dimming and blur sliders.
+- `emulator_home_wallpaper.png`: Home screen rendered on top of custom in-app wallpaper with contrast protection scrim.
+- `emulator_home_active_chart.png`: Live connected state displaying 30s live oscilloscope bandwidth chart and ticker.
+
+---
+
+## 4. Phase 17 Verification: Real-Time Traffic Speed & In-App Background Engine (D9)
+- **Kernel-Level Speed Ticker:** Verified 1-second delta bytes polling via `android.net.TrafficStats.getUidRxBytes(Process.myUid())` and `getUidTxBytes(Process.myUid())`.
+- **Bandwidth Waveform:** Verified 30-sample rolling history window in `HomeViewModel.kt` rendered by `NebulaTrafficChart.kt` with dynamic auto-scaling and dual-curve Bezier spline.
+- **In-App Wallpaper Isolation:** Removed `android.permission.SET_WALLPAPER` and verified that host device phone wallpaper is never touched. Custom images are loaded strictly as in-app canvases using Coil `AsyncImage` with WCAG AA dimming scrims.
+- **Unit Tests:** `./gradlew.bat testDebugUnitTest` PASSED (30 tasks, 0 errors, 100% key parity across all 5 languages).
+- **Release Compilation:** `./gradlew.bat assembleRelease` PASSED (`app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-x86_64-release.apk`, `app-universal-release.apk`).
 
 ---
 
@@ -174,13 +188,23 @@ Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully re
    - [ ] Select a high-speed Hysteria 2 or Trojan node and tap Connect.
    - [ ] Verify that the state transitions to `Connected` and the status orb glows in the chosen theme accent color.
    - [ ] If an individual node is blocked or drops packets, verify that the status badge updates to `Connected (No Internet)` with amber warning rather than claiming false healthy connectivity.
+   - [ ] Verify that the real-time speed ticker (`DOWN ... KB/s`, `UP ... KB/s`) updates live with non-zero speeds during internet activity.
+   - [ ] Verify that the traffic chart draws a live 30-second oscilloscope waveform reflecting throughput changes.
 
-4. **Censorship Circumvention (Real TSPU/DPI Bypass):**
+4. **In-App Wallpaper Theming (No Phone Wallpaper Changes):**
+   - [ ] Navigate to Settings -> Appearance.
+   - [ ] Tap "Выбрать фото" to pick a photo from gallery, or tap "По ссылке / URL" and enter an image link.
+   - [ ] Verify that the background image renders *inside* the Nebula app behind the cards.
+   - [ ] Verify that the user's phone home screen and lock screen wallpaper are completely unaffected.
+   - [ ] Adjust "Затемнение фона" (dimming) slider and verify text remains legible (WCAG AA compliant).
+   - [ ] Tap "Сбросить фон" and verify the app returns to pure OLED black.
+
+5. **Censorship Circumvention (Real TSPU/DPI Bypass):**
    - [ ] **YouTube:** Open YouTube official app or browser. Verify that video playback starts instantly at 1080p without 10-second initial buffering (verifies QUIC UDP 443 rejection causing instant TCP HTTP/2 fallback).
    - [ ] **Telegram:** Open Telegram app. Verify that connection establishes immediately (verifies direct Telegram datacenter CIDR routing).
    - [ ] **Blocked Web Endpoints:** Open browser and visit previously blocked domains (e.g. `rutracker.org`, `instagram.com`, `x.com`). Verify pages load cleanly without SSL certificate warnings or handshake drops.
 
-5. **Clean Disconnect & Lifecycle:**
+6. **Clean Disconnect & Lifecycle:**
    - [ ] Tap Disconnect in Nebula.
    - [ ] Verify that within 3 seconds:
      - The VPN status key icon disappears from the Android system status bar.

@@ -72,9 +72,14 @@
     <string name="background_solid">Solid Color</string>
     <string name="background_gradient">Gradient</string>
     <string name="background_photo">Custom Image</string>
-    <string name="wallpaper_apply_home">Apply to Home Screen</string>
-    <string name="wallpaper_apply_lock">Apply to Lock Screen</string>
-    <string name="wallpaper_apply_both">Apply to Both Screens</string>
+    <string name="wallpaper_apply_home">Choose from Gallery</string>
+    <string name="wallpaper_apply_lock">By Link / URL</string>
+    <string name="wallpaper_apply_both">Reset Background</string>
+    <string name="wallpaper_dim_label">Background Dimming</string>
+    <string name="wallpaper_blur_label">Background Blur</string>
+    <string name="wallpaper_dialog_title">Background Image URL</string>
+    <string name="wallpaper_dialog_hint">https://example.com/image.jpg</string>
+    <string name="wallpaper_dialog_apply">Apply</string>
     <string name="launcher_icon_title">Launcher Icon Variant</string>
 
     <string name="security_title">Security &amp; Privacy</string>

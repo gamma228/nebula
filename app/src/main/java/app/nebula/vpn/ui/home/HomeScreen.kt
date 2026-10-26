@@ -78,6 +78,8 @@ fun HomeScreen(
 ) {
     val connectionState by viewModel.connectionState.collectAsState()
     val trafficStats by viewModel.trafficStats.collectAsState()
+    val downloadHistory by viewModel.downloadHistory.collectAsState()
+    val uploadHistory by viewModel.uploadHistory.collectAsState()
     val selectedProfile by viewModel.selectedProfile.collectAsState()
     val activeSub by viewModel.activeSubscription.collectAsState()
     val isRefreshingSub by viewModel.isRefreshingSubscription.collectAsState()
@@ -218,22 +220,9 @@ fun HomeScreen(
                     modifier = Modifier.padding(horizontal = spacing.xxs, vertical = spacing.xxs)
                 )
                 Spacer(modifier = Modifier.height(spacing.xxs))
-                // Sample sliding window bandwidth values
-                val sampleDown = listOf(
-                    trafficStats.downloadSpeedBps / 4,
-                    trafficStats.downloadSpeedBps / 2,
-                    (trafficStats.downloadSpeedBps * 3) / 4,
-                    trafficStats.downloadSpeedBps
-                )
-                val sampleUp = listOf(
-                    trafficStats.uploadSpeedBps / 4,
-                    trafficStats.uploadSpeedBps / 2,
-                    (trafficStats.uploadSpeedBps * 3) / 4,
-                    trafficStats.uploadSpeedBps
-                )
                 NebulaTrafficChart(
-                    downloadHistory = sampleDown,
-                    uploadHistory = sampleUp
+                    downloadHistory = downloadHistory,
+                    uploadHistory = uploadHistory
                 )
             }
         }

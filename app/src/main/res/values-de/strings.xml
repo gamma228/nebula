@@ -72,9 +72,14 @@
     <string name="background_solid">Einfarbig</string>
     <string name="background_gradient">Farbverlauf</string>
     <string name="background_photo">Eigenes Bild</string>
-    <string name="wallpaper_apply_home">Als Startbildschirm festlegen</string>
-    <string name="wallpaper_apply_lock">Als Sperrbildschirm festlegen</string>
-    <string name="wallpaper_apply_both">Auf beiden Bildschirmen festlegen</string>
+    <string name="wallpaper_apply_home">Aus Galerie wählen</string>
+    <string name="wallpaper_apply_lock">Per Link / URL</string>
+    <string name="wallpaper_apply_both">Hintergrund zurücksetzen</string>
+    <string name="wallpaper_dim_label">Hintergrund-Abdunkelung</string>
+    <string name="wallpaper_blur_label">Hintergrund-Unschärfe</string>
+    <string name="wallpaper_dialog_title">Bild-URL eingeben</string>
+    <string name="wallpaper_dialog_hint">https://example.com/image.jpg</string>
+    <string name="wallpaper_dialog_apply">Anwenden</string>
     <string name="launcher_icon_title">App-Symbolvariante</string>
 
     <string name="security_title">Sicherheit &amp; Privatsphäre</string>

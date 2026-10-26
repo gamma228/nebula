@@ -13,6 +13,7 @@ import app.nebula.vpn.NebulaApp
 import app.nebula.vpn.R
 import app.nebula.vpn.core.builder.SingBoxConfigBuilder
 import app.nebula.vpn.core.model.ConnectionState
+import app.nebula.vpn.core.model.TrafficStats
 import app.nebula.vpn.core.parser.SplitTunnelApplier
 import app.nebula.vpn.core.proxy.ProxyCore
 import app.nebula.vpn.core.proxy.TunProvider
@@ -29,6 +30,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -67,6 +69,12 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     private var stateCollectorJob: Job? = null
     private var statsCollectorJob: Job? = null
+    private var trafficTickerJob: Job? = null
+    private var lastUidRxBytes: Long = -1L
+    private var lastUidTxBytes: Long = -1L
+    private var lastTrafficSampleTimeMs: Long = 0L
+    private var accumulatedRxBytes: Long = 0L
+    private var accumulatedTxBytes: Long = 0L
     private var probeJob: Job? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -204,6 +212,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                         }
                     }
 
+                    startTrafficTicker()
+
                 } catch (e: Exception) {
                     android.util.Log.e("ProxyVpnService", "startVpnTunnel error: ${e.message}", e)
                     vpnRepository.updateState(ConnectionState.Error(e.message ?: "Failed to start VPN"))
@@ -315,6 +325,8 @@ class ProxyVpnService : VpnService(), TunProvider {
         stateCollectorJob = null
         statsCollectorJob?.cancel()
         statsCollectorJob = null
+        trafficTickerJob?.cancel()
+        trafficTickerJob = null
 
         vpnRepository.updateState(ConnectionState.Disconnecting)
 
@@ -609,5 +621,112 @@ class ProxyVpnService : VpnService(), TunProvider {
             }
         }
         return false
+    }
+
+    private fun startTrafficTicker() {
+        trafficTickerJob?.cancel()
+        lastUidRxBytes = android.net.TrafficStats.getUidRxBytes(android.os.Process.myUid())
+        lastUidTxBytes = android.net.TrafficStats.getUidTxBytes(android.os.Process.myUid())
+        lastTrafficSampleTimeMs = System.currentTimeMillis()
+        accumulatedRxBytes = 0L
+        accumulatedTxBytes = 0L
+
+        trafficTickerJob = serviceScope.launch(Dispatchers.IO) {
+            while (isActive) {
+                kotlinx.coroutines.delay(1000L)
+                val now = System.currentTimeMillis()
+                val deltaSec = ((now - lastTrafficSampleTimeMs).coerceAtLeast(500L)) / 1000.0
+                lastTrafficSampleTimeMs = now
+
+                val currentUidRx = android.net.TrafficStats.getUidRxBytes(android.os.Process.myUid())
+                val currentUidTx = android.net.TrafficStats.getUidTxBytes(android.os.Process.myUid())
+
+                var deltaRx = 0L
+                var deltaTx = 0L
+
+                if (lastUidRxBytes >= 0 && currentUidRx >= lastUidRxBytes) {
+                    deltaRx = currentUidRx - lastUidRxBytes
+                }
+                if (lastUidTxBytes >= 0 && currentUidTx >= lastUidTxBytes) {
+                    deltaTx = currentUidTx - lastUidTxBytes
+                }
+
+                lastUidRxBytes = currentUidRx
+                lastUidTxBytes = currentUidTx
+
+                accumulatedRxBytes += deltaRx
+                accumulatedTxBytes += deltaTx
+
+                val rxSpeedBps = if (deltaSec > 0) (deltaRx / deltaSec).toLong() else 0L
+                val txSpeedBps = if (deltaSec > 0) (deltaTx / deltaSec).toLong() else 0L
+
+                val coreStats = proxyCore.stats.value
+                val finalRxSpeed = maxOf(rxSpeedBps, coreStats.downloadSpeedBps)
+                val finalTxSpeed = maxOf(txSpeedBps, coreStats.uploadSpeedBps)
+                val finalTotalRx = maxOf(accumulatedRxBytes, coreStats.totalDownloadBytes)
+                val finalTotalTx = maxOf(accumulatedTxBytes, coreStats.totalUploadBytes)
+
+                val stats = TrafficStats(
+                    uploadSpeedBps = finalTxSpeed,
+                    downloadSpeedBps = finalRxSpeed,
+                    totalUploadBytes = finalTotalTx,
+                    totalDownloadBytes = finalTotalRx,
+                    memoryUsageBytes = coreStats.memoryUsageBytes,
+                    activeConnections = coreStats.activeConnections
+                )
+
+                vpnRepository.updateStats(stats)
+
+                if (currentProfileName != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
+                    val notifTitle = "Connected: $currentProfileName"
+                    val notifContent = "⬇ ${formatSpeed(finalRxSpeed)}   ⬆ ${formatSpeed(finalTxSpeed)}"
+                    updateForegroundNotification(notifTitle, notifContent)
+                }
+            }
+        }
+    }
+
+    private fun formatSpeed(bytesPerSec: Long): String {
+        if (bytesPerSec <= 0) return "0 KB/s"
+        val kb = bytesPerSec / 1024.0
+        if (kb < 1000) {
+            return String.format(java.util.Locale.US, "%.1f KB/s", kb)
+        }
+        val mb = kb / 1024.0
+        return String.format(java.util.Locale.US, "%.1f MB/s", mb)
+    }
+
+    private fun updateForegroundNotification(title: String, content: String) {
+        try {
+            val pendingIntent = PendingIntent.getActivity(
+                this,
+                0,
+                Intent(this, MainActivity::class.java),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+
+            val disconnectIntent = PendingIntent.getService(
+                this,
+                1,
+                Intent(this, ProxyVpnService::class.java).apply { action = ACTION_STOP },
+                PendingIntent.FLAG_IMMUTABLE
+            )
+
+            val notification = NotificationCompat.Builder(this, NebulaApp.VPN_NOTIFICATION_CHANNEL_ID)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentIntent(pendingIntent)
+                .addAction(0, "Disconnect", disconnectIntent)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
+                .build()
+
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            notificationManager.notify(NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            android.util.Log.w("ProxyVpnService", "Failed to update notification: ${e.message}")
+        }
     }
 }

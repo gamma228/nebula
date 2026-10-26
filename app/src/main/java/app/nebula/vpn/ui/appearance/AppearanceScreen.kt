@@ -1,13 +1,16 @@
 package app.nebula.vpn.ui.appearance
 
-import android.app.WallpaperManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,23 +18,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,6 +51,7 @@ import app.nebula.vpn.R
 import app.nebula.vpn.core.model.ButtonShape
 import app.nebula.vpn.core.model.ThemeMode
 import app.nebula.vpn.ui.theme.NebulaTheme
+import coil.compose.AsyncImage
 
 @Composable
 fun AppearanceScreen(
@@ -51,6 +63,16 @@ fun AppearanceScreen(
     val spacing = NebulaTheme.spacing
     val shapes = NebulaTheme.shapes
     val typography = NebulaTheme.typography
+
+    var showUrlDialog by remember { mutableStateOf(false) }
+    var urlInputText by remember { mutableStateOf("") }
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.setInAppBackgroundImage(uri.toString())
+        }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -244,7 +266,7 @@ fun AppearanceScreen(
             }
         }
 
-        // Device Wallpaper Applier
+        // In-App Background Customization
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = colors.surface),
@@ -254,46 +276,161 @@ fun AppearanceScreen(
                     .border(1.dp, colors.borderSubtle, shapes.card)
             ) {
                 Column(modifier = Modifier.padding(spacing.md)) {
-                    Text(
-                        text = stringResource(R.string.background_title),
-                        style = typography.titleMedium,
-                        color = colors.textPrimary
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.background_title),
+                            style = typography.titleMedium,
+                            color = colors.textPrimary
+                        )
+                        if (theme.backgroundImageUri != null) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(shapes.chip)
+                                    .background(colors.primary.copy(alpha = 0.2f))
+                                    .border(1.dp, colors.primary, shapes.chip)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Active",
+                                    style = typography.bodySmall.copy(fontWeight = FontWeight.Bold, fontSize = 10.sp),
+                                    color = colors.primary
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(spacing.sm))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(spacing.xs)
                     ) {
                         Button(
-                            onClick = { viewModel.applyWallpaper(WallpaperManager.FLAG_SYSTEM) },
+                            onClick = { photoPickerLauncher.launch("image/*") },
                             colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceElevated),
                             shape = shapes.button,
                             modifier = Modifier
                                 .weight(1f)
                                 .defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Text(stringResource(R.string.wallpaper_apply_home), style = typography.bodySmall, color = colors.textPrimary)
+                            Text(
+                                text = stringResource(R.string.wallpaper_apply_home),
+                                style = typography.bodySmall,
+                                color = colors.textPrimary,
+                                maxLines = 1
+                            )
                         }
                         Button(
-                            onClick = { viewModel.applyWallpaper(WallpaperManager.FLAG_LOCK) },
+                            onClick = {
+                                urlInputText = theme.backgroundImageUri ?: ""
+                                showUrlDialog = true
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceElevated),
                             shape = shapes.button,
                             modifier = Modifier
                                 .weight(1f)
                                 .defaultMinSize(minHeight = 48.dp)
                         ) {
-                            Text(stringResource(R.string.wallpaper_apply_lock), style = typography.bodySmall, color = colors.textPrimary)
+                            Text(
+                                text = stringResource(R.string.wallpaper_apply_lock),
+                                style = typography.bodySmall,
+                                color = colors.textPrimary,
+                                maxLines = 1
+                            )
                         }
-                        Button(
-                            onClick = { viewModel.applyWallpaper(WallpaperManager.FLAG_SYSTEM or WallpaperManager.FLAG_LOCK) },
-                            colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
-                            shape = shapes.button,
+                    }
+
+                    if (theme.backgroundImageUri != null) {
+                        Spacer(modifier = Modifier.height(spacing.sm))
+
+                        // Preview Thumbnail with Reset Action
+                        Row(
                             modifier = Modifier
-                                .weight(1f)
-                                .defaultMinSize(minHeight = 48.dp)
+                                .fillMaxWidth()
+                                .clip(shapes.button)
+                                .background(colors.surfaceElevated)
+                                .border(1.dp, colors.borderSubtle, shapes.button)
+                                .padding(spacing.xs),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text(stringResource(R.string.wallpaper_apply_both), style = typography.bodySmall, color = colors.onPrimary)
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(shapes.chip)
+                            ) {
+                                AsyncImage(
+                                    model = theme.backgroundImageUri,
+                                    contentDescription = "Background Preview",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(spacing.xs))
+                            Text(
+                                text = theme.backgroundImageUri?.takeLast(28) ?: "",
+                                style = typography.bodySmall.copy(fontSize = 11.sp),
+                                color = colors.textMuted,
+                                maxLines = 1,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(spacing.xs))
+                            Button(
+                                onClick = { viewModel.clearInAppBackground() },
+                                colors = ButtonDefaults.buttonColors(containerColor = colors.statusError.copy(alpha = 0.2f)),
+                                shape = shapes.button,
+                                modifier = Modifier.defaultMinSize(minHeight = 36.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.wallpaper_apply_both),
+                                    style = typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = colors.statusError
+                                )
+                            }
                         }
+
+                        Spacer(modifier = Modifier.height(spacing.sm))
+
+                        // Dimming Slider
+                        Text(
+                            text = "${stringResource(R.string.wallpaper_dim_label)}: ${(theme.backgroundDimAlpha * 100).toInt()}%",
+                            style = typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textPrimary
+                        )
+                        Slider(
+                            value = theme.backgroundDimAlpha,
+                            onValueChange = { viewModel.setBackgroundDim(it) },
+                            valueRange = 0.15f..0.90f,
+                            colors = SliderDefaults.colors(
+                                thumbColor = colors.primary,
+                                activeTrackColor = colors.primary,
+                                inactiveTrackColor = colors.surfaceElevated
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(spacing.xs))
+
+                        // Blur Slider
+                        Text(
+                            text = "${stringResource(R.string.wallpaper_blur_label)}: ${theme.backgroundBlurRadius} dp",
+                            style = typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textPrimary
+                        )
+                        Slider(
+                            value = theme.backgroundBlurRadius.toFloat(),
+                            onValueChange = { viewModel.setBackgroundBlur(it.toInt()) },
+                            valueRange = 0f..25f,
+                            steps = 25,
+                            colors = SliderDefaults.colors(
+                                thumbColor = colors.primary,
+                                activeTrackColor = colors.primary,
+                                inactiveTrackColor = colors.surfaceElevated
+                            )
+                        )
                     }
                 }
             }
@@ -328,6 +465,88 @@ fun AppearanceScreen(
                 }
             }
         }
+    }
+
+    if (showUrlDialog) {
+        AlertDialog(
+            onDismissRequest = { showUrlDialog = false },
+            title = {
+                Text(
+                    text = stringResource(R.string.wallpaper_dialog_title),
+                    style = typography.titleMedium,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = urlInputText,
+                        onValueChange = { urlInputText = it },
+                        label = { Text("URL") },
+                        placeholder = { Text(stringResource(R.string.wallpaper_dialog_hint)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colors.primary,
+                            unfocusedBorderColor = colors.borderSubtle,
+                            focusedTextColor = colors.textPrimary,
+                            unfocusedTextColor = colors.textPrimary
+                        ),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(spacing.sm))
+                    Text(
+                        text = "Quick Presets",
+                        style = typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                        color = colors.textMuted
+                    )
+                    Spacer(modifier = Modifier.height(spacing.xs))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(spacing.xs)
+                    ) {
+                        PresetUrlChip(
+                            name = "Neon Cyber",
+                            url = "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1080&q=80",
+                            onSelect = { urlInputText = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                        PresetUrlChip(
+                            name = "Deep Mesh",
+                            url = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1080&q=80",
+                            onSelect = { urlInputText = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val trimmed = urlInputText.trim()
+                        if (trimmed.isNotEmpty()) {
+                            viewModel.setInAppBackgroundImage(trimmed)
+                        }
+                        showUrlDialog = false
+                    }
+                ) {
+                    Text(
+                        text = stringResource(R.string.wallpaper_dialog_apply),
+                        color = colors.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUrlDialog = false }) {
+                    Text(
+                        text = stringResource(R.string.settings_close),
+                        color = colors.textSecondary
+                    )
+                }
+            },
+            containerColor = colors.surface,
+            shape = shapes.card
+        )
     }
 }
 
@@ -461,6 +680,36 @@ private fun IconChip(
         Text(
             text = title,
             style = typography.bodySmall.copy(fontSize = 11.sp),
+            color = colors.textPrimary,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun PresetUrlChip(
+    name: String,
+    url: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = NebulaTheme.colors
+    val shapes = NebulaTheme.shapes
+    val typography = NebulaTheme.typography
+
+    Box(
+        modifier = modifier
+            .clip(shapes.chip)
+            .background(colors.surfaceElevated)
+            .border(1.dp, colors.borderSubtle, shapes.chip)
+            .clickable { onSelect(url) }
+            .defaultMinSize(minHeight = 40.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = name,
+            style = typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
             color = colors.textPrimary,
             maxLines = 1
         )

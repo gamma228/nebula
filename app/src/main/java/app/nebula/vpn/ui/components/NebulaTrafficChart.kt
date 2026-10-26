@@ -3,11 +3,19 @@ package app.nebula.vpn.ui.components
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -18,7 +26,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.nebula.vpn.ui.theme.NebulaTheme
+import java.util.Locale
 
 @Composable
 fun NebulaTrafficChart(
@@ -29,17 +39,18 @@ fun NebulaTrafficChart(
     val colors = NebulaTheme.colors
     val shapes = NebulaTheme.shapes
     val spacing = NebulaTheme.spacing
+    val typography = NebulaTheme.typography
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(110.dp)
+            .height(115.dp)
             .clip(shapes.card)
             .background(colors.surface)
             .border(1.dp, colors.borderSubtle, shapes.card)
-            .padding(horizontal = spacing.md, vertical = spacing.sm)
+            .padding(horizontal = spacing.md, vertical = spacing.xs)
     ) {
-        Canvas(modifier = Modifier.fillMaxWidth().height(90.dp)) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(95.dp).align(Alignment.BottomCenter)) {
             val width = size.width
             val height = size.height
 
@@ -48,7 +59,7 @@ fun NebulaTrafficChart(
             for (i in 1..gridLines) {
                 val y = height * (i.toFloat() / (gridLines + 1))
                 drawLine(
-                    color = colors.borderSubtle,
+                    color = colors.borderSubtle.copy(alpha = 0.5f),
                     start = Offset(0f, y),
                     end = Offset(width, y),
                     strokeWidth = 1f
@@ -67,12 +78,12 @@ fun NebulaTrafficChart(
 
                 data.forEachIndexed { index, value ->
                     val x = index * stepX
-                    val y = height - (value.toFloat() / overallMax) * (height * 0.85f)
+                    val y = height - (value.toFloat() / overallMax) * (height * 0.80f)
                     if (index == 0) {
                         path.moveTo(x, y)
                     } else {
                         val prevX = (index - 1) * stepX
-                        val prevY = height - (data[index - 1].toFloat() / overallMax) * (height * 0.85f)
+                        val prevY = height - (data[index - 1].toFloat() / overallMax) * (height * 0.80f)
                         val midX = (prevX + x) / 2f
                         path.cubicTo(midX, prevY, midX, y, x, y)
                     }
@@ -97,7 +108,7 @@ fun NebulaTrafficChart(
                 path = downArea,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        colors.statusOk.copy(alpha = 0.20f),
+                        colors.statusOk.copy(alpha = 0.25f),
                         Color.Transparent
                     )
                 )
@@ -108,7 +119,7 @@ fun NebulaTrafficChart(
                 style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
             )
 
-            // Draw Upload Line (Electric Violet / Accent)
+            // Draw Upload Line (Primary / Accent)
             if (uploadHistory.size >= 2) {
                 val upPath = buildLinePath(uploadHistory)
                 drawPath(
@@ -118,7 +129,53 @@ fun NebulaTrafficChart(
                 )
             }
         }
+
+        // Live chart overlay badge (Legends & Peak indicator)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "30s LIVE",
+                style = typography.labelSmall,
+                color = colors.textMuted,
+                fontSize = 9.sp
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(colors.statusOk))
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(text = "DL", style = typography.labelSmall, color = colors.statusOk, fontSize = 9.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(colors.primary))
+                Spacer(modifier = Modifier.width(3.dp))
+                Text(text = "UL", style = typography.labelSmall, color = colors.primary, fontSize = 9.sp)
+                val peak = maxOf(downloadHistory.maxOrNull() ?: 0L, uploadHistory.maxOrNull() ?: 0L)
+                if (peak > 0) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Max: ${formatChartSpeed(peak)}",
+                        style = typography.labelSmall,
+                        color = colors.textMuted,
+                        fontSize = 9.sp
+                    )
+                }
+            }
+        }
     }
+}
+
+private fun formatChartSpeed(bytesPerSec: Long): String {
+    if (bytesPerSec <= 0) return "0 KB/s"
+    val kb = bytesPerSec / 1024.0
+    if (kb < 1000) {
+        return String.format(Locale.US, "%.1f KB/s", kb)
+    }
+    val mb = kb / 1024.0
+    return String.format(Locale.US, "%.1f MB/s", mb)
 }
 
 @Preview(name = "Traffic Chart Preview", showBackground = true, backgroundColor = 0xFF000000)

@@ -61,7 +61,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -73,6 +76,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.lifecycleScope
 import app.nebula.vpn.R
+import app.nebula.vpn.core.model.BackgroundType
 import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.core.model.Result
 import app.nebula.vpn.core.model.RoutingRule
@@ -100,12 +104,15 @@ import app.nebula.vpn.ui.servers.ServersViewModel
 import app.nebula.vpn.ui.settings.SettingsScreen
 import app.nebula.vpn.ui.settings.SettingsViewModel
 import app.nebula.vpn.ui.theme.EmeraldGreen
+import app.nebula.vpn.ui.theme.LocalThemeConfig
 import app.nebula.vpn.ui.theme.NebulaTheme
 import app.nebula.vpn.ui.tools.ToolsScreen
 import app.nebula.vpn.ui.tools.ToolsViewModel
 import app.nebula.vpn.vpn.BootReceiver
 import app.nebula.vpn.vpn.ProxyVpnService
 import app.nebula.vpn.vpn.VpnTileService
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -453,126 +460,161 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        Scaffold(
-            bottomBar = {
-                val navColors = NebulaTheme.colors
-                NavigationBar(
-                    containerColor = navColors.surface,
-                    contentColor = navColors.textPrimary
-                ) {
-                    bottomBarScreens.forEach { screen ->
-                        val isSelected = currentScreen == screen
-                        NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
-                            label = { Text(stringResource(screen.titleRes), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) },
-                            selected = isSelected,
-                            onClick = { currentScreen = screen },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = navColors.primary,
-                                selectedTextColor = navColors.primary,
-                                unselectedIconColor = navColors.textMuted,
-                                unselectedTextColor = navColors.textMuted,
-                                indicatorColor = navColors.primary.copy(alpha = 0.15f)
-                            )
+        val themeConfig = LocalThemeConfig.current
+        val hasCustomImage = themeConfig.backgroundType == BackgroundType.USER_IMAGE && !themeConfig.backgroundImageUri.isNullOrEmpty()
+        val navColors = NebulaTheme.colors
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(navColors.background)
+        ) {
+            if (hasCustomImage) {
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(themeConfig.backgroundImageUri)
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(
+                            if (themeConfig.backgroundBlurRadius > 0) {
+                                Modifier.blur(themeConfig.backgroundBlurRadius.dp)
+                            } else Modifier
                         )
+                )
+
+                // Contrast scrim overlay to guarantee WCAG AA readability for all screens
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = themeConfig.backgroundDimAlpha.coerceIn(0.15f, 0.95f)))
+                )
+            }
+
+            Scaffold(
+                containerColor = if (hasCustomImage) Color.Transparent else navColors.background,
+                bottomBar = {
+                    NavigationBar(
+                        containerColor = if (hasCustomImage) navColors.surface.copy(alpha = 0.85f) else navColors.surface,
+                        contentColor = navColors.textPrimary
+                    ) {
+                        bottomBarScreens.forEach { screen ->
+                            val isSelected = currentScreen == screen
+                            NavigationBarItem(
+                                icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
+                                label = { Text(stringResource(screen.titleRes), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) },
+                                selected = isSelected,
+                                onClick = { currentScreen = screen },
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = navColors.primary,
+                                    selectedTextColor = navColors.primary,
+                                    unselectedIconColor = navColors.textMuted,
+                                    unselectedTextColor = navColors.textMuted,
+                                    indicatorColor = navColors.primary.copy(alpha = 0.15f)
+                                )
+                            )
+                        }
                     }
                 }
-            }
-        ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-            ) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // Sub-screen header with Back button
-                    if (isSubScreen) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
-                        ) {
-                            IconButton(onClick = { currentScreen = Screen.Settings }) {
-                                Icon(
-                                    imageVector = Icons.Default.ArrowBack,
-                                    contentDescription = "Back",
-                                    tint = MaterialTheme.colorScheme.onSurface
+            ) { paddingValues ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(paddingValues)
+                ) {
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        // Sub-screen header with Back button
+                        if (isSubScreen) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(if (hasCustomImage) navColors.surface.copy(alpha = 0.85f) else navColors.surface)
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                IconButton(onClick = { currentScreen = Screen.Settings }) {
+                                    Icon(
+                                        imageVector = Icons.Default.ArrowBack,
+                                        contentDescription = "Back",
+                                        tint = navColors.textPrimary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = stringResource(currentScreen.titleRes),
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = navColors.textPrimary
                                 )
                             }
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = stringResource(currentScreen.titleRes),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
                         }
-                    }
 
-                    // Content
-                    Box(modifier = Modifier.weight(1f)) {
-                        when (currentScreen) {
-                            is Screen.Home -> HomeScreen(
-                                viewModel = homeViewModel,
-                                onNavigateToServers = { currentScreen = Screen.Servers },
-                                onRequestConnect = {
-                                    requestVpnPermissionAndExecute {
-                                        homeViewModel.toggleConnection()
+                        // Content
+                        Box(modifier = Modifier.weight(1f)) {
+                            when (currentScreen) {
+                                is Screen.Home -> HomeScreen(
+                                    viewModel = homeViewModel,
+                                    onNavigateToServers = { currentScreen = Screen.Servers },
+                                    onRequestConnect = {
+                                        requestVpnPermissionAndExecute {
+                                            homeViewModel.toggleConnection()
+                                        }
                                     }
-                                }
-                            )
-                            is Screen.Servers -> ServersScreen(
-                                viewModel = serversViewModel,
-                                onOpenQrScanner = { showQrScanner = true }
-                            )
-                            is Screen.Routing -> RoutingScreen(viewModel = routingViewModel)
-                            is Screen.Doctor -> DoctorScreen(viewModel = doctorViewModel)
-                            is Screen.Tools -> ToolsScreen(viewModel = toolsViewModel)
-                            is Screen.Appearance -> AppearanceScreen(viewModel = appearanceViewModel)
-                            is Screen.Settings -> SettingsScreen(
-                                viewModel = settingsViewModel,
-                                onNavigateToRouting = { currentScreen = Screen.Routing },
-                                onNavigateToAppearance = { currentScreen = Screen.Appearance },
-                                onNavigateToDoctor = { currentScreen = Screen.Doctor },
-                                onNavigateToTools = { currentScreen = Screen.Tools }
-                            )
+                                )
+                                is Screen.Servers -> ServersScreen(
+                                    viewModel = serversViewModel,
+                                    onOpenQrScanner = { showQrScanner = true }
+                                )
+                                is Screen.Routing -> RoutingScreen(viewModel = routingViewModel)
+                                is Screen.Doctor -> DoctorScreen(viewModel = doctorViewModel)
+                                is Screen.Tools -> ToolsScreen(viewModel = toolsViewModel)
+                                is Screen.Appearance -> AppearanceScreen(viewModel = appearanceViewModel)
+                                is Screen.Settings -> SettingsScreen(
+                                    viewModel = settingsViewModel,
+                                    onNavigateToRouting = { currentScreen = Screen.Routing },
+                                    onNavigateToAppearance = { currentScreen = Screen.Appearance },
+                                    onNavigateToDoctor = { currentScreen = Screen.Doctor },
+                                    onNavigateToTools = { currentScreen = Screen.Tools }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            if (showQrScanner) {
-                QrScannerDialog(
-                    onDismissRequest = { showQrScanner = false },
-                    onQrCodeScanned = { scannedContent ->
-                        showQrScanner = false
-                        val trimmed = scannedContent.trim()
-                        if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
-                            pendingImportSubscriptionUrl.value = trimmed
-                        } else {
-                            val parsed = LinkParser.parse(trimmed)
-                            if (parsed is Result.Success) {
-                                lifecycleScope.launch {
-                                    profileRepository.saveProfile(parsed.data)
-                                    settingsRepository.setSelectedProfileId(parsed.data.id)
+                if (showQrScanner) {
+                    QrScannerDialog(
+                        onDismissRequest = { showQrScanner = false },
+                        onQrCodeScanned = { scannedContent ->
+                            showQrScanner = false
+                            val trimmed = scannedContent.trim()
+                            if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+                                pendingImportSubscriptionUrl.value = trimmed
+                            } else {
+                                val parsed = LinkParser.parse(trimmed)
+                                if (parsed is Result.Success) {
+                                    lifecycleScope.launch {
+                                        profileRepository.saveProfile(parsed.data)
+                                        settingsRepository.setSelectedProfileId(parsed.data.id)
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Импортирован: ${parsed.data.name}",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                } else {
                                     Toast.makeText(
                                         this@MainActivity,
-                                        "Импортирован: ${parsed.data.name}",
+                                        "Неизвестный формат QR-кода",
                                         Toast.LENGTH_SHORT
                                     ).show()
                                 }
-                            } else {
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Неизвестный формат QR-кода",
-                                    Toast.LENGTH_SHORT
-                                ).show()
                             }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }

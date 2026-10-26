@@ -72,9 +72,14 @@
     <string name="background_solid">Суцільний колір</string>
     <string name="background_gradient">Градієнт</string>
     <string name="background_photo">Власне зображення</string>
-    <string name="wallpaper_apply_home">Встановити на головний екран</string>
-    <string name="wallpaper_apply_lock">Встановити на екран блокування</string>
-    <string name="wallpaper_apply_both">Встановити на обидва екрани</string>
+    <string name="wallpaper_apply_home">Вибрати фото</string>
+    <string name="wallpaper_apply_lock">За посиланням / URL</string>
+    <string name="wallpaper_apply_both">Скинути фон</string>
+    <string name="wallpaper_dim_label">Затемнення фону</string>
+    <string name="wallpaper_blur_label">Розмиття фону</string>
+    <string name="wallpaper_dialog_title">Посилання на зображення</string>
+    <string name="wallpaper_dialog_hint">https://example.com/image.jpg</string>
+    <string name="wallpaper_dialog_apply">Застосувати</string>
     <string name="launcher_icon_title">Варіант іконки запуску</string>
 
     <string name="security_title">Безпека та приватність</string>

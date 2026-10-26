@@ -68,13 +68,18 @@
     <string name="theme_mode_dark">深色模式</string>
     <string name="theme_mode_amoled">纯黑 AMOLED</string>
     <string name="theme_mode_system">跟随系统</string>
-    <string name="background_title">应用背景</string>
+    <string name="background_title">应用内部背景</string>
     <string name="background_solid">纯色背景</string>
     <string name="background_gradient">渐变色彩</string>
     <string name="background_photo">自定义图片</string>
-    <string name="wallpaper_apply_home">设置为桌面壁纸</string>
-    <string name="wallpaper_apply_lock">设置为锁屏壁纸</string>
-    <string name="wallpaper_apply_both">同时设置两处壁纸</string>
+    <string name="wallpaper_apply_home">从相册选择</string>
+    <string name="wallpaper_apply_lock">通过网络链接</string>
+    <string name="wallpaper_apply_both">清除背景壁纸</string>
+    <string name="wallpaper_dim_label">背景暗化深度</string>
+    <string name="wallpaper_blur_label">背景高斯模糊</string>
+    <string name="wallpaper_dialog_title">图片网络链接</string>
+    <string name="wallpaper_dialog_hint">https://example.com/image.jpg</string>
+    <string name="wallpaper_dialog_apply">应用</string>
     <string name="launcher_icon_title">启动器图标样式</string>
 
     <string name="security_title">安全与隐私</string>
