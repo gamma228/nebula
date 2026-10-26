@@ -208,4 +208,10 @@
     <string name="settings_about_protocols">Supported protocols: VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard.</string>
     <string name="settings_about_privacy">Complete privacy: 0 trackers, 0 analytics, 0 Google Play Services, 100% open source.</string>
     <string name="settings_close">Close</string>
+    <string name="appearance_neon_borders">Neon Gradient Borders</string>
+    <string name="appearance_corner_style">Corner &amp; Interface Shape</string>
+    <string name="appearance_shape_squircle">Squircle (16dp)</string>
+    <string name="appearance_shape_rounded">Capsule (Rounded)</string>
+    <string name="appearance_shape_sharp">Sharp (Technical)</string>
+    <string name="appearance_display_mode">Display Mode</string>
 </resources>

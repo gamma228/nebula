@@ -208,4 +208,10 @@
     <string name="settings_about_protocols">支持的协议：VLESS、VMess、Trojan、Shadowsocks、Hysteria 2、WireGuard。</string>
     <string name="settings_about_privacy">极致隐私：零追踪器、零统计分析、零 Google Play 服务、100% 开源代码。</string>
     <string name="settings_close">关闭</string>
+    <string name="appearance_neon_borders">霓虹渐变边框</string>
+    <string name="appearance_corner_style">圆角与界面形态</string>
+    <string name="appearance_shape_squircle">平滑超椭圆 (16dp)</string>
+    <string name="appearance_shape_rounded">全胶囊圆角</string>
+    <string name="appearance_shape_sharp">直角边缘 (科技感)</string>
+    <string name="appearance_display_mode">显示模式</string>
 </resources>

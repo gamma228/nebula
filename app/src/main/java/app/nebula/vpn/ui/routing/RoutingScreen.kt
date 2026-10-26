@@ -138,14 +138,20 @@ fun RoutingScreen(
     var showAddRuleSheet by remember { mutableStateOf(false) }
     var showMassImportDialog by remember { mutableStateOf(false) }
 
+    val colors = NebulaTheme.colors
+    val spacing = NebulaTheme.spacing
+    val shapes = NebulaTheme.shapes
+    val typography = NebulaTheme.typography
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             if (selectedTabIndex == 0) {
                 FloatingActionButton(
                     onClick = { showAddRuleSheet = true },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = colors.primary,
+                    contentColor = colors.onPrimary,
+                    shape = shapes.button
                 ) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_rule))
                 }
@@ -158,47 +164,47 @@ fun RoutingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = spacing.md, vertical = spacing.xs)
         ) {
             // Screen Title & Summary Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = spacing.xxs),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
                     Text(
                         text = stringResource(R.string.routing_title),
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        style = typography.displayLarge.copy(fontSize = 22.sp),
+                        color = colors.textPrimary
                     )
                     Text(
                         text = "${customRules.count { it.isEnabled }} active rules • Mode: ${routingMode.name}",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        style = typography.bodySmall,
+                        color = colors.textSecondary
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(spacing.xs))
 
             // Sticky Top Segmented Tabs
             TabRow(
                 selectedTabIndex = selectedTabIndex,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                contentColor = MaterialTheme.colorScheme.primary,
+                containerColor = colors.surfaceElevated,
+                contentColor = colors.primary,
                 indicator = { tabPositions ->
                     TabRowDefaults.SecondaryIndicator(
                         Modifier.tabIndicatorOffset(tabPositions[selectedTabIndex]),
-                        color = MaterialTheme.colorScheme.primary
+                        color = colors.primary
                     )
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(shapes.card)
+                    .border(1.dp, colors.borderSubtle, shapes.card)
             ) {
                 tabs.forEachIndexed { index, (title, count) ->
                     Tab(
@@ -209,7 +215,8 @@ fun RoutingScreen(
                                 Text(
                                     text = title,
                                     fontWeight = if (selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal,
-                                    fontSize = 13.sp
+                                    fontSize = 11.sp,
+                                    maxLines = 1
                                 )
                                 if (count > 0 && index < 2) {
                                     Spacer(modifier = Modifier.width(4.dp))

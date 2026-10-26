@@ -1,14 +1,18 @@
 package app.nebula.vpn.ui.tools
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -35,17 +39,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nebula.vpn.R
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.material3.TextButton
+import app.nebula.vpn.ui.theme.NebulaTheme
+
 @Composable
 fun ToolsScreen(
     viewModel: ToolsViewModel,
     modifier: Modifier = Modifier
 ) {
     val logs by viewModel.logs.collectAsState()
+    val colors = NebulaTheme.colors
+    val spacing = NebulaTheme.spacing
+    val shapes = NebulaTheme.shapes
+    val typography = NebulaTheme.typography
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(spacing.md)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -54,23 +67,27 @@ fun ToolsScreen(
         ) {
             Text(
                 text = stringResource(R.string.nav_tools),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                style = typography.displayLarge.copy(fontSize = 24.sp),
+                color = colors.textPrimary
             )
 
             Button(
                 onClick = { viewModel.batchPingAll() },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = MaterialTheme.shapes.small
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                shape = shapes.button,
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp)
             ) {
-                Icon(Icons.Default.Speed, contentDescription = null)
-                Spacer(modifier = Modifier.padding(horizontal = 4.dp))
-                Text("Batch Ping")
+                Icon(Icons.Default.Speed, contentDescription = null, tint = colors.onPrimary)
+                Spacer(modifier = Modifier.width(spacing.xs))
+                Text(
+                    text = stringResource(R.string.auto_select_fastest),
+                    style = typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = colors.onPrimary
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(spacing.md))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -79,43 +96,67 @@ fun ToolsScreen(
         ) {
             Text(
                 text = stringResource(R.string.logs_title),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground
+                style = typography.titleMedium,
+                color = colors.textPrimary
             )
 
-            IconButton(onClick = { viewModel.clearLogs() }) {
+            IconButton(
+                onClick = { viewModel.clearLogs() },
+                modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Default.DeleteSweep,
-                    contentDescription = "Clear",
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    contentDescription = stringResource(R.string.clear_logs),
+                    tint = colors.textMuted
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(spacing.xs))
 
         // Log Console
         Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = MaterialTheme.shapes.medium,
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            shape = shapes.card,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .border(1.dp, colors.borderSubtle, shapes.card)
         ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-            ) {
-                items(logs) { log ->
+            if (logs.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(spacing.lg),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = log,
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                        modifier = Modifier.padding(vertical = 2.dp)
+                        text = "— Log stream is empty —",
+                        style = typography.bodyMedium,
+                        color = colors.textMuted
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(spacing.sm)
+                ) {
+                    items(logs) { log ->
+                        val logColor = when {
+                            log.contains("error", ignoreCase = true) || log.contains("fatal", ignoreCase = true) -> colors.statusError
+                            log.contains("warn", ignoreCase = true) -> colors.statusWarning
+                            log.contains("info", ignoreCase = true) -> colors.statusOk
+                            else -> colors.textSecondary
+                        }
+                        Text(
+                            text = log,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = logColor,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
                 }
             }
         }

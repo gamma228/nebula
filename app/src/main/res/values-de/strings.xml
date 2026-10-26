@@ -208,4 +208,10 @@
     <string name="settings_about_protocols">Unterstützte Protokolle: VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard.</string>
     <string name="settings_about_privacy">Vollständige Privatsphäre: 0 Tracker, 0 Analysen, 0 Google Play Services, 100% quelloffen.</string>
     <string name="settings_close">Schließen</string>
+    <string name="appearance_neon_borders">Neon-Farbverlaufsrahmen</string>
+    <string name="appearance_corner_style">Ecken- und Schnittstellenstil</string>
+    <string name="appearance_shape_squircle">Squircle (16dp)</string>
+    <string name="appearance_shape_rounded">Kapsel (Abgerundet)</string>
+    <string name="appearance_shape_sharp">Scharf (Technisch)</string>
+    <string name="appearance_display_mode">Anzeigemodus</string>
 </resources>

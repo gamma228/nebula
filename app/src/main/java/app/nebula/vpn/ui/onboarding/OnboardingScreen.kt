@@ -39,6 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.nebula.vpn.R
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.defaultMinSize
+import app.nebula.vpn.ui.theme.NebulaTheme
+
 @Composable
 fun OnboardingScreen(
     onComplete: (routingPresetDirectRu: Boolean) -> Unit,
@@ -47,26 +51,33 @@ fun OnboardingScreen(
     var step by remember { mutableStateOf(0) }
     var selectedDirectRu by remember { mutableStateOf(true) }
 
+    val colors = NebulaTheme.colors
+    val spacing = NebulaTheme.spacing
+    val shapes = NebulaTheme.shapes
+    val typography = NebulaTheme.typography
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .background(colors.background)
+            .padding(spacing.lg),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         // Top Icon
         Box(
             modifier = Modifier
-                .padding(top = 40.dp)
+                .padding(top = spacing.xl)
                 .size(80.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                .background(colors.primary.copy(alpha = 0.15f))
+                .border(1.dp, colors.primary.copy(alpha = 0.35f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Shield,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = colors.primary,
                 modifier = Modifier.size(44.dp)
             )
         }
@@ -78,43 +89,42 @@ fun OnboardingScreen(
         ) {
             Text(
                 text = stringResource(R.string.onboarding_welcome),
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                style = typography.displayLarge.copy(fontSize = 28.sp),
+                color = colors.textPrimary,
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(spacing.sm))
             Text(
                 text = stringResource(R.string.onboarding_welcome_desc),
-                fontSize = 15.sp,
+                style = typography.bodyMedium,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                modifier = Modifier.padding(horizontal = 16.dp)
+                color = colors.textSecondary,
+                modifier = Modifier.padding(horizontal = spacing.md)
             )
 
-            Spacer(modifier = Modifier.height(30.dp))
+            Spacer(modifier = Modifier.height(spacing.lg))
 
             Text(
                 text = stringResource(R.string.onboarding_routing_preset),
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground
+                style = typography.titleMedium,
+                color = colors.textPrimary
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(spacing.sm))
 
             // Strategy Cards
             StrategyOptionCard(
                 title = stringResource(R.string.onboarding_preset_russia_direct),
-                subtitle = "Domestic banks & government portals connect directly without VPN",
+                subtitle = stringResource(R.string.preset_russia_direct_desc),
                 isSelected = selectedDirectRu,
                 onClick = { selectedDirectRu = true }
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(spacing.sm))
 
             StrategyOptionCard(
                 title = stringResource(R.string.onboarding_preset_global_proxy),
-                subtitle = "All Internet traffic routed through proxy tunnel with leak shield",
+                subtitle = stringResource(R.string.app_mode_global_desc),
                 isSelected = !selectedDirectRu,
                 onClick = { selectedDirectRu = false }
             )
@@ -127,25 +137,29 @@ fun OnboardingScreen(
         ) {
             Button(
                 onClick = { onComplete(selectedDirectRu) },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                shape = MaterialTheme.shapes.medium,
+                colors = ButtonDefaults.buttonColors(containerColor = colors.primary),
+                shape = shapes.button,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(52.dp)
+                    .defaultMinSize(minHeight = 48.dp)
             ) {
                 Text(
                     text = stringResource(R.string.onboarding_get_started),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
+                    style = typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                    color = colors.onPrimary
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(spacing.xs))
 
-            TextButton(onClick = { onComplete(false) }) {
+            TextButton(
+                onClick = { onComplete(false) },
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.onboarding_skip),
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                    style = typography.bodyMedium,
+                    color = colors.textMuted
                 )
             }
         }
@@ -159,31 +173,40 @@ private fun StrategyOptionCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
+    val colors = NebulaTheme.colors
+    val shapes = NebulaTheme.shapes
+    val typography = NebulaTheme.typography
+
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                colors.primary.copy(alpha = 0.15f)
             } else {
-                MaterialTheme.colorScheme.surface
+                colors.surface
             }
         ),
-        shape = MaterialTheme.shapes.medium,
+        shape = shapes.card,
         modifier = Modifier
             .fillMaxWidth()
+            .border(
+                width = if (isSelected) 1.5.dp else 1.dp,
+                color = if (isSelected) colors.primary else colors.borderSubtle,
+                shape = shapes.card
+            )
             .clickable { onClick() }
+            .defaultMinSize(minHeight = 48.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                style = typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = subtitle,
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                style = typography.bodySmall,
+                color = colors.textSecondary
             )
         }
     }

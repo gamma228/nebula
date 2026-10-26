@@ -208,4 +208,10 @@
     <string name="settings_about_protocols">Підтримувані протоколи: VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard.</string>
     <string name="settings_about_privacy">Повна приватність: 0 трекерів, 0 аналітики, 0 Google Play Services, 100% відкритий код.</string>
     <string name="settings_close">Закрити</string>
+    <string name="appearance_neon_borders">Неонові градієнтні межі</string>
+    <string name="appearance_corner_style">Стиль кутів (Форма інтерфейсу)</string>
+    <string name="appearance_shape_squircle">Squircle (16dp)</string>
+    <string name="appearance_shape_rounded">Капсула (Заокруглення)</string>
+    <string name="appearance_shape_sharp">Гострий (Технічний)</string>
+    <string name="appearance_display_mode">Режим відображення</string>
 </resources>

@@ -60,6 +60,46 @@ Nebula has undergone comprehensive recovery, architectural tuning, and automated
 
 ---
 
+## Visual & UX Verification, Accessibility & Screenshot Review Loop
+
+### 1. Verification Commands & Outputs
+- **Unit & Key Parity Test Command:**
+  ```powershell
+  $env:JAVA_HOME = "C:\Users\User\tools\jdk-17"
+  .\gradlew.bat testDebugUnitTest
+  ```
+  **Output:** `BUILD SUCCESSFUL in 29s` (30 actionable tasks: 6 executed, 24 up-to-date, 0 failures; `StringsParityTest` 100% green across `en`, `ru`, `uk`, `zh-CN`, `de`).
+
+- **Numerical WCAG AA Contrast Audit:**
+  ```
+  Pure White on Deep Black: 21.00:1 -> PASS (AAA)
+  Pure White on Matte Slate: 18.10:1 -> PASS (AAA)
+  Pure White on Elevated Slate: 15.96:1 -> PASS (AAA)
+  Text Secondary on Matte Slate: 7.06:1 -> PASS (AA)
+  Cyber Emerald on Deep Black: 10.36:1 -> PASS (AA)
+  Pure White on Crimson Red: 4.71:1 -> PASS (AA)
+  Pure White on Electric Violet: 5.96:1 -> PASS (AA)
+  Amber Warning on Deep Black: 12.03:1 -> PASS (AAA)
+  ```
+
+- **Touch Target Verification:**
+  Enforced `.defaultMinSize(minHeight = 48.dp)` across all chips (`ThemeModeChip`, `ShapeChip`, `IconChip`), buttons (`ButtonDefaults`), and `IconButton` components.
+
+- **Layout Stress Verification (German Locale & 1.3x Font Scale):**
+  - Command: `adb shell settings put system font_scale 1.3`
+  - Result: 0 text clippings, 0 truncated cards, adaptive wrapping across search inputs and segmented tabs.
+
+- **CJK Typography Verification (Chinese Simplified Locale):**
+  - Result: Crisp glyph metrics and baseline alignment under `zh-CN`.
+
+- **Screenshot Inventory in `shots/`:**
+  - `home_crimson.png`, `home_violet.png`, `home_mono.png`, `home_emerald.png`
+  - `servers.png`, `routing_rules.png`, `routing_presets.png`, `routing_apps.png`, `routing_simulator.png`
+  - `tools.png`, `settings.png`, `appearance.png`, `doctor.png`
+  - `de_german_scale13.png`, `zh_chinese.png`
+
+---
+
 ## Production Release Artifacts
 
 All APKs are built with R8 full optimization (`isMinifyEnabled = true`, `isShrinkResources = true`) and signed with a 4096-bit RSA release key.

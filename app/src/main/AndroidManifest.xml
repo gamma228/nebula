@@ -65,6 +65,7 @@
                 <data android:scheme="hy2" />
                 <data android:scheme="sing-box" />
                 <data android:scheme="clash" />
+                <data android:scheme="nebula" />
             </intent-filter>
         </activity>
 

@@ -208,4 +208,10 @@
     <string name="settings_about_protocols">Поддерживаемые протоколы: VLESS, VMess, Trojan, Shadowsocks, Hysteria 2, WireGuard.</string>
     <string name="settings_about_privacy">Полная приватность: 0 трекеров, 0 аналитики, 0 Google Play Services, 100% открытый код.</string>
     <string name="settings_close">Закрыть</string>
+    <string name="appearance_neon_borders">Неоновые градиентные границы</string>
+    <string name="appearance_corner_style">Стиль углов (Форма интерфейса)</string>
+    <string name="appearance_shape_squircle">Squircle (16dp)</string>
+    <string name="appearance_shape_rounded">Капсула (Скругление)</string>
+    <string name="appearance_shape_sharp">Острый (Технический)</string>
+    <string name="appearance_display_mode">Режим отображения</string>
 </resources>

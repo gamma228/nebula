@@ -161,6 +161,7 @@ class MainActivity : AppCompatActivity() {
 
     private var pendingImportProfileState = mutableStateOf<ProxyProfile?>(null)
     private var pendingImportSubscriptionUrl = mutableStateOf<String?>(null)
+    private val requestedScreenState = mutableStateOf<Screen?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -360,6 +361,33 @@ class MainActivity : AppCompatActivity() {
     private fun handleIntent(intent: Intent?) {
         val uri: Uri? = intent?.data
         if (uri != null) {
+            if (uri.scheme == "nebula" && uri.host == "set") {
+                uri.getQueryParameter("lang")?.let { lang ->
+                    lifecycleScope.launch { settingsRepository.setLanguageCode(lang) }
+                }
+                uri.getQueryParameter("preset")?.let { preset ->
+                    lifecycleScope.launch {
+                        when (preset) {
+                            "oled_crimson" -> themeRepository.setActiveTheme(ThemeRepository.PRESET_OLED_CRIMSON)
+                            "cyber_violet" -> themeRepository.setActiveTheme(ThemeRepository.PRESET_CYBER_VIOLET)
+                            "monochrome" -> themeRepository.setActiveTheme(ThemeRepository.PRESET_MONOCHROME)
+                            "emerald_cyber" -> themeRepository.setActiveTheme(ThemeRepository.PRESET_EMERALD_CYBER)
+                        }
+                    }
+                }
+                uri.getQueryParameter("screen")?.let { s ->
+                    when (s.lowercase()) {
+                        "home" -> requestedScreenState.value = Screen.Home
+                        "servers" -> requestedScreenState.value = Screen.Servers
+                        "routing" -> requestedScreenState.value = Screen.Routing
+                        "doctor" -> requestedScreenState.value = Screen.Doctor
+                        "tools" -> requestedScreenState.value = Screen.Tools
+                        "appearance" -> requestedScreenState.value = Screen.Appearance
+                        "settings" -> requestedScreenState.value = Screen.Settings
+                    }
+                }
+                return
+            }
             val link = uri.toString().trim()
             if (link.startsWith("http://", ignoreCase = true) || link.startsWith("https://", ignoreCase = true)) {
                 pendingImportSubscriptionUrl.value = link
@@ -386,6 +414,15 @@ class MainActivity : AppCompatActivity() {
     private fun MainNavigationContent() {
         var currentScreen by remember { mutableStateOf<Screen>(Screen.Home) }
         var showQrScanner by remember { mutableStateOf(false) }
+
+        val requestedScreen by requestedScreenState
+        LaunchedEffect(requestedScreen) {
+            val req = requestedScreen
+            if (req != null) {
+                currentScreen = req
+                requestedScreenState.value = null
+            }
+        }
 
         val homeViewModel: HomeViewModel = hiltViewModel()
         val serversViewModel: ServersViewModel = hiltViewModel()

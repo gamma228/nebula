@@ -47,6 +47,10 @@ import androidx.compose.ui.graphics.Color
 import app.nebula.vpn.ui.theme.EmeraldGreen
 import app.nebula.vpn.ui.theme.StatusRed
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.defaultMinSize
+import app.nebula.vpn.ui.theme.NebulaTheme
+
 @Composable
 fun DoctorScreen(
     viewModel: DoctorViewModel,
@@ -57,10 +61,15 @@ fun DoctorScreen(
     val verdict by viewModel.verdict.collectAsState()
     val context = LocalContext.current
 
+    val colors = NebulaTheme.colors
+    val spacing = NebulaTheme.spacing
+    val shapes = NebulaTheme.shapes
+    val typography = NebulaTheme.typography
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(spacing.md)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -69,9 +78,8 @@ fun DoctorScreen(
         ) {
             Text(
                 text = stringResource(R.string.doctor_title),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                style = typography.displayLarge.copy(fontSize = 24.sp),
+                color = colors.textPrimary
             )
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -79,96 +87,102 @@ fun DoctorScreen(
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
-                        color = EmeraldGreen
+                        color = colors.primary
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(spacing.xs))
                 }
-                IconButton(onClick = { viewModel.runDiagnostics() }, enabled = !isRunning) {
+                IconButton(
+                    onClick = { viewModel.runDiagnostics() },
+                    enabled = !isRunning,
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Rerun",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = colors.primary
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(spacing.sm))
 
         if (verdict != null) {
             val isSuccess = verdict!!.isSuccess
+            val verdictBorder = if (isSuccess) colors.statusOk else colors.statusError
+            val verdictBg = if (isSuccess) colors.statusOk.copy(alpha = 0.12f) else colors.statusError.copy(alpha = 0.12f)
             Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isSuccess) EmeraldGreen.copy(alpha = 0.15f) else StatusRed.copy(alpha = 0.15f)
-                ),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
+                colors = CardDefaults.cardColors(containerColor = verdictBg),
+                shape = shapes.card,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, verdictBorder.copy(alpha = 0.5f), shapes.card)
             ) {
                 Row(
-                    modifier = Modifier.padding(14.dp),
+                    modifier = Modifier.padding(spacing.md),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Warning,
                         contentDescription = null,
-                        tint = if (isSuccess) EmeraldGreen else StatusRed,
+                        tint = if (isSuccess) colors.statusOk else colors.statusError,
                         modifier = Modifier.size(28.dp)
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(spacing.sm))
                     Column {
                         Text(
                             text = verdict!!.title,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = typography.titleMedium,
+                            color = colors.textPrimary
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = verdict!!.description,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                            style = typography.bodySmall,
+                            color = colors.textSecondary
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(spacing.sm))
         }
 
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(spacing.xs),
             modifier = Modifier.weight(1f)
         ) {
             items(checks) { check ->
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth()
+                    colors = CardDefaults.cardColors(containerColor = colors.surface),
+                    shape = shapes.card,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, colors.borderSubtle, shapes.card)
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
+                            .padding(spacing.md),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = if (check.isPassed) Icons.Default.CheckCircle else Icons.Default.Warning,
                             contentDescription = null,
-                            tint = if (check.isPassed) EmeraldGreen else StatusRed,
+                            tint = if (check.isPassed) colors.statusOk else colors.statusError,
                             modifier = Modifier.size(24.dp)
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(spacing.sm))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = check.title,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                style = typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = check.details,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                style = typography.bodySmall,
+                                color = colors.textSecondary
                             )
                         }
                     }
@@ -176,24 +190,28 @@ fun DoctorScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(spacing.md))
 
         Button(
             onClick = {
                 val report = viewModel.generateRedactedDiagnosticsBundle()
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("Nebula Diagnostic Report", report))
-                Toast.makeText(context, "Диагностический отчет скопирован", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.copy_diagnostic_report), Toast.LENGTH_SHORT).show()
             },
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            shape = MaterialTheme.shapes.medium,
-            modifier = Modifier.fillMaxWidth()
+            colors = ButtonDefaults.buttonColors(containerColor = colors.surfaceElevated),
+            shape = shapes.button,
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 48.dp)
+                .border(1.dp, colors.borderSubtle, shapes.button)
         ) {
-            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(modifier = Modifier.width(8.dp))
+            Icon(Icons.Default.ContentCopy, contentDescription = null, tint = colors.primary)
+            Spacer(modifier = Modifier.width(spacing.xs))
             Text(
-                text = "Скопировать отчет диагностики (без паролей)",
-                color = MaterialTheme.colorScheme.onSurface
+                text = stringResource(R.string.copy_diagnostic_report),
+                style = typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary
             )
         }
     }
