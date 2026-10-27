@@ -61,6 +61,12 @@ fun DoctorScreen(
     val verdict by viewModel.verdict.collectAsState()
     val context = LocalContext.current
 
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        if (checks.isEmpty()) {
+            viewModel.runDiagnostics()
+        }
+    }
+
     val colors = NebulaTheme.colors
     val spacing = NebulaTheme.spacing
     val shapes = NebulaTheme.shapes

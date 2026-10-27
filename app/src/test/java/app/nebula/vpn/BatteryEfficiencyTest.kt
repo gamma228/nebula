@@ -26,13 +26,13 @@ class BatteryEfficiencyTest {
     @Test
     fun testPowerProfileContractParameters() {
         val balanced = PowerProfile.BALANCED
-        assertEquals(3000L, balanced.interactiveIntervalMs)
-        assertEquals(60000L, balanced.backgroundIntervalMs)
+        assertEquals(1000L, balanced.interactiveIntervalMs)
+        assertEquals(0L, balanced.backgroundIntervalMs)
         assertEquals("warn", balanced.coreLogLevel)
         assertTrue(balanced.description.isNotBlank())
 
         val saver = PowerProfile.BATTERY_SAVER
-        assertEquals(5000L, saver.interactiveIntervalMs)
+        assertEquals(2000L, saver.interactiveIntervalMs)
         assertEquals(0L, saver.backgroundIntervalMs)
         assertEquals("error", saver.coreLogLevel)
         assertTrue(saver.description.isNotBlank())

@@ -49,6 +49,11 @@ class ProxyVpnService : VpnService(), TunProvider {
         const val ACTION_STOP = "app.nebula.vpn.action.STOP"
         const val EXTRA_PROFILE_ID = "profile_id"
         private const val NOTIFICATION_ID = 1001
+
+        @Volatile var isRunning: Boolean = false
+            internal set
+        @Volatile var activeProfileName: String? = null
+            internal set
     }
 
     @Inject lateinit var proxyCore: ProxyCore
@@ -82,11 +87,24 @@ class ProxyVpnService : VpnService(), TunProvider {
     private var probeJob: Job? = null
     private var screenReceiver: BroadcastReceiver? = null
     @Volatile private var isScreenInteractive: Boolean = true
+    @Volatile private var cachedPowerProfile: PowerProfile = PowerProfile.BALANCED
+    @Volatile private var cachedShowSpeed: Boolean = true
 
     override fun onCreate() {
         super.onCreate()
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
         isScreenInteractive = powerManager?.isInteractive ?: true
+
+        serviceScope.launch {
+            settingsRepository.powerProfile.collect { id ->
+                cachedPowerProfile = PowerProfile.fromId(id)
+            }
+        }
+        serviceScope.launch {
+            settingsRepository.showSpeedInNotification.collect { show ->
+                cachedShowSpeed = show
+            }
+        }
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
@@ -293,6 +311,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                     android.util.Log.i("ProxyVpnService", "Hot-switching to profile: ${targetProfile.name} (${targetProfile.id})")
                     currentProfileId = targetProfile.id
                     currentProfileName = targetProfile.name
+                    activeProfileName = targetProfile.name
                     settingsRepository.setSelectedProfileId(targetProfile.id)
 
                     val groupTag = "select"
@@ -416,6 +435,8 @@ class ProxyVpnService : VpnService(), TunProvider {
 
         currentProfileId = null
         currentProfileName = null
+        isRunning = false
+        activeProfileName = null
         connectionStartTime = 0L
 
         vpnRepository.updateState(ConnectionState.Disconnected)
@@ -531,6 +552,8 @@ class ProxyVpnService : VpnService(), TunProvider {
         val nativeFd = pfd.dup().detachFd()
         android.util.Log.i("ProxyVpnService", "TUN established successfully, native fd=$nativeFd, pfd=$pfd")
         tunNativeFd = nativeFd
+        isRunning = true
+        activeProfileName = currentProfileName
         return nativeFd
     }
 
@@ -575,6 +598,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                 }
             } catch (ignored: Exception) {}
         }
+        isRunning = false
+        activeProfileName = null
         teardownScope.cancel()
     }
 
@@ -700,9 +725,8 @@ class ProxyVpnService : VpnService(), TunProvider {
             var lastNotifUpdateTime = 0L
 
             while (isActive) {
-                val powerProfileId = settingsRepository.powerProfile.first()
-                val profileEnum = PowerProfile.fromId(powerProfileId)
-                val showSpeed = settingsRepository.showSpeedInNotification.first()
+                val profileEnum = cachedPowerProfile
+                val showSpeed = cachedShowSpeed
                 val interactive = isScreenInteractive
 
                 val delayMs = if (interactive) {

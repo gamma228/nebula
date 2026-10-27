@@ -203,7 +203,7 @@ class LibboxCore(
     private fun initCommandClient() {
         try {
             val clientOptions = CommandClientOptions().apply {
-                statusInterval = 3000 // 3 second updates (balanced battery efficiency)
+                statusInterval = 1000 // 1s updates for smooth UI when active
                 addCommand(Libbox.CommandStatus)
                 addCommand(Libbox.CommandLog)
                 // Omit Libbox.CommandGroup and Libbox.CommandConnections to eliminate JNI event marshaling overhead

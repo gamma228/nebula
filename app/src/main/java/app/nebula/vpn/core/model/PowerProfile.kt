@@ -11,18 +11,18 @@ enum class PowerProfile(
     BALANCED(
         id = "BALANCED",
         displayName = "Balanced",
-        interactiveIntervalMs = 3000L,
-        backgroundIntervalMs = 60000L,
+        interactiveIntervalMs = 1000L,
+        backgroundIntervalMs = 0L,
         coreLogLevel = "warn",
-        description = "Optimal battery life with live 3s speed while screen is on; freezes notification updates when screen is off."
+        description = "Smooth 1s live speed while screen is on; completely freezes updates when screen is off to conserve 100% battery."
     ),
     BATTERY_SAVER(
         id = "BATTERY_SAVER",
         displayName = "Battery Saver",
-        interactiveIntervalMs = 5000L,
+        interactiveIntervalMs = 2000L,
         backgroundIntervalMs = 0L,
         coreLogLevel = "error",
-        description = "Maximum battery endurance. Minimum core wakeups, error-only logging, notification speed disabled when screen is locked."
+        description = "Maximum battery endurance. 2s sampling when active, error-only logging, notification speed disabled when screen is locked."
     ),
     HIGH_PERFORMANCE(
         id = "HIGH_PERFORMANCE",

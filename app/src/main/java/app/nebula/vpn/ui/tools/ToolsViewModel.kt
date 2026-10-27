@@ -20,11 +20,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.net.InetSocketAddress
 import java.net.Socket
 import javax.inject.Inject
@@ -72,21 +70,54 @@ class ToolsViewModel @Inject constructor(
     private val _activeConnections = MutableStateFlow<List<ConnectionItem>>(emptyList())
     val activeConnections: StateFlow<List<ConnectionItem>> = _activeConnections.asStateFlow()
 
-    private val _batteryReport = MutableStateFlow(buildBatteryReportSync())
+    @Volatile
+    private var currentPowerProfile = PowerProfile.BALANCED
+
+    @Volatile
+    private var currentShowSpeed = true
+
+    private val _batteryReport = MutableStateFlow(createInitialReport())
     val batteryReport: StateFlow<BatteryReport> = _batteryReport.asStateFlow()
 
     private var reportTickerJob: Job? = null
 
     init {
-        startReportTicker()
+        // Collect preferences in background without blocking UI thread
+        viewModelScope.launch {
+            settingsRepository.powerProfile.collect { id ->
+                currentPowerProfile = PowerProfile.fromId(id)
+                refreshBatteryReport()
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.showSpeedInNotification.collect { show ->
+                currentShowSpeed = show
+                refreshBatteryReport()
+            }
+        }
+    }
+
+    private fun createInitialReport(): BatteryReport {
+        val cpuMs = Process.getElapsedCpuTime()
+        return BatteryReport(
+            elapsedCpuTimeMs = cpuMs,
+            formattedCpuTime = formatDuration(cpuMs),
+            liveThreadCount = Thread.activeCount(),
+            powerProfile = PowerProfile.BALANCED,
+            showSpeedInNotification = true,
+            appUptimeMs = 1000L,
+            formattedUptime = "1s",
+            isInteractive = true,
+            diagnostics = listOf("Ready")
+        )
     }
 
     fun startReportTicker() {
         if (reportTickerJob != null) return
-        reportTickerJob = viewModelScope.launch(Dispatchers.IO) {
+        reportTickerJob = viewModelScope.launch(Dispatchers.Default) {
             while (isActive) {
-                _batteryReport.value = buildBatteryReportSync()
-                delay(3000L) // Refresh every 3s while tools is viewed
+                _batteryReport.value = buildReport()
+                delay(3000L) // Refresh every 3s only while tools screen is actually open
             }
         }
     }
@@ -97,14 +128,15 @@ class ToolsViewModel @Inject constructor(
     }
 
     fun refreshBatteryReport() {
-        viewModelScope.launch(Dispatchers.IO) {
-            _batteryReport.value = buildBatteryReportSync()
+        viewModelScope.launch(Dispatchers.Default) {
+            _batteryReport.value = buildReport()
         }
     }
 
     fun setPowerProfile(profile: PowerProfile) {
         viewModelScope.launch {
             settingsRepository.setPowerProfile(profile.id)
+            currentPowerProfile = profile
             refreshBatteryReport()
         }
     }
@@ -112,11 +144,12 @@ class ToolsViewModel @Inject constructor(
     fun setShowSpeedInNotification(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setShowSpeedInNotification(enabled)
+            currentShowSpeed = enabled
             refreshBatteryReport()
         }
     }
 
-    private fun buildBatteryReportSync(): BatteryReport {
+    private fun buildReport(): BatteryReport {
         val cpuMs = Process.getElapsedCpuTime()
         val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
         val interactive = powerManager?.isInteractive ?: true
@@ -129,29 +162,15 @@ class ToolsViewModel @Inject constructor(
         }
         val uptimeMs = (SystemClock.elapsedRealtime() - startElapsed).coerceAtLeast(1000L)
 
-        // Read current profile from repo or default
-        val profileId = kotlinx.coroutines.runBlocking {
-            try {
-                settingsRepository.powerProfile.first()
-            } catch (_: Exception) {
-                "BALANCED"
-            }
-        }
-        val showSpeed = kotlinx.coroutines.runBlocking {
-            try {
-                settingsRepository.showSpeedInNotification.first()
-            } catch (_: Exception) {
-                true
-            }
-        }
-        val profile = PowerProfile.fromId(profileId)
+        val profile = currentPowerProfile
+        val showSpeed = currentShowSpeed
 
         val diag = listOf(
             "Screen state: ${if (interactive) "Interactive (ON)" else "Sleep (OFF)"}",
             "Core log level: ${profile.coreLogLevel}",
             "Speed sampling: ${profile.interactiveIntervalMs / 1000}s on / ${if (profile.backgroundIntervalMs > 0) "${profile.backgroundIntervalMs / 1000}s off" else "frozen off"}",
             "Notification updates: ${if (showSpeed) "Throttled (zero in sleep)" else "Disabled (static only)"}",
-            "TCP Fast Open: Enabled",
+            "TCP Fast Open: Mobile-safe (standard TCP)",
             "Zero wakelocks • JNI events throttled"
         )
 

@@ -524,7 +524,6 @@ object SingBoxConfigBuilder {
                     put("server_port", profile.port)
                     put("method", profile.encryption.ifEmpty { "aes-128-gcm" })
                     put("password", profile.authSecret)
-                    put("tcp_fast_open", true)
                 }
                 ProtocolType.VLESS -> {
                     put("type", "vless")
@@ -533,7 +532,6 @@ object SingBoxConfigBuilder {
                     put("server_port", profile.port)
                     put("uuid", profile.authSecret)
                     put("packet_encoding", "xudp")
-                    put("tcp_fast_open", true)
                     val flowVal = when {
                         profile.transport.type == TransportType.TCP && profile.tls.flow.isNotEmpty() -> profile.tls.flow
                         profile.transport.type == TransportType.TCP && profile.tls.realityPublicKey.isNotEmpty() -> "xtls-rprx-vision"
@@ -558,7 +556,6 @@ object SingBoxConfigBuilder {
                     put("security", profile.encryption.ifEmpty { "auto" })
                     put("alter_id", 0)
                     put("packet_encoding", "xudp")
-                    put("tcp_fast_open", true)
                     if (profile.tls.enabled) {
                         put("tls", buildTlsObject(profile.tls, profile.server, profile.transport.type))
                     }
@@ -572,7 +569,6 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("password", profile.authSecret)
-                    put("tcp_fast_open", true)
                     val tlsToUse = if (profile.tls.enabled) profile.tls else profile.tls.copy(enabled = true)
                     put("tls", buildTlsObject(tlsToUse, profile.server, profile.transport.type))
                     buildTransportObject(profile.transport, profile.server, profile.tls.serverName)?.let {

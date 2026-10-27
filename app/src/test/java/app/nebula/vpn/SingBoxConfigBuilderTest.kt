@@ -327,7 +327,6 @@ class SingBoxConfigBuilderTest {
             SingBoxConfigBuilder.BuildConfig(activeProfile = profile)
         )
         assertTrue("Default config should use warn log level", balancedConfig.contains("\"level\": \"warn\""))
-        assertTrue("Must include tcp_fast_open on outbound", balancedConfig.contains("\"tcp_fast_open\": true"))
         validateWithDesktopSingBox(balancedConfig, "test-battery-balanced.json")
 
         // 2. Battery Saver: level should be "error"

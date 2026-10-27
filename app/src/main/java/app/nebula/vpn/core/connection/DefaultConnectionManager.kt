@@ -5,6 +5,7 @@ import app.nebula.vpn.core.model.TrafficStats
 import app.nebula.vpn.core.proxy.ProxyCore
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.SettingsRepository
+import app.nebula.vpn.vpn.ProxyVpnService
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,15 @@ class DefaultConnectionManager @Inject constructor(
     private var activeJob: Job? = null
     private var activeProfileId: String? = null
     private var connectionStartTime: Long = 0L
+
+    init {
+        try {
+            if (ProxyVpnService.isRunning) {
+                val name = ProxyVpnService.activeProfileName ?: "Active Proxy"
+                _state.value = ConnectionState.Connected(name, System.currentTimeMillis())
+            }
+        } catch (_: Throwable) {}
+    }
 
     override suspend fun connect(profileId: String?) {
         commandMutex.withLock {
