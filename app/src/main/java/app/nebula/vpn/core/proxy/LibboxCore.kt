@@ -206,7 +206,8 @@ class LibboxCore(
                 statusInterval = 1000 // 1s updates for smooth UI when active
                 addCommand(Libbox.CommandStatus)
                 addCommand(Libbox.CommandLog)
-                // Omit Libbox.CommandGroup and Libbox.CommandConnections to eliminate JNI event marshaling overhead
+                addCommand(Libbox.CommandGroup) // Required for selector outbound management and hot-switching
+                // CommandConnections omitted to eliminate high-frequency JNI connection event marshaling overhead
             }
 
             val clientHandler = object : CommandClientHandler {

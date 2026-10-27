@@ -642,10 +642,17 @@ class ProxyVpnService : VpnService(), TunProvider {
     private fun launchConnectivityProbe(profileName: String, startT: Long) {
         probeJob?.cancel()
         probeJob = serviceScope.launch(Dispatchers.IO) {
-            kotlinx.coroutines.delay(1200)
+            // Initial warm-up for TLS / WebSocket handshake to settle
+            kotlinx.coroutines.delay(1800)
             if (vpnRepository.connectionState.value !is ConnectionState.Connected) return@launch
 
-            val ok = probeProxyConnectivity()
+            var ok = probeProxyConnectivity()
+            if (!ok) {
+                // Retry once after brief pause to tolerate initial mobile packet jitter
+                kotlinx.coroutines.delay(1500)
+                if (vpnRepository.connectionState.value !is ConnectionState.Connected) return@launch
+                ok = probeProxyConnectivity()
+            }
             if (vpnRepository.connectionState.value !is ConnectionState.Connected) return@launch
 
             if (!ok) {
@@ -674,7 +681,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                 )
                 startForegroundNotification(
                     title = "Connected: $profileName",
-                    content = "Protected via sing-box core"
+                    content = "Protected via Nebula"
                 )
             }
         }
@@ -684,14 +691,16 @@ class ProxyVpnService : VpnService(), TunProvider {
         val proxy = java.net.Proxy(java.net.Proxy.Type.HTTP, java.net.InetSocketAddress("127.0.0.1", 2080))
         val testUrls = listOf(
             "http://cp.cloudflare.com/generate_204",
-            "http://connectivitycheck.gstatic.com/generate_204"
+            "http://connectivitycheck.gstatic.com/generate_204",
+            "http://1.1.1.1/generate_204",
+            "http://www.google.com/generate_204"
         )
         for (urlStr in testUrls) {
             try {
                 val url = java.net.URL(urlStr)
                 val conn = url.openConnection(proxy) as java.net.HttpURLConnection
-                conn.connectTimeout = 3000
-                conn.readTimeout = 3000
+                conn.connectTimeout = 3500
+                conn.readTimeout = 3500
                 conn.instanceFollowRedirects = false
                 conn.requestMethod = "GET"
                 conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")

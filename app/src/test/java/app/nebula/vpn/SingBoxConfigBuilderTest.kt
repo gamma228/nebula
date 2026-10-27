@@ -344,6 +344,22 @@ class SingBoxConfigBuilderTest {
         validateWithDesktopSingBox(perfConfig, "test-battery-perf.json")
     }
 
+    @Test
+    fun testBuildConfigForHaarlemTrojan() {
+        val link = "trojan://humanity@139.28.240.24:443?security=tls&sni=www.pleadcourt.org&type=ws&host=www.pleadcourt.org&path=%2Fassignment&fp=android#%F0%9F%87%B3%F0%9F%87%B1%20The%20Netherlands%2C%20Haarlem%20%7C%20%5BBL%5D"
+        val parsed = app.nebula.vpn.core.parser.LinkParser.parse(link)
+        assertTrue(parsed is app.nebula.vpn.core.model.Result.Success)
+        val profile = (parsed as app.nebula.vpn.core.model.Result.Success).data
+        val config = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile,
+                allProfiles = listOf(profile),
+                localPortMixedInbound = 2080
+            )
+        )
+        validateWithDesktopSingBox(config, "test-haarlem.json")
+    }
+
     private fun validateWithDesktopSingBox(configJson: String, tempFileName: String) {
         val singBoxBin = File("C:/Users/User/tools/sing-box.exe")
         if (singBoxBin.exists()) {

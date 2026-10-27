@@ -68,7 +68,7 @@ class DoctorViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             _isRunning.value = true
             val results = mutableListOf<DiagnosticCheckItem>()
-            val isConnected = (vpnRepository.connectionState.value is ConnectionState.Connected) || ProxyVpnService.isRunning
+            val isConnected = vpnRepository.connectionState.value is ConnectionState.Connected
 
             // Local mixed HTTP/SOCKS inbound exposed by sing-box at port 2080
             val tunnelProxy: Proxy? = if (isConnected) {

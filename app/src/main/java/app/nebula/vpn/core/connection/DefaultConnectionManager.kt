@@ -59,15 +59,6 @@ class DefaultConnectionManager @Inject constructor(
     private var activeProfileId: String? = null
     private var connectionStartTime: Long = 0L
 
-    init {
-        try {
-            if (ProxyVpnService.isRunning) {
-                val name = ProxyVpnService.activeProfileName ?: "Active Proxy"
-                _state.value = ConnectionState.Connected(name, System.currentTimeMillis())
-            }
-        } catch (_: Throwable) {}
-    }
-
     override suspend fun connect(profileId: String?) {
         commandMutex.withLock {
             _userRequestedDisconnect = false
