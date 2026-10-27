@@ -120,9 +120,7 @@ class DefaultConnectionManager @Inject constructor(
             // Wait for service to report disconnected or timeout
             if (wasActive) {
                 withTimeoutOrNull(2000L) {
-                    while (_state.value !is ConnectionState.Disconnected) {
-                        kotlinx.coroutines.delay(50)
-                    }
+                    _state.first { it is ConnectionState.Disconnected }
                 }
             }
 

@@ -15,6 +15,7 @@ import app.nebula.vpn.data.repository.ThemeRepository
 import app.nebula.vpn.data.repository.VpnRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -77,19 +78,10 @@ class HomeViewModel @Inject constructor(
     private val _uploadHistory = MutableStateFlow<List<Long>>(List(30) { 0L })
     val uploadHistory: StateFlow<List<Long>> = _uploadHistory.asStateFlow()
 
+    private var uiStatsJob: Job? = null
+    private var durationTimerJob: Job? = null
+
     init {
-        // Collect traffic stats to feed rolling 30-second waveform history
-        viewModelScope.launch {
-            trafficStats.collect { stats ->
-                if (connectionState.value is ConnectionState.Connected) {
-                    _downloadHistory.value = (_downloadHistory.value.drop(1) + stats.downloadSpeedBps)
-                    _uploadHistory.value = (_uploadHistory.value.drop(1) + stats.uploadSpeedBps)
-                } else {
-                    _downloadHistory.value = List(30) { 0L }
-                    _uploadHistory.value = List(30) { 0L }
-                }
-            }
-        }
         // Collect selected profile changes
         viewModelScope.launch {
             settingsRepository.selectedProfileId.collect { id ->
@@ -101,27 +93,52 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
+    }
 
-        // Connection duration timer
-        viewModelScope.launch {
-            var connectedStartTime = 0L
-            while (isActive) {
-                when (connectionState.value) {
-                    is ConnectionState.Connected -> {
-                        if (connectedStartTime == 0L) {
-                            connectedStartTime = System.currentTimeMillis()
-                        }
-                        val elapsed = (System.currentTimeMillis() - connectedStartTime) / 1000
-                        _connectionDurationSeconds.value = elapsed
-                    }
-                    else -> {
-                        connectedStartTime = 0L
-                        _connectionDurationSeconds.value = 0L
+    /**
+     * Called when the HomeScreen composable becomes active/visible.
+     * Starts waveform chart collection and 1s duration timer only while the user is actually looking at the screen.
+     */
+    fun onHomeScreenVisible() {
+        if (uiStatsJob == null) {
+            uiStatsJob = viewModelScope.launch {
+                trafficStats.collect { stats ->
+                    if (connectionState.value is ConnectionState.Connected) {
+                        _downloadHistory.value = (_downloadHistory.value.drop(1) + stats.downloadSpeedBps)
+                        _uploadHistory.value = (_uploadHistory.value.drop(1) + stats.uploadSpeedBps)
+                    } else {
+                        _downloadHistory.value = List(30) { 0L }
+                        _uploadHistory.value = List(30) { 0L }
                     }
                 }
-                delay(1000)
             }
         }
+        if (durationTimerJob == null) {
+            durationTimerJob = viewModelScope.launch {
+                while (isActive) {
+                    val state = connectionState.value
+                    if (state is ConnectionState.Connected) {
+                        val start = state.connectedAt
+                        val now = System.currentTimeMillis()
+                        _connectionDurationSeconds.value = if (start > 0L) (now - start) / 1000L else 0L
+                    } else {
+                        _connectionDurationSeconds.value = 0L
+                    }
+                    delay(1000L)
+                }
+            }
+        }
+    }
+
+    /**
+     * Called when the HomeScreen is disposed (navigated away or app backgrounded).
+     * Immediately terminates UI polling loops to conserve battery and CPU.
+     */
+    fun onHomeScreenHidden() {
+        uiStatsJob?.cancel()
+        uiStatsJob = null
+        durationTimerJob?.cancel()
+        durationTimerJob = null
     }
 
     fun selectProfile(id: String) {

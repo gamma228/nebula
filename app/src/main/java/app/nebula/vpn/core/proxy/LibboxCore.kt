@@ -203,11 +203,10 @@ class LibboxCore(
     private fun initCommandClient() {
         try {
             val clientOptions = CommandClientOptions().apply {
-                statusInterval = 1000 // 1 second updates
+                statusInterval = 3000 // 3 second updates (balanced battery efficiency)
                 addCommand(Libbox.CommandStatus)
                 addCommand(Libbox.CommandLog)
-                addCommand(Libbox.CommandGroup)
-                addCommand(Libbox.CommandConnections)
+                // Omit Libbox.CommandGroup and Libbox.CommandConnections to eliminate JNI event marshaling overhead
             }
 
             val clientHandler = object : CommandClientHandler {
@@ -236,11 +235,13 @@ class LibboxCore(
                             val entry = logs.next()
                             val line = entry?.message ?: ""
                             if (line.isNotBlank()) {
-                                android.util.Log.d("SingBoxCore", line)
-                            }
-                            logBuffer.addLast(line)
-                            if (logBuffer.size > 2000) {
-                                logBuffer.removeFirst()
+                                if (line.contains("error", ignoreCase = true) || line.contains("warn", ignoreCase = true)) {
+                                    android.util.Log.w("SingBoxCore", line)
+                                }
+                                logBuffer.addLast(line)
+                                if (logBuffer.size > 250) {
+                                    logBuffer.removeFirst()
+                                }
                             }
                         }
                     }

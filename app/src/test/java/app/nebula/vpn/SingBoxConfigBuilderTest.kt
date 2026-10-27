@@ -311,6 +311,40 @@ class SingBoxConfigBuilderTest {
         validateWithDesktopSingBox(config, "test-telegram-cidr.json")
     }
 
+    @Test
+    fun testBatteryPowerProfileLogLevels() {
+        val profile = ProxyProfile(
+            id = "test-battery",
+            name = "Battery-Node",
+            protocol = ProtocolType.SHADOWSOCKS,
+            server = "1.2.3.4",
+            port = 8388,
+            authSecret = "secret123"
+        )
+
+        // 1. Default (Balanced): level should be "warn"
+        val balancedConfig = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(activeProfile = profile)
+        )
+        assertTrue("Default config should use warn log level", balancedConfig.contains("\"level\": \"warn\""))
+        assertTrue("Must include tcp_fast_open on outbound", balancedConfig.contains("\"tcp_fast_open\": true"))
+        validateWithDesktopSingBox(balancedConfig, "test-battery-balanced.json")
+
+        // 2. Battery Saver: level should be "error"
+        val saverConfig = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(activeProfile = profile, logLevel = "error")
+        )
+        assertTrue("Battery saver should use error log level", saverConfig.contains("\"level\": \"error\""))
+        validateWithDesktopSingBox(saverConfig, "test-battery-saver.json")
+
+        // 3. High Performance: level should be "info"
+        val perfConfig = SingBoxConfigBuilder.build(
+            SingBoxConfigBuilder.BuildConfig(activeProfile = profile, logLevel = "info")
+        )
+        assertTrue("High performance should use info log level", perfConfig.contains("\"level\": \"info\""))
+        validateWithDesktopSingBox(perfConfig, "test-battery-perf.json")
+    }
+
     private fun validateWithDesktopSingBox(configJson: String, tempFileName: String) {
         val singBoxBin = File("C:/Users/User/tools/sing-box.exe")
         if (singBoxBin.exists()) {

@@ -26,6 +26,8 @@ class SettingsRepository @Inject constructor(
     val pingMode: Flow<String> = dataStore.pingMode
     val ipv6Enabled: Flow<Boolean> = dataStore.ipv6Enabled
     val blockQuic: Flow<Boolean> = dataStore.blockQuic
+    val powerProfile: Flow<String> = dataStore.powerProfile
+    val showSpeedInNotification: Flow<Boolean> = dataStore.showSpeedInNotification
 
     suspend fun setSelectedProfileId(id: String?) = dataStore.setSelectedProfileId(id)
     suspend fun setRoutingMode(mode: AppRoutingMode) = dataStore.setRoutingMode(mode)
@@ -43,5 +45,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setPingMode(mode: String) = dataStore.setPingMode(mode)
     suspend fun setIpv6Enabled(enabled: Boolean) = dataStore.setIpv6Enabled(enabled)
     suspend fun setBlockQuic(enabled: Boolean) = dataStore.setBlockQuic(enabled)
+    suspend fun setPowerProfile(profile: String) = dataStore.setPowerProfile(profile)
+    suspend fun setShowSpeedInNotification(enabled: Boolean) = dataStore.setShowSpeedInNotification(enabled)
     suspend fun clearAll() = dataStore.clearAll()
 }

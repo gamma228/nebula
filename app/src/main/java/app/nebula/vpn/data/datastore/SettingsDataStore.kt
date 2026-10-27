@@ -33,6 +33,8 @@ class SettingsDataStore(private val context: Context) {
         private val KEY_PING_MODE = stringPreferencesKey("ping_mode")
         private val KEY_IPV6_ENABLED = booleanPreferencesKey("ipv6_enabled")
         private val KEY_BLOCK_QUIC = booleanPreferencesKey("block_quic")
+        private val KEY_POWER_PROFILE = stringPreferencesKey("power_profile")
+        private val KEY_SHOW_SPEED_IN_NOTIF = booleanPreferencesKey("show_speed_in_notif")
     }
 
     val selectedProfileId: Flow<String?> = context.dataStore.data.map { it[KEY_SELECTED_PROFILE_ID] }
@@ -128,6 +130,16 @@ class SettingsDataStore(private val context: Context) {
     val blockQuic: Flow<Boolean> = context.dataStore.data.map { it[KEY_BLOCK_QUIC] ?: true }
     suspend fun setBlockQuic(enabled: Boolean) {
         context.dataStore.edit { it[KEY_BLOCK_QUIC] = enabled }
+    }
+
+    val powerProfile: Flow<String> = context.dataStore.data.map { it[KEY_POWER_PROFILE] ?: "BALANCED" }
+    suspend fun setPowerProfile(profile: String) {
+        context.dataStore.edit { it[KEY_POWER_PROFILE] = profile }
+    }
+
+    val showSpeedInNotification: Flow<Boolean> = context.dataStore.data.map { it[KEY_SHOW_SPEED_IN_NOTIF] ?: true }
+    suspend fun setShowSpeedInNotification(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_SHOW_SPEED_IN_NOTIF] = enabled }
     }
 
     suspend fun clearAll() {

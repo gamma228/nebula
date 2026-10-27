@@ -9,6 +9,7 @@ import app.nebula.vpn.data.repository.VpnRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -20,10 +21,12 @@ class VpnTileService : TileService() {
 
     @Inject lateinit var vpnRepository: VpnRepository
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var listeningJob: Job? = null
 
     override fun onStartListening() {
         super.onStartListening()
-        scope.launch {
+        listeningJob?.cancel()
+        listeningJob = scope.launch {
             vpnRepository.connectionState.collect { state ->
                 val tile = qsTile ?: return@collect
                 when (state) {
@@ -43,6 +46,12 @@ class VpnTileService : TileService() {
                 tile.updateTile()
             }
         }
+    }
+
+    override fun onStopListening() {
+        super.onStopListening()
+        listeningJob?.cancel()
+        listeningJob = null
     }
 
     override fun onClick() {

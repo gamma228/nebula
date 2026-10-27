@@ -2,17 +2,21 @@ package app.nebula.vpn.vpn
 
 import android.app.Notification
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import app.nebula.vpn.NebulaApp
 import app.nebula.vpn.R
 import app.nebula.vpn.core.builder.SingBoxConfigBuilder
 import app.nebula.vpn.core.model.ConnectionState
+import app.nebula.vpn.core.model.PowerProfile
 import app.nebula.vpn.core.model.TrafficStats
 import app.nebula.vpn.core.parser.SplitTunnelApplier
 import app.nebula.vpn.core.proxy.ProxyCore
@@ -76,6 +80,54 @@ class ProxyVpnService : VpnService(), TunProvider {
     private var accumulatedRxBytes: Long = 0L
     private var accumulatedTxBytes: Long = 0L
     private var probeJob: Job? = null
+    private var screenReceiver: BroadcastReceiver? = null
+    @Volatile private var isScreenInteractive: Boolean = true
+
+    override fun onCreate() {
+        super.onCreate()
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        isScreenInteractive = powerManager?.isInteractive ?: true
+
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    Intent.ACTION_SCREEN_ON -> {
+                        isScreenInteractive = true
+                        onScreenStateChanged(true)
+                    }
+                    Intent.ACTION_SCREEN_OFF -> {
+                        isScreenInteractive = false
+                        onScreenStateChanged(false)
+                    }
+                }
+            }
+        }
+        screenReceiver = receiver
+        try {
+            registerReceiver(receiver, filter)
+        } catch (e: Exception) {
+            android.util.Log.w("ProxyVpnService", "Failed to register screen receiver: ${e.message}")
+        }
+    }
+
+    private fun onScreenStateChanged(screenOn: Boolean) {
+        if (!screenOn) {
+            // Screen is OFF: freeze notification speed updates immediately to let CPU sleep
+            val name = currentProfileName
+            if (name != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
+                updateForegroundNotification("Connected: $name", "Protected via Nebula")
+            }
+        } else {
+            // Screen is ON: restart ticker immediately so fresh speeds appear without lag
+            if (vpnRepository.connectionState.value is ConnectionState.Connected) {
+                startTrafficTicker()
+            }
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action
@@ -149,6 +201,9 @@ class ProxyVpnService : VpnService(), TunProvider {
                     cachedRoutingMode = routingMode
                     cachedTargetPackages = targetPackages
 
+                    val powerProfileId = settingsRepository.powerProfile.first()
+                    val profileEnum = PowerProfile.fromId(powerProfileId)
+
                     val configJson = SingBoxConfigBuilder.build(
                         SingBoxConfigBuilder.BuildConfig(
                             activeProfile = activeProfile,
@@ -161,10 +216,11 @@ class ProxyVpnService : VpnService(), TunProvider {
                             killSwitchEnabled = killSwitch,
                             localPortMixedInbound = 2080,
                             ipv6Enabled = ipv6,
-                            blockQuic = blockQuic
+                            blockQuic = blockQuic,
+                            logLevel = profileEnum.coreLogLevel
                         )
                     )
-                    android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile.name}, config length=${configJson.length}")
+                    android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile.name}, logLevel=${profileEnum.coreLogLevel}, config length=${configJson.length}")
 
                     // Hand-off: start core with this as TunProvider
                     proxyCore.start(configJson, this@ProxyVpnService)
@@ -172,6 +228,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                     // Cancel previous collectors if any
                     stateCollectorJob?.cancel()
                     statsCollectorJob?.cancel()
+                    statsCollectorJob = null
 
                     stateCollectorJob = launch {
                         proxyCore.state.collect { state ->
@@ -187,7 +244,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                                     )
                                     startForegroundNotification(
                                         title = "Connected: $name",
-                                        content = "Protected via sing-box core"
+                                        content = "Protected via Nebula"
                                     )
                                     launchConnectivityProbe(name, startT)
                                 }
@@ -203,12 +260,6 @@ class ProxyVpnService : VpnService(), TunProvider {
                                     vpnRepository.updateState(state)
                                 }
                             }
-                        }
-                    }
-
-                    statsCollectorJob = launch {
-                        proxyCore.stats.collect { stats ->
-                            vpnRepository.updateStats(stats)
                         }
                     }
 
@@ -259,6 +310,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                         val killSwitch = settingsRepository.killSwitchEnabled.first()
                         val ipv6 = settingsRepository.ipv6Enabled.first()
                         val blockQuic = settingsRepository.blockQuic.first()
+                        val powerProfileId = settingsRepository.powerProfile.first()
+                        val profileEnum = PowerProfile.fromId(powerProfileId)
 
                         val configJson = SingBoxConfigBuilder.build(
                             SingBoxConfigBuilder.BuildConfig(
@@ -272,7 +325,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                                 killSwitchEnabled = killSwitch,
                                 localPortMixedInbound = 2080,
                                 ipv6Enabled = ipv6,
-                                blockQuic = blockQuic
+                                blockQuic = blockQuic,
+                                logLevel = profileEnum.coreLogLevel
                             )
                         )
                         proxyCore.reloadConfig(configJson)
@@ -288,7 +342,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                     )
                     startForegroundNotification(
                         title = "Connected: ${targetProfile.name}",
-                        content = "Protected via sing-box core"
+                        content = "Protected via Nebula"
                     )
                     launchConnectivityProbe(targetProfile.name, startT)
                     android.util.Log.i("ProxyVpnService", "Hot-switch completed successfully to ${targetProfile.name}")
@@ -493,6 +547,12 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     override fun onDestroy() {
         super.onDestroy()
+        screenReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {}
+            screenReceiver = null
+        }
         serviceScope.cancel()
         tunnelJob?.cancel()
         tunnelJob = null
@@ -623,6 +683,11 @@ class ProxyVpnService : VpnService(), TunProvider {
         return false
     }
 
+    private var lastNotifTitle: String? = null
+    private var lastNotifContent: String? = null
+    private var cachedPendingIntent: PendingIntent? = null
+    private var cachedDisconnectIntent: PendingIntent? = null
+
     private fun startTrafficTicker() {
         trafficTickerJob?.cancel()
         lastUidRxBytes = android.net.TrafficStats.getUidRxBytes(android.os.Process.myUid())
@@ -632,8 +697,23 @@ class ProxyVpnService : VpnService(), TunProvider {
         accumulatedTxBytes = 0L
 
         trafficTickerJob = serviceScope.launch(Dispatchers.IO) {
+            var lastNotifUpdateTime = 0L
+
             while (isActive) {
-                kotlinx.coroutines.delay(1000L)
+                val powerProfileId = settingsRepository.powerProfile.first()
+                val profileEnum = PowerProfile.fromId(powerProfileId)
+                val showSpeed = settingsRepository.showSpeedInNotification.first()
+                val interactive = isScreenInteractive
+
+                val delayMs = if (interactive) {
+                    profileEnum.interactiveIntervalMs
+                } else {
+                    if (profileEnum.backgroundIntervalMs > 0L) profileEnum.backgroundIntervalMs else 60000L
+                }
+
+                kotlinx.coroutines.delay(delayMs)
+                if (!isActive) break
+
                 val now = System.currentTimeMillis()
                 val deltaSec = ((now - lastTrafficSampleTimeMs).coerceAtLeast(500L)) / 1000.0
                 lastTrafficSampleTimeMs = now
@@ -667,8 +747,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                 val finalTotalTx = maxOf(accumulatedTxBytes, coreStats.totalUploadBytes)
 
                 val stats = TrafficStats(
-                    uploadSpeedBps = finalTxSpeed,
-                    downloadSpeedBps = finalRxSpeed,
+                    uploadSpeedBps = if (interactive) finalTxSpeed else 0L,
+                    downloadSpeedBps = if (interactive) finalRxSpeed else 0L,
                     totalUploadBytes = finalTotalTx,
                     totalDownloadBytes = finalTotalRx,
                     memoryUsageBytes = coreStats.memoryUsageBytes,
@@ -677,10 +757,15 @@ class ProxyVpnService : VpnService(), TunProvider {
 
                 vpnRepository.updateStats(stats)
 
-                if (currentProfileName != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
-                    val notifTitle = "Connected: $currentProfileName"
-                    val notifContent = "⬇ ${formatSpeed(finalRxSpeed)}   ⬆ ${formatSpeed(finalTxSpeed)}"
-                    updateForegroundNotification(notifTitle, notifContent)
+                // Update notification ONLY when screen is interactive AND user enabled speed in notification.
+                // When screen is off, zero notification IPC occurs.
+                if (interactive && showSpeed && currentProfileName != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
+                    if (now - lastNotifUpdateTime >= profileEnum.interactiveIntervalMs) {
+                        lastNotifUpdateTime = now
+                        val notifTitle = "Connected: $currentProfileName"
+                        val notifContent = "⬇ ${formatSpeed(finalRxSpeed)}   ⬆ ${formatSpeed(finalTxSpeed)}"
+                        updateForegroundNotification(notifTitle, notifContent)
+                    }
                 }
             }
         }
@@ -697,20 +782,26 @@ class ProxyVpnService : VpnService(), TunProvider {
     }
 
     private fun updateForegroundNotification(title: String, content: String) {
+        if (title == lastNotifTitle && content == lastNotifContent) {
+            return // Skip IPC if content has not changed
+        }
+        lastNotifTitle = title
+        lastNotifContent = content
+
         try {
-            val pendingIntent = PendingIntent.getActivity(
+            val pendingIntent = cachedPendingIntent ?: PendingIntent.getActivity(
                 this,
                 0,
                 Intent(this, MainActivity::class.java),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
+            ).also { cachedPendingIntent = it }
 
-            val disconnectIntent = PendingIntent.getService(
+            val disconnectIntent = cachedDisconnectIntent ?: PendingIntent.getService(
                 this,
                 1,
                 Intent(this, ProxyVpnService::class.java).apply { action = ACTION_STOP },
                 PendingIntent.FLAG_IMMUTABLE
-            )
+            ).also { cachedDisconnectIntent = it }
 
             val notification = NotificationCompat.Builder(this, NebulaApp.VPN_NOTIFICATION_CHANNEL_ID)
                 .setContentTitle(title)

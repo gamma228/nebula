@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -76,6 +77,13 @@ fun HomeScreen(
     onRequestConnect: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    DisposableEffect(Unit) {
+        viewModel.onHomeScreenVisible()
+        onDispose {
+            viewModel.onHomeScreenHidden()
+        }
+    }
+
     val connectionState by viewModel.connectionState.collectAsState()
     val trafficStats by viewModel.trafficStats.collectAsState()
     val downloadHistory by viewModel.downloadHistory.collectAsState()
