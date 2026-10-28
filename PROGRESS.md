@@ -128,6 +128,24 @@
   - **In-App Background Wallpaper Customizer:** Implemented in-app background rendering in `MainActivity.kt` with Coil `AsyncImage` layered beneath Compose screens, contrast protection scrim (`backgroundDimAlpha`), and Gaussian blur. Added gallery photo picker, URL input dialog with quick presets, and dimming/blur sliders in `AppearanceScreen.kt`.
   - **5-Language Parity & Verification:** Added all keys across `en`, `ru`, `uk`, `zh-CN`, and `de`; unit tests 100% passing; release APKs cleanly assembled and verified on `emulator-5554`.
 
+- [x] **Milestone M1: Environment, Proxy Engines & Reliable Connection State Machine (Sections D, E, F)**
+  - **Section D (Environment, Build & Static Guards):**
+    - JDK 17 (`Temurin 17.0.9`), Android SDK (API 35, build-tools 35.0.0), Gradle 8.10.2 verified.
+    - `./gradlew.bat testDebugUnitTest` and `testReleaseUnitTest` 100% green (31 tasks, 0 failures).
+    - `./gradlew.bat lintDebug` 100% green (0 errors).
+    - Workflows: Created `.agent/workflows/static.md`, `.agent/workflows/fuzz.md`, `.agent/workflows/harness.md`, `.agent/workflows/release-check.md`.
+    - Static Guards: Verified zero `GlobalScope`, zero `Thread.sleep` in production code (replaced `Thread.sleep(100)` in `LibboxCore` with coroutine `delay(100L)`), zero `delay(0)`, all `while(isActive)` loops have real suspension. Verified by automated tests in `MilestoneM1Test.kt`.
+  - **Section E (Proxy Engines & VPN Service):**
+    - `ProxyCore` abstraction with two engine types (`CoreType.SING_BOX`, `CoreType.XRAY`).
+    - sing-box v1.14.4: fully integrated real engine (`libbox.aar`, SHA-256 `A593A0C4020439F883B20E164C6745375550967E4E25B1B3FA4F66B1543EB996`).
+    - Xray-core: reproducible build script `scripts/build-cores.sh` created covering both sing-box and Xray-core / `hev-socks5-tunnel`; `XrayCore` interface adapter created which refuses to open tunnel without bundled binary to prevent traffic blackholing (`REAL ENGINE NOT INTEGRATED` for Xray; sing-box v1.14.4 is the active verified engine).
+    - VpnService design: TUN hand-off in `TunProvider`, `SplitTunnelApplier` with strict whitelist/blacklist mutual exclusivity, MTU 1500 default, IPv6 option default OFF, foreground service with `specialUse`, QS tile, autostart boot receiver.
+    - Architectural process note: Single-process model actively retained to guarantee zero DataStore corruption and rock-solid state synchronization without multi-process race conditions.
+  - **Section F (Connection State Machine):**
+    - Single `DefaultConnectionManager` backed by Mutex actor with states (`Disconnected`, `Connecting`, `Connected`, `Reconnecting`, `Disconnecting`, `Failed`).
+    - Disconnect priority: `_userRequestedDisconnect = true`, 3s timeout with forced termination, START_NOT_STICKY. Verified by `ConnectionManagerTest` (4/4 passing: 100 rapid cycles, 3s timeout, in-flight cancel).
+    - Active HTTP probe before confirming un-degraded connected state.
+
 ## Core Artifact Details
 - **Sing-box Tag:** `v1.14.4`
 - **Commit:** `c005f35300ce76427dc285481ec5695f5b179cd2`

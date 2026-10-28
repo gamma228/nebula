@@ -200,7 +200,7 @@ class LibboxCore(
         }
     }
 
-    private fun initCommandClient() {
+    private suspend fun initCommandClient() {
         try {
             val clientOptions = CommandClientOptions().apply {
                 statusInterval = 1000 // 1s updates for smooth UI when active
@@ -275,7 +275,7 @@ class LibboxCore(
                     break
                 } catch (e: Exception) {
                     android.util.Log.w("LibboxCore", "CommandClient connect attempt $attempt failed: ${e.message}")
-                    Thread.sleep(100)
+                    kotlinx.coroutines.delay(100L)
                 }
             }
             if (!connected) {

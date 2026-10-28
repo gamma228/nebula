@@ -1,7 +1,62 @@
 # Nebula Android Proxy/VPN Client - Verification & Release Summary
 
 ## Executive Overview
-Nebula has undergone comprehensive recovery, architectural tuning, and automated verification across all 6 defect areas (D1 through D6). The client utilizes the native SagerNet sing-box v1.14.4 core via gomobile Cgo TUN file descriptor handoff, Jetpack Compose Material 3 UI, and strict reactive state machines.
+Nebula has undergone comprehensive recovery, architectural tuning, and automated verification across all defect areas. The client utilizes the native SagerNet sing-box v1.14.4 core via gomobile Cgo TUN file descriptor handoff, Jetpack Compose Material 3 UI, and strict reactive state machines.
+
+---
+
+## Milestone M1 Verification Evidence (Sections D, E, F)
+
+### 1. Build & Static Guards Verification (Section D)
+- **Command:**
+  ```powershell
+  $env:JAVA_HOME = "C:\Users\User\tools\jdk-17"
+  .\gradlew.bat lintDebug testDebugUnitTest testReleaseUnitTest
+  ```
+- **Output:**
+  - `lintDebug`: `BUILD SUCCESSFUL in 1m 34s` (0 errors)
+  - `testDebugUnitTest`: `BUILD SUCCESSFUL in 1m 5s` (30 actionable tasks, 0 failures)
+  - `testReleaseUnitTest`: `BUILD SUCCESSFUL in 41s` (31 actionable tasks, 0 failures)
+- **Static Guards (`MilestoneM1Test.kt`):**
+  - `static guard - zero Thread sleep in production code` -> PASS (Replaced `Thread.sleep(100)` in `LibboxCore.kt` with coroutine `delay(100L)`)
+  - `static guard - zero GlobalScope in production code` -> PASS (0 occurrences across entire `app/src/main`)
+  - `static guard - zero delay(0) in production code` -> PASS (0 occurrences)
+  - All `while(isActive)` loops verified with real suspension (`HomeViewModel` 1s, `ToolsViewModel` 3s, `ProxyVpnService` >= 1s)
+
+### 2. Proxy Engines & Abstraction Verification (Section E)
+- **Engines:**
+  - `CoreType.SING_BOX`: Integrated official SagerNet sing-box v1.14.4 `libbox.aar` (SHA-256: `A593A0C4020439F883B20E164C6745375550967E4E25B1B3FA4F66B1543EB996`). Native Cgo TUN fd passing via `PlatformInterface.openTun`.
+  - `CoreType.XRAY`: Build instructions documented in `scripts/build-cores.sh`. Interface adapter `XrayCore` created; explicitly throws `IllegalStateException("REAL ENGINE NOT INTEGRATED: ... Refusing to open tunnel to avoid blackholing traffic")` to prevent blackholing traffic. Verified by `MilestoneM1Test.xray core refuses to open tunnel when native engine unbundled` -> PASS.
+  - `CoreFactory`: Instantiates `LibboxCore`, `XrayCore`, or `StubProxyCore`.
+
+### 3. Connection State Machine Verification (Section F)
+- **State Machine (`ConnectionManagerTest.kt`):**
+  - `initial state is Disconnected` -> PASS
+  - `disconnect while Connecting cancels in-flight job and finishes in Disconnected` -> PASS
+  - `disconnect has 3 second timeout and forces termination if service hangs` -> PASS
+  - `rapid 100 connect-disconnect cycles do not deadlock` -> PASS
+- **Disconnect Priority:**
+  - Disconnect immediately sets `_userRequestedDisconnect = true`, cancelling in-flight connect/reconnect, auto-reconnect, and health checks.
+  - `serviceController.stopVpnService` with hard 3s timeout.
+  - `ProxyVpnService` returns `START_NOT_STICKY`.
+
+### 4. Signed Release Verification
+- **Command:**
+  ```powershell
+  $env:JAVA_HOME = "C:\Users\User\tools\jdk-17"
+  .\gradlew.bat assembleRelease
+  C:\Users\User\Android\Sdk\build-tools\35.0.0\apksigner.bat verify --verbose app\build\outputs\apk\release\app-arm64-v8a-release.apk
+  ```
+- **Output:**
+  - `assembleRelease`: `BUILD SUCCESSFUL in 1m 52s` (55 actionable tasks, 0 failures)
+  - `apksigner`:
+    ```
+    Verified using v1 scheme (JAR signing): false
+    Verified using v2 scheme (APK Signature Scheme v2): true
+    Number of signers: 1
+    ```
+- **Status on Physical Device / Live ISP Blocking:**
+  - Real ISP blocking in Russia / live cellular battery performance: **NOT VERIFIED BY AGENT** (Requires physical Samsung device test by user per checklist in `MASTER_PROMPT.md`).
 
 ---
 
