@@ -14,6 +14,7 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D7: Clean VPN teardown synchronization & physical interface resolution](#d7-clean-vpn-teardown-synchronization--physical-interface-resolution)
 - [D8: Real-World Subscription & v2rayNG Functional Parity (Russian TSPU/DPI Circumvention)](#d8-real-world-subscription--v2rayng-functional-parity)
 - [D9: Real-Time Traffic Speed/Waveform and In-App Background Wallpaper Engine](#d9-real-time-traffic-speedwaveform-and-in-app-background-wallpaper-engine)
+- [D10: Interactive Color Picker Sliders, Curated Swatches, and AMOLED vs Dark Mode Contrast](#d10-interactive-color-picker-sliders-curated-swatches-and-amoled-vs-dark-mode-contrast)
 
 ---
 
@@ -414,5 +415,50 @@ The user reported: "The same servers from the public subscription `https://raw.g
    - Screenshots captured: `emulator_appearance_scroll2.png`, `emulator_dialog_bg.png`, `emulator_appearance_applied.png`, `emulator_home_wallpaper.png`, `emulator_home_active_chart.png`.
 3. **Release Packaging (`./gradlew.bat assembleRelease`)**:
    - Clean compilation with R8 shrinking, ProGuard optimizations, and ABI splits.
+
+---
+
+## D10: Interactive Color Picker Sliders, Curated Swatches, and AMOLED vs Dark Mode Contrast
+
+### Problem Description
+1. **No Custom Color Picker**: Users were restricted to 4 fixed preset cards. There was no way to smoothly slide through the color spectrum or enter a custom hex/palette.
+2. **No Visual Difference Between Dark Mode and AMOLED Mode**: In `Theme.kt`, Dark Mode used near-black `#0A070B` and `#0A0A0C` (3% luminance), virtually indistinguishable from Pure AMOLED `#000000`. Card surface colors were also identical between the two modes.
+3. **Preset Selection Overwriting Display Mode**: In `AppearanceViewModel.applyPreset()`, applying any preset reset `mode` to `preset.mode` (hardcoded to `AMOLED`), overwriting the user's explicit Dark or Light mode choice.
+4. **Light Mode Surface Desynchronization**: `NebulaTheme.colors` did not properly account for Light Mode, leaving background/surfaces dark in custom composables.
+
+### Invariant Fix
+1. **Interactive Nebula Color Picker Component (`NebulaColorPicker.kt`)**:
+   - Pure Kotlin HSV math (`HsvColor`, `hexToHsv`, `hsvToColor`, `hsvToHex`) for 100% JVM testability.
+   - **Hue Slider (0° - 360°)** with continuous horizontal rainbow gradient track.
+   - **Saturation Slider (0% - 100%)** with gradient from desaturated to full color.
+   - **Brightness Slider (20% - 100%)** with gradient from dark to vivid.
+   - **Target Selector**: Toggle between editing Primary Accent and Secondary Accent/Glow.
+   - **Live Color Chip & Sample Button**: Real-time interactive preview showing hex readout, RGB values, and miniature UI components using the custom color.
+   - **12 Curated Neon Swatches**: Cyber Emerald (`#00D084`), Neon Cyan (`#00E5FF`), Electric Violet (`#8A2BE2`), Crimson Red (`#E60049`), Neon Pink (`#FF007F`), Sunset Orange (`#FF6B00`), Solar Amber (`#FFB300`), Cyber Lime (`#76FF03`), Azure Blue (`#2979FF`), Mint Teal (`#00E676`), Ultra Coral (`#FF5252`), Pure White (`#FFFFFF`).
+2. **Distinct Dark vs. AMOLED Mode Architecture (`Theme.kt`)**:
+   - **Pure AMOLED (`ThemeMode.AMOLED`)**: Pure pitch black `#000000` (every black OLED pixel powered completely off for maximum battery savings) with obsidian `#090E14` surfaces and crisp high-contrast `#2BFFFFFF` borders.
+   - **Dark Mode (`ThemeMode.DARK`)**: Comfortable charcoal navy `#131A1F` / `#161922` (12-14% luminance slate, soft on the eyes, visibly distinct from pitch black) with `#1D2631` elevated cards and `#2C3A4B` borders.
+   - **Light Mode (`ThemeMode.LIGHT`)**: Clean off-white `#F4FAF7` / `#F8FAFC` background with pure white `#FFFFFF` cards and `#0A1F16` high-contrast text.
+3. **Mode Preservation on Preset Switch (`AppearanceViewModel.kt`)**:
+   - `applyPreset(presetId)` now copies `current.mode`, ensuring the user's Dark / Light choice is never clobbered when changing color themes.
+   - Added `setPrimaryColor(hex)` and `setAccentColor(hex)` marking `presetId = "custom"`.
+4. **Localization Parity Across 5 Languages**:
+   - Added 8 new localization keys across `en`, `ru`, `uk`, `zh-CN`, and `de` (`appearance_custom_color`, `appearance_color_target_primary`, `appearance_color_target_accent`, `appearance_hue`, `appearance_saturation`, `appearance_brightness`, `appearance_quick_swatches`, `appearance_preset_custom`).
+   - Verified 100% key parity via `StringsParityTest`.
+
+### Automated Verification Proof
+1. **Unit Test Suite (`./gradlew.bat testDebugUnitTest`)**:
+   - Added `ThemeColorPickerTest.kt` verifying HSV round-trip conversions, curated swatch validity, and Dark/AMOLED enum distinction.
+   - 30 tasks executed, 58 tests passed, 0 failures.
+   - `StringsParityTest`: 100% parity across all 5 language sets.
+2. **Static Analysis (`./gradlew.bat lintDebug`)**:
+   - 0 errors across all resources and Compose UI components.
+3. **Release Packaging (`./gradlew.bat assembleRelease`)**:
+   - All 4 release APKs (`arm64-v8a`, `armeabi-v7a`, `universal`, `x86_64`) built and signed with R8 optimization.
+4. **Live Emulator Testing (`emulator-5554`)**:
+   - Tapped curated swatches (Neon Cyan `#00E5FF`, Electric Violet `#8A2BE2`).
+   - Dragged Hue slider smoothly from 158° to 295°.
+   - Verified immediate visual difference between Dark Mode, Pure AMOLED, and Light Mode.
+
 
 

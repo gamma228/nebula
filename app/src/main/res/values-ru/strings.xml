@@ -230,4 +230,12 @@
     <string name="doctor_check_quic_block">Блокировка QUIC против цензуры</string>
     <string name="doctor_fix_ipv6">Отключить IPv6</string>
     <string name="doctor_fix_quic">Блокировать QUIC</string>
+    <string name="appearance_custom_color">Свой цвет и палитра</string>
+    <string name="appearance_color_target_primary">Основной акцент</string>
+    <string name="appearance_color_target_accent">Вторичный акцент / Свечение</string>
+    <string name="appearance_hue">Оттенок</string>
+    <string name="appearance_saturation">Насыщенность</string>
+    <string name="appearance_brightness">Яркость</string>
+    <string name="appearance_quick_swatches">Быстрая палитра</string>
+    <string name="appearance_preset_custom">Свой</string>
 </resources>

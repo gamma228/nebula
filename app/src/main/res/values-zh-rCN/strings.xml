@@ -230,4 +230,12 @@
     <string name="doctor_check_quic_block">QUIC 防审查阻断</string>
     <string name="doctor_fix_ipv6">禁用 IPv6</string>
     <string name="doctor_fix_quic">阻断 QUIC</string>
+    <string name="appearance_custom_color">自定义颜色与调色板</string>
+    <string name="appearance_color_target_primary">主要强调色</string>
+    <string name="appearance_color_target_accent">次要强调色 / 光晕</string>
+    <string name="appearance_hue">色相</string>
+    <string name="appearance_saturation">饱和度</string>
+    <string name="appearance_brightness">亮度</string>
+    <string name="appearance_quick_swatches">精选调色板</string>
+    <string name="appearance_preset_custom">自定义</string>
 </resources>

@@ -128,6 +128,15 @@
   - **In-App Background Wallpaper Customizer:** Implemented in-app background rendering in `MainActivity.kt` with Coil `AsyncImage` layered beneath Compose screens, contrast protection scrim (`backgroundDimAlpha`), and Gaussian blur. Added gallery photo picker, URL input dialog with quick presets, and dimming/blur sliders in `AppearanceScreen.kt`.
   - **5-Language Parity & Verification:** Added all keys across `en`, `ru`, `uk`, `zh-CN`, and `de`; unit tests 100% passing; release APKs cleanly assembled and verified on `emulator-5554`.
 
+- [x] **Phase 18: Custom Color Picker Sliders, Curated Swatches & AMOLED vs Dark Mode Contrast (D10)**
+  - **Interactive Color Picker (`NebulaColorPicker.kt`):** Built HSV slider engine (Hue 0°..360° with rainbow track, Saturation 0%..100%, Brightness 20%..100%), live hex/RGB readout, interactive preview button/chip, and 12-swatch curated neon palette.
+  - **AMOLED vs Dark Mode Contrast Distinction (`Theme.kt`):**
+    - Pure AMOLED (`ThemeMode.AMOLED`): Pure `#000000` black (100% OLED pixels off) with obsidian `#090E14` surfaces and high-contrast borders.
+    - Dark Mode (`ThemeMode.DARK`): Comfortable charcoal navy `#131A1F` / `#161922` slate (visibly distinct from pitch black, soft on eyes) with `#1D2631` elevated cards.
+    - Light Mode (`ThemeMode.LIGHT`): Crisp `#F4FAF7` / `#F8FAFC` background with pure white `#FFFFFF` cards and `#0A1F16` high-contrast typography.
+  - **Preset Selection Preservation (`AppearanceViewModel.kt`):** Switching presets now preserves user's current display mode instead of resetting to AMOLED. Added `setPrimaryColor()` and `setAccentColor()`.
+  - **Unit Testing & 5-Language Parity:** Added `ThemeColorPickerTest.kt`; verified 100% key parity across `en`, `ru`, `uk`, `zh-CN`, and `de` via `StringsParityTest`. Verified with `lintDebug` (0 errors) and `assembleRelease` (all APK splits built and signed).
+
 - [x] **Milestone M1: Environment, Proxy Engines & Reliable Connection State Machine (Sections D, E, F)**
   - **Section D (Environment, Build & Static Guards):**
     - JDK 17 (`Temurin 17.0.9`), Android SDK (API 35, build-tools 35.0.0), Gradle 8.10.2 verified.

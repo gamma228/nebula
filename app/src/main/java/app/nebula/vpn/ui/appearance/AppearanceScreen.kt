@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import app.nebula.vpn.R
 import app.nebula.vpn.core.model.ButtonShape
 import app.nebula.vpn.core.model.ThemeMode
+import app.nebula.vpn.ui.components.NebulaColorPicker
 import app.nebula.vpn.ui.theme.NebulaTheme
 import coil.compose.AsyncImage
 
@@ -172,6 +173,16 @@ fun AppearanceScreen(
                     }
                 }
             }
+        }
+
+        // Custom Color & Palette (Sliders for Hue, Saturation, Brightness + 12 Swatches)
+        item {
+            NebulaColorPicker(
+                primaryColorHex = theme.primaryColorHex,
+                accentColorHex = theme.accentColorHex,
+                onPrimaryColorChanged = { viewModel.setPrimaryColor(it) },
+                onAccentColorChanged = { viewModel.setAccentColor(it) }
+            )
         }
 
         // Button Shape & Neon Borders

@@ -32,6 +32,7 @@ class AppearanceViewModel @Inject constructor(
 
     fun applyPreset(presetId: String) {
         viewModelScope.launch {
+            val current = activeTheme.value
             val preset = when (presetId) {
                 "emerald_cyber" -> ThemeRepository.PRESET_EMERALD_CYBER
                 "cyber_violet" -> ThemeRepository.PRESET_CYBER_VIOLET
@@ -39,7 +40,44 @@ class AppearanceViewModel @Inject constructor(
                 "oled_crimson" -> ThemeRepository.PRESET_OLED_CRIMSON
                 else -> ThemeRepository.PRESET_EMERALD_CYBER
             }
-            themeRepository.setActiveTheme(preset)
+            themeRepository.setActiveTheme(preset.copy(mode = current.mode))
+        }
+    }
+
+    fun setPrimaryColor(hex: String) {
+        viewModelScope.launch {
+            val current = activeTheme.value
+            themeRepository.setActiveTheme(
+                current.copy(
+                    presetId = "custom",
+                    primaryColorHex = hex
+                )
+            )
+        }
+    }
+
+    fun setAccentColor(hex: String) {
+        viewModelScope.launch {
+            val current = activeTheme.value
+            themeRepository.setActiveTheme(
+                current.copy(
+                    presetId = "custom",
+                    accentColorHex = hex
+                )
+            )
+        }
+    }
+
+    fun setCustomPalette(primaryHex: String, accentHex: String) {
+        viewModelScope.launch {
+            val current = activeTheme.value
+            themeRepository.setActiveTheme(
+                current.copy(
+                    presetId = "custom",
+                    primaryColorHex = primaryHex,
+                    accentColorHex = accentHex
+                )
+            )
         }
     }
 

@@ -230,4 +230,12 @@
     <string name="doctor_check_quic_block">QUIC-Zensurschutz (UDP 443)</string>
     <string name="doctor_fix_ipv6">IPv6 deaktivieren</string>
     <string name="doctor_fix_quic">QUIC blockieren</string>
+    <string name="appearance_custom_color">Eigene Farbe &amp; Palette</string>
+    <string name="appearance_color_target_primary">Hauptakzent</string>
+    <string name="appearance_color_target_accent">Sekundärakzent / Leuchten</string>
+    <string name="appearance_hue">Farbton</string>
+    <string name="appearance_saturation">Sättigung</string>
+    <string name="appearance_brightness">Helligkeit</string>
+    <string name="appearance_quick_swatches">Farbpalette</string>
+    <string name="appearance_preset_custom">Benutzerdefiniert</string>
 </resources>
