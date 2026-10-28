@@ -189,4 +189,13 @@ class LinkParserTest {
         assertEquals("www.calmlunch.com", profile.transport.host)
         assertEquals("/assignment", profile.transport.path)
     }
+
+    @Test
+    fun testParseVlessWithInvalidSniUrlSanitized() {
+        val link = "vless://uuid@1.2.3.4:443?security=tls&sni=https%3A%2F%2Fevil.com%2Fpath#Bad-Sni"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("evil.com", profile.tls.serverName)
+    }
 }

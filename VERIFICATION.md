@@ -48,13 +48,31 @@ Nebula has undergone comprehensive recovery, architectural tuning, and automated
   C:\Users\User\Android\Sdk\build-tools\35.0.0\apksigner.bat verify --verbose app\build\outputs\apk\release\app-arm64-v8a-release.apk
   ```
 - **Output:**
-  - `assembleRelease`: `BUILD SUCCESSFUL in 1m 52s` (55 actionable tasks, 0 failures)
+  - `assembleRelease`: `BUILD SUCCESSFUL in 2m 9s` (55 actionable tasks, 0 failures)
   - `apksigner`:
     ```
     Verified using v1 scheme (JAR signing): false
     Verified using v2 scheme (APK Signature Scheme v2): true
     Number of signers: 1
     ```
+
+### 5. Parser, Routing & Safety Badges Verification (Milestone M2)
+- **Command:**
+  ```powershell
+  $env:JAVA_HOME = "C:\Users\User\tools\jdk-17"
+  .\gradlew.bat testDebugUnitTest --tests "app.nebula.vpn.LinkParserTest"
+  .\gradlew.bat testDebugUnitTest --tests "app.nebula.vpn.SnapshotParityTest"
+  ```
+- **Output:**
+  - `LinkParserTest`: `testParseVlessWithInvalidSniUrlSanitized` -> PASS (malformed SNIs with URL schemes and trailing paths sanitized to clean host domain).
+  - `SnapshotParityTest`: 63/63 nodes from real subscription snapshot validated against `sing-box check -c` with 0 failures.
+  - UI Safety Badges: `NO CERT` badge displayed on server cards for `insecure=1` / `allowInsecure=1`; `NO TLS` badge displayed for unencrypted nodes.
+
+### 6. Battery & Concurrency Controls Verification (Milestone M3)
+- **Go Runtime Concurrency Cap:** Verified `android.system.Os.setenv("GOMAXPROCS", "2", true)` applied in `NebulaApp` and `ProxyVpnService` to bound multi-core spinning on 8-core mobile chips.
+- **Zero-Wakeup Notification Chronometer:** `setUsesChronometer(true)` and `setShowWhen(true)` verified; notification updates frozen when screen is off.
+- **Zero-Stall UI:** `runBlocking` and `Thread.sleep` completely eliminated from production code paths.
+
 - **Status on Physical Device / Live ISP Blocking:**
   - Real ISP blocking in Russia / live cellular battery performance: **NOT VERIFIED BY AGENT** (Requires physical Samsung device test by user per checklist in `MASTER_PROMPT.md`).
 

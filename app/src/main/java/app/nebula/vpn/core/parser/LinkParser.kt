@@ -106,7 +106,8 @@ object LinkParser {
 
         val security = uri.getQueryParameter("security") ?: "none"
         val isTls = security.equals("tls", true) || security.equals("reality", true)
-        val sni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val rawSni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val sni = sanitizeSni(rawSni, host)
         val pbk = uri.getQueryParameter("pbk") ?: uri.getQueryParameter("publicKey") ?: ""
         val sid = uri.getQueryParameter("sid") ?: uri.getQueryParameter("shortId") ?: ""
         val spx = uri.getQueryParameter("spx") ?: uri.getQueryParameter("spiderX") ?: ""
@@ -180,9 +181,10 @@ object LinkParser {
         val hostHeader = jsonObj["host"]?.jsonPrimitive?.content ?: ""
         val tlsStr = jsonObj["tls"]?.jsonPrimitive?.content ?: ""
         val isTls = tlsStr.equals("tls", true) || tlsStr == "1" || tlsStr.equals("true", true)
-        val sni = jsonObj["sni"]?.jsonPrimitive?.content?.ifBlank { null }
+        val rawSni = jsonObj["sni"]?.jsonPrimitive?.content?.ifBlank { null }
             ?: hostHeader.ifBlank { null }
             ?: host
+        val sni = sanitizeSni(rawSni, host)
         val alpnStr = jsonObj["alpn"]?.jsonPrimitive?.content ?: ""
         val alpnList = if (alpnStr.isNotEmpty()) alpnStr.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
 
@@ -237,7 +239,8 @@ object LinkParser {
         }
 
         val name = decodeFragment(uri.fragment, "Trojan-$host:$port")
-        val sni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val rawSni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val sni = sanitizeSni(rawSni, host)
         val fp = uri.getQueryParameter("fp")?.ifBlank { null } ?: uri.getQueryParameter("fingerprint")?.ifBlank { null } ?: "chrome"
         val alpnParam = uri.getQueryParameter("alpn")
         val alpnList = if (!alpnParam.isNullOrEmpty()) alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() } else emptyList()
@@ -326,7 +329,8 @@ object LinkParser {
         val host = uri.host
         val port = if (uri.port > 0) uri.port else 443
         val name = decodeFragment(uri.fragment, "Hy2-$host:$port")
-        val sni = uri.getQueryParameter("sni") ?: host
+        val rawSni = uri.getQueryParameter("sni") ?: host
+        val sni = sanitizeSni(rawSni, host)
         val fp = uri.getQueryParameter("fp")?.ifBlank { null } ?: uri.getQueryParameter("fingerprint")?.ifBlank { null } ?: "chrome"
         val insecure = isAllowInsecure(uri)
         val alpnParam = uri.getQueryParameter("alpn")
@@ -348,6 +352,16 @@ object LinkParser {
             )
         )
         return Result.Success(profile)
+    }
+
+    private fun sanitizeSni(rawSni: String?, fallbackHost: String): String {
+        if (rawSni.isNullOrBlank()) return fallbackHost
+        val trimmed = rawSni.trim()
+        if (trimmed.contains("://") || trimmed.contains("/") || trimmed.contains(" ")) {
+            val stripped = trimmed.substringAfter("://").substringBefore("/").substringBefore(" ").substringBefore(":")
+            return if (stripped.isNotBlank()) stripped else fallbackHost
+        }
+        return trimmed
     }
 
     private fun isAllowInsecure(uri: SimpleUri): Boolean {

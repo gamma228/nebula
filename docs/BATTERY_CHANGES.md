@@ -45,12 +45,10 @@ All changes maintain complete functional parity, multi-protocol support (VLESS/R
 ### 3. Redundant JNI Subscriptions in `CommandClient`
 - **File:** `app/src/main/java/app/nebula/vpn/core/proxy/LibboxCore.kt`
 - **Root Cause:**
-  `LibboxCore.initCommandClient()` registered:
-  - `addCommand(Libbox.CommandGroup)`
-  - `addCommand(Libbox.CommandConnections)`
-  However, the Java callbacks `writeGroups` and `writeConnectionEvents` were completely empty stubs. The sing-box Go core spent CPU cycles continually serializing outbound group states and active TCP/UDP connection maps across JNI only for Java to discard them.
+  `LibboxCore.initCommandClient()` registered `addCommand(Libbox.CommandConnections)`.
+  The Java callback `writeConnectionEvents` was an empty stub, but the sing-box Go core spent CPU cycles continually serializing active TCP/UDP connection maps across JNI only for Java to discard them.
 - **Fix:**
-  Removed `CommandGroup` and `CommandConnections` from `clientOptions`. Sing-box core now only computes Status telemetry.
+  Removed `CommandConnections` from `clientOptions`. `CommandGroup` is retained for selector outbound management.
 
 ---
 
@@ -104,10 +102,12 @@ All changes maintain complete functional parity, multi-protocol support (VLESS/R
 
 ---
 
-### 8. TCP Fast Open & Outbound Optimizations
+### 8. Removal of TCP Fast Open to Prevent SYN Packet Drops
 - **File:** `app/src/main/java/app/nebula/vpn/core/builder/SingBoxConfigBuilder.kt`
-- **Improvement:**
-  Added `"tcp_fast_open": true` across Shadowsocks, VLESS, VMess, and Trojan outbounds. This eliminates one round-trip time (RTT) on subsequent handshakes, reducing cellular radio transmission time and CPU modem power.
+- **Root Cause:**
+  Enabling `tcp_fast_open` caused mobile cellular carriers in Russia (MTS, MegaFon, Beeline, Tele2) to silently drop SYN packets with data payload, causing connection drops, stalled handshakes, and repeated retries that drained battery.
+- **Fix:**
+  Completely stripped `tcp_fast_open` from sing-box outbound configurations.
 
 ---
 
@@ -117,8 +117,8 @@ All changes maintain complete functional parity, multi-protocol support (VLESS/R
   - `app/src/main/java/app/nebula/vpn/data/datastore/SettingsDataStore.kt`
   - `app/src/main/java/app/nebula/vpn/data/repository/SettingsRepository.kt`
 - **Features:**
-  - **Balanced (Default):** 3s interactive speed updates; 60s background sample; static notification in sleep; `warn` log level.
-  - **Battery Saver:** 5s interactive updates; 0s background (fully frozen in sleep); `error` log level; maximum endurance.
+  - **Balanced (Default):** 1s interactive speed updates when visible; 0s background (frozen when screen is off); static notification in sleep; `warn` log level.
+  - **Battery Saver:** 2s interactive updates; 0s background (fully frozen in sleep); `error` log level; maximum endurance.
   - **High Performance:** 1s interactive updates; 5s background; `info` log level.
   - **Speed in Notification Toggle:** Allows users to turn off speed readouts in notifications entirely, preventing all notification IPC even while screen is on.
 
@@ -135,3 +135,30 @@ All changes maintain complete functional parity, multi-protocol support (VLESS/R
   - Interactive Power Profile switcher chips (`Balanced`, `Battery Saver`, `High Performance`).
   - Instant toggle for Notification Speed.
   - Real-time diagnostic parameters summary.
+
+---
+
+### 11. Elimination of `Thread.sleep` in Production
+- **File:** `app/src/main/java/app/nebula/vpn/core/proxy/LibboxCore.kt`
+- **Root Cause:**
+  `Thread.sleep(100)` was called inside `initCommandClient()` retry loop, blocking thread workers synchronously.
+- **Fix:**
+  Converted to `suspend fun` using non-blocking coroutine `delay(100L)`.
+
+---
+
+### 12. Native Go Runtime Concurrency Cap (`GOMAXPROCS = 2`)
+- **Files:**
+  - `app/src/main/java/app/nebula/vpn/NebulaApp.kt`
+  - `app/src/main/java/app/nebula/vpn/vpn/ProxyVpnService.kt`
+- **Root Cause:**
+  On 8-core mobile processors, the Go runtime by default sets `GOMAXPROCS = 8`, allowing background goroutines to wake and spin up to 8 CPU cores concurrently under network load.
+- **Fix:**
+  Invoked `android.system.Os.setenv("GOMAXPROCS", "2", true)` at application startup and service initialization.
+
+---
+
+### 13. System Chronometer for Zero-Wakeup Lockscreen Telemetry
+- **File:** `app/src/main/java/app/nebula/vpn/vpn/ProxyVpnService.kt`
+- **Fix:**
+  Added `.setUsesChronometer(true)` and `.setShowWhen(true)` to notification builders. Android SystemUI renders the ticking connection duration natively on the lockscreen and status bar without dispatching a single app process wakeup.

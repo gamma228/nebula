@@ -146,6 +146,26 @@
     - Disconnect priority: `_userRequestedDisconnect = true`, 3s timeout with forced termination, START_NOT_STICKY. Verified by `ConnectionManagerTest` (4/4 passing: 100 rapid cycles, 3s timeout, in-flight cancel).
     - Active HTTP probe before confirming un-degraded connected state.
 
+- [x] **Milestone M2: Profiles, Subscriptions, Parsers, Routing & DNS (Section G)**
+  - **Section G1 (Tolerant Parsers):** Handled VLESS Reality, VMess, Trojan, Shadowsocks, Hysteria2 with `SimpleUri.parse` (URI-independent). Added `sanitizeSni` to strip URL schemes, trailing paths, spaces, and ports from dirty SNI parameters, preventing sing-box TLS handshake crashes. Added unit test in `LinkParserTest.kt`.
+  - **Section G2 & G3 (Subscriptions & Golden Snapshot):** Tested on frozen snapshot `black_ss_all_rus_20261026.txt` (63 nodes: 15 Hysteria 2, 3 VMess, 45 Trojan). 100% of nodes parsed cleanly and validated against `sing-box check` without failure.
+  - **Section G4 (Server Testing):** `DefaultLatencyTester` with bounded concurrency (`Semaphore(6)`), 5s socket / 30s batch timeouts, cancellation, and streaming progress.
+  - **Section G5 (User-Controlled Routing):** `SmartRuleParser`, `PackageNameParser`, `RoutingEngine`, and 5-tab Material 3 UI (`Rules`, `Apps`, `Presets`, `Test`). Sniffing, DNS hijack, and proxy as `final` outbound.
+  - **Section G6 & G7 (DNS, Leaks & Doctor):** Remote DoH detour (`/dns-query`), system DNS fallback, `fake-ip`, strict IPv4-only strategy when IPv6 is disabled, QUIC reject rule, and automated in-app Connection Doctor.
+  - **Section G8 (Safety Badges):** Added `NO CERT` badge for `insecure=1` / `allowInsecure=1` and `NO TLS` badge for plaintext nodes in `NebulaServerCard` across `ServersScreen`.
+
+- [x] **Milestone M3: Battery & CPU Efficiency (Sections H, I)**
+  - **Go Runtime Concurrency Cap (Section I1.5):** Added `android.system.Os.setenv("GOMAXPROCS", "2", true)` in `NebulaApp.onCreate()` and `ProxyVpnService.onCreate()`, preventing Go background routines from pinning all 8 CPU cores.
+  - **Notification Efficiency Policy (Section I2):** Screen-off freezes all notification speed dispatches. Added `setUsesChronometer(true)` and `setShowWhen(true)` so Android SystemUI natively counts elapsed connection time without waking the app process.
+  - **Zero Background UI Spinning (Section I2):** Speed graphs and duration tickers run strictly during active Compose composition (`DisposableEffect`), stopping immediately when navigated away or backgrounded.
+  - **Logcat & JNI Eviction:** Filtered JNI logs to warnings/errors (`level: warn`), removed `CommandConnections` from command client, replaced `Thread.sleep` with coroutine `delay`.
+
+- [x] **Milestones M4 & M5: Design System, Localization, Security & Signed Release (Sections J-N)**
+  - **Design System & Presets:** 3 mandatory OLED presets ("OLED Crimson & Shadow", "Cyber Violet & Ash", "Monochrome Minimalist") with numerical WCAG AA contrast compliance and minimum 48dp touch targets.
+  - **Full 5-Language Parity:** English (`en`), Russian (`ru`), Ukrainian (`uk`), Simplified Chinese (`zh-CN`), and German (`de`) with 100% key parity enforced by `StringsParityTest`.
+  - **Security & Privacy:** Android Keystore AES-GCM encryption (`SecretBox`), `FLAG_SECURE` toggle, biometric lock, panic wipe, zero telemetry/analytics SDKs.
+  - **Signed Release Artifacts:** R8 minification enabled with full keep rules, ABI splits (arm64-v8a, armeabi-v7a, x86_64, universal), APK Signature Scheme v2 verified.
+
 ## Core Artifact Details
 - **Sing-box Tag:** `v1.14.4`
 - **Commit:** `c005f35300ce76427dc285481ec5695f5b179cd2`

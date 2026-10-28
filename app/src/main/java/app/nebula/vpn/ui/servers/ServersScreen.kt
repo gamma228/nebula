@@ -607,7 +607,9 @@ fun ServersScreen(
                                     onSelect = { viewModel.selectProfile(profile.id) },
                                     onFavoriteToggle = { viewModel.toggleFavorite(profile.id) },
                                     onMenuClick = { showItemMenu = true },
-                                    onPingClick = { viewModel.pingSingleProfile(profile.id) }
+                                    onPingClick = { viewModel.pingSingleProfile(profile.id) },
+                                    isInsecure = profile.tls.insecure,
+                                    hasTls = profile.tls.enabled
                                 )
 
                                 DropdownMenu(
@@ -917,7 +919,9 @@ private fun SubscriptionAccordion(
                                 onSelect = { onSelectProfile(profile.id) },
                                 onFavoriteToggle = { onToggleFavorite(profile.id) },
                                 onMenuClick = { showSubItemMenu = true },
-                                onPingClick = { onPingProfile(profile.id) }
+                                onPingClick = { onPingProfile(profile.id) },
+                                isInsecure = profile.tls.insecure,
+                                hasTls = profile.tls.enabled
                             )
 
                             DropdownMenu(

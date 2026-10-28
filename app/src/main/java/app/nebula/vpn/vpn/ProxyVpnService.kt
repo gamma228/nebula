@@ -92,6 +92,9 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     override fun onCreate() {
         super.onCreate()
+        try {
+            android.system.Os.setenv("GOMAXPROCS", "2", true)
+        } catch (_: Exception) {}
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
         isScreenInteractive = powerManager?.isInteractive ?: true
 
@@ -625,7 +628,10 @@ class ProxyVpnService : VpnService(), TunProvider {
             .setContentIntent(pendingIntent)
             .addAction(0, "Disconnect", disconnectIntent)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setUsesChronometer(true)
+            .setShowWhen(true)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -845,6 +851,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
+                .setUsesChronometer(true)
+                .setShowWhen(true)
                 .build()
 
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager

@@ -15,6 +15,10 @@ class NebulaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Cap Go runtime concurrency to 2 cores to eliminate runaway CPU spinning on 8-core mobile chipsets
+        try {
+            android.system.Os.setenv("GOMAXPROCS", "2", true)
+        } catch (_: Exception) {}
         createNotificationChannels()
     }
 

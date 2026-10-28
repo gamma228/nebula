@@ -60,7 +60,9 @@ fun NebulaServerCard(
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier,
     countryCode: String? = null,
-    onPingClick: (() -> Unit)? = null
+    onPingClick: (() -> Unit)? = null,
+    isInsecure: Boolean = false,
+    hasTls: Boolean = true
 ) {
     val haptic = LocalHapticFeedback.current
     val colors = NebulaTheme.colors
@@ -169,6 +171,36 @@ fun NebulaServerCard(
                             style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = colors.primary
                         )
+                    }
+
+                    if (isInsecure) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(colors.statusWarning.copy(alpha = 0.2f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "NO CERT",
+                                style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.statusWarning
+                            )
+                        }
+                    } else if (!hasTls) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(colors.statusError.copy(alpha = 0.2f))
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "NO TLS",
+                                style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colors.statusError
+                            )
+                        }
                     }
                 }
             }
