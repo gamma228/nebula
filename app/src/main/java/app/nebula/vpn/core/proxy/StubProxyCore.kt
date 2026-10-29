@@ -37,4 +37,8 @@ class StubProxyCore : ProxyCore {
     override suspend fun reloadConfig(configJson: String) {
         // No-op for stub
     }
+
+    override fun setScreenInteractive(isInteractive: Boolean) {
+        // No-op for stub
+    }
 }

@@ -60,6 +60,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import app.nebula.vpn.R
 import app.nebula.vpn.core.model.ConnectionState
 import app.nebula.vpn.core.model.ProxyProfile
@@ -77,9 +80,22 @@ fun HomeScreen(
     onRequestConnect: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    DisposableEffect(Unit) {
-        viewModel.onHomeScreenVisible()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
+                    viewModel.onHomeScreenVisible()
+                }
+                Lifecycle.Event.ON_STOP, Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.onHomeScreenHidden()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.onHomeScreenHidden()
         }
     }

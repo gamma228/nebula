@@ -49,4 +49,8 @@ class XrayCore : ProxyCore {
     override suspend fun reloadConfig(configJson: String) {
         throw IllegalStateException("REAL ENGINE NOT INTEGRATED: Xray-core is not running.")
     }
+
+    override fun setScreenInteractive(isInteractive: Boolean) {
+        // No-op for unbundled core
+    }
 }

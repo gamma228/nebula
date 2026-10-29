@@ -6,6 +6,8 @@ enum class PowerProfile(
     val interactiveIntervalMs: Long,
     val backgroundIntervalMs: Long,
     val coreLogLevel: String,
+    val tunStack: String = "mixed",
+    val endpointIndependentNat: Boolean = false,
     val description: String
 ) {
     BALANCED(
@@ -14,6 +16,8 @@ enum class PowerProfile(
         interactiveIntervalMs = 1000L,
         backgroundIntervalMs = 0L,
         coreLogLevel = "warn",
+        tunStack = "mixed",
+        endpointIndependentNat = false,
         description = "Smooth 1s live speed while screen is on; completely freezes updates when screen is off to conserve 100% battery."
     ),
     BATTERY_SAVER(
@@ -22,6 +26,8 @@ enum class PowerProfile(
         interactiveIntervalMs = 2000L,
         backgroundIntervalMs = 0L,
         coreLogLevel = "error",
+        tunStack = "mixed",
+        endpointIndependentNat = false,
         description = "Maximum battery endurance. 2s sampling when active, error-only logging, notification speed disabled when screen is locked."
     ),
     HIGH_PERFORMANCE(
@@ -30,6 +36,8 @@ enum class PowerProfile(
         interactiveIntervalMs = 1000L,
         backgroundIntervalMs = 5000L,
         coreLogLevel = "info",
+        tunStack = "mixed",
+        endpointIndependentNat = true,
         description = "Continuous 1s telemetry and diagnostics. Higher CPU usage."
     );
 

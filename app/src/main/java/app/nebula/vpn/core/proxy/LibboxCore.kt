@@ -181,6 +181,15 @@ class LibboxCore(
         Unit
     }
 
+    override fun setScreenInteractive(isInteractive: Boolean) {
+        try {
+            commandServer?.recordScreenState(isInteractive)
+            android.util.Log.d("LibboxCore", "Notified commandServer of screen interactive: $isInteractive")
+        } catch (e: Exception) {
+            android.util.Log.w("LibboxCore", "recordScreenState failed: ${e.message}")
+        }
+    }
+
     override suspend fun selectOutbound(groupTag: String, outboundTag: String): Boolean = withContext(Dispatchers.IO) {
         val client = commandClient ?: return@withContext false
         try {
@@ -203,11 +212,8 @@ class LibboxCore(
     private suspend fun initCommandClient() {
         try {
             val clientOptions = CommandClientOptions().apply {
-                statusInterval = 1000 // 1s updates for smooth UI when active
-                addCommand(Libbox.CommandStatus)
-                addCommand(Libbox.CommandLog)
+                statusInterval = 0 // Disable background JNI status polling ticker in Go runtime
                 addCommand(Libbox.CommandGroup) // Required for selector outbound management and hot-switching
-                // CommandConnections omitted to eliminate high-frequency JNI connection event marshaling overhead
             }
 
             val clientHandler = object : CommandClientHandler {
@@ -229,24 +235,7 @@ class LibboxCore(
 
                 override fun writeGroups(groups: OutboundGroupIterator?) {}
 
-                override fun writeLogs(logs: LogIterator?) {
-                    if (logs == null) return
-                    synchronized(logBuffer) {
-                        while (logs.hasNext()) {
-                            val entry = logs.next()
-                            val line = entry?.message ?: ""
-                            if (line.isNotBlank()) {
-                                if (line.contains("error", ignoreCase = true) || line.contains("warn", ignoreCase = true)) {
-                                    android.util.Log.w("SingBoxCore", line)
-                                }
-                                logBuffer.addLast(line)
-                                if (logBuffer.size > 250) {
-                                    logBuffer.removeFirst()
-                                }
-                            }
-                        }
-                    }
-                }
+                override fun writeLogs(logs: LogIterator?) {}
 
                 override fun writeOutbounds(outbounds: OutboundGroupItemIterator?) {}
 
@@ -288,6 +277,10 @@ class LibboxCore(
 
     private var defaultInterfaceMonitor: InterfaceUpdateListener? = null
     private var defaultNetworkCallback: ConnectivityManager.NetworkCallback? = null
+    @Volatile private var lastReportedName: String? = null
+    @Volatile private var lastReportedIndex: Int = -2
+    @Volatile private var lastReportedExpensive: Boolean = false
+    @Volatile private var lastReportedConstrained: Boolean = false
 
     private fun notifyDefaultInterface(listener: InterfaceUpdateListener) {
         try {
@@ -358,7 +351,21 @@ class LibboxCore(
                 -1
             }
 
-            android.util.Log.i("LibboxCore", "updateDefaultInterface: name='$finalName', index=$index, expensive=$isExpensive, constrained=$isConstrained")
+            // DEDUPLICATION: Return early if state has not changed to eliminate Go routing thrashing
+            if (finalName == lastReportedName &&
+                index == lastReportedIndex &&
+                isExpensive == lastReportedExpensive &&
+                isConstrained == lastReportedConstrained
+            ) {
+                return
+            }
+
+            lastReportedName = finalName
+            lastReportedIndex = index
+            lastReportedExpensive = isExpensive
+            lastReportedConstrained = isConstrained
+
+            android.util.Log.i("LibboxCore", "updateDefaultInterface changed: name='$finalName', index=$index, expensive=$isExpensive, constrained=$isConstrained")
             listener.updateDefaultInterface(finalName, index, isExpensive, isConstrained)
         } catch (e: Exception) {
             android.util.Log.e("LibboxCore", "Failed to notify default interface: ${e.message}", e)
@@ -369,7 +376,7 @@ class LibboxCore(
         return object : PlatformInterface {
             override fun autoDetectInterfaceControl(fd: Int) {
                 val protected = tunProvider.protect(fd)
-                android.util.Log.i("LibboxCore", "autoDetectInterfaceControl: fd=$fd, protected=$protected")
+                android.util.Log.d("LibboxCore", "autoDetectInterfaceControl: fd=$fd, protected=$protected")
             }
 
             override fun cancelNotification(tag: String?, id: Int) {}
@@ -386,6 +393,8 @@ class LibboxCore(
                     defaultNetworkCallback = null
                 }
                 defaultInterfaceMonitor = null
+                lastReportedName = null
+                lastReportedIndex = -2
             }
 
             override fun closeNeighborMonitor(listener: NeighborUpdateListener?) {}
@@ -496,15 +505,15 @@ class LibboxCore(
                     override fun onLinkPropertiesChanged(network: Network, linkProperties: LinkProperties) {
                         defaultInterfaceMonitor?.let { notifyDefaultInterface(it) }
                     }
-                    override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-                        defaultInterfaceMonitor?.let { notifyDefaultInterface(it) }
-                    }
+                    // onCapabilitiesChanged is intentionally omitted:
+                    // RSSI/bandwidth/validation updates on cellular do not change physical default interface
+                    // and previously fired multiple times per second causing severe CPU spinning in Go.
                 }
                 defaultNetworkCallback = callback
                 try {
                     val request = NetworkRequest.Builder()
                         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
                         .build()
                     connectivityManager.registerNetworkCallback(request, callback)
                 } catch (e: Exception) {

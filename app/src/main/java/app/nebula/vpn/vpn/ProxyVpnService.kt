@@ -93,7 +93,8 @@ class ProxyVpnService : VpnService(), TunProvider {
     override fun onCreate() {
         super.onCreate()
         try {
-            android.system.Os.setenv("GOMAXPROCS", "2", true)
+            android.system.Os.setenv("GOMAXPROCS", "1", true)
+            android.system.Os.setenv("GODEBUG", "madvdontneed=1", true)
         } catch (_: Exception) {}
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
         isScreenInteractive = powerManager?.isInteractive ?: true
@@ -136,6 +137,7 @@ class ProxyVpnService : VpnService(), TunProvider {
     }
 
     private fun onScreenStateChanged(screenOn: Boolean) {
+        proxyCore.setScreenInteractive(screenOn)
         if (!screenOn) {
             // Screen is OFF: freeze notification speed updates immediately to let CPU sleep
             val name = currentProfileName
@@ -238,13 +240,16 @@ class ProxyVpnService : VpnService(), TunProvider {
                             localPortMixedInbound = 2080,
                             ipv6Enabled = ipv6,
                             blockQuic = blockQuic,
-                            logLevel = profileEnum.coreLogLevel
+                            logLevel = profileEnum.coreLogLevel,
+                            tunStack = profileEnum.tunStack,
+                            endpointIndependentNat = profileEnum.endpointIndependentNat
                         )
                     )
                     android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile.name}, logLevel=${profileEnum.coreLogLevel}, config length=${configJson.length}")
 
                     // Hand-off: start core with this as TunProvider
                     proxyCore.start(configJson, this@ProxyVpnService)
+                    proxyCore.setScreenInteractive(isScreenInteractive)
 
                     // Cancel previous collectors if any
                     stateCollectorJob?.cancel()
@@ -348,7 +353,9 @@ class ProxyVpnService : VpnService(), TunProvider {
                                 localPortMixedInbound = 2080,
                                 ipv6Enabled = ipv6,
                                 blockQuic = blockQuic,
-                                logLevel = profileEnum.coreLogLevel
+                                logLevel = profileEnum.coreLogLevel,
+                                tunStack = profileEnum.tunStack,
+                                endpointIndependentNat = profileEnum.endpointIndependentNat
                             )
                         )
                         proxyCore.reloadConfig(configJson)

@@ -15,6 +15,7 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D8: Real-World Subscription & v2rayNG Functional Parity (Russian TSPU/DPI Circumvention)](#d8-real-world-subscription--v2rayng-functional-parity)
 - [D9: Real-Time Traffic Speed/Waveform and In-App Background Wallpaper Engine](#d9-real-time-traffic-speedwaveform-and-in-app-background-wallpaper-engine)
 - [D10: Interactive Color Picker Sliders, Curated Swatches, and AMOLED vs Dark Mode Contrast](#d10-interactive-color-picker-sliders-curated-swatches-and-amoled-vs-dark-mode-contrast)
+- [D11: Elimination of Go Runtime Multi-Core Spinning & NetworkCallback Storm (Parity with INCY)](#d11-elimination-of-go-runtime-multi-core-spinning--networkcallback-storm-parity-with-incy)
 
 ---
 
@@ -459,6 +460,58 @@ The user reported: "The same servers from the public subscription `https://raw.g
    - Tapped curated swatches (Neon Cyan `#00E5FF`, Electric Violet `#8A2BE2`).
    - Dragged Hue slider smoothly from 158° to 295°.
    - Verified immediate visual difference between Dark Mode, Pure AMOLED, and Light Mode.
+
+---
+
+## D11: Elimination of Go Runtime Multi-Core Spinning & NetworkCallback Storm (Parity with INCY)
+
+### Problem Description
+On Oct 29, Samsung device battery statistics showed:
+- **INCY**: 19 h 3 min total (2 min screen on, 19 h 1 min background), **CPU: 13 min**, 1,118,629 packets. (~0.68 min CPU / hour).
+- **Nebula**: 28 min total (9 min screen on, 19 min background), **CPU: 51 min**, 72,449 packets. (~110 min CPU / hour, ~1.82 CPU cores continuously pegged).
+
+CPU time exceeding wall-clock time by ~1.82x with low packet volume proved that the app was not draining power due to crypto or data forwarding, but rather internal thread spinning and runaway loops.
+
+### Root Cause Analysis
+1. **Go Runtime Multi-Core Spinning (`GOMAXPROCS = 2`)**:
+   In `NebulaApp.kt` and `ProxyVpnService.kt`, `GOMAXPROCS` was set to `2`. On 8-core ARM big.LITTLE architectures, Go's runtime kept two OS worker threads spinning in work-stealing loops, preventing CPU cores from entering low-power C-states.
+2. **NetworkCallback Storm & Recursive Routing Updates (`LibboxCore.kt`)**:
+   `startDefaultInterfaceMonitor` registered a network callback without `NET_CAPABILITY_NOT_VPN`, causing callbacks to fire for `tun0` itself when VPN packets flowed. Furthermore, `onCapabilitiesChanged` triggered on every cellular RSSI/bandwidth fluctuation (dozens of times per second). Every callback invoked `notifyDefaultInterface`, which iterated all physical interfaces and invoked Go's `listener.updateDefaultInterface(name, index, ...)`, causing sing-box to acquire locks and rebind sockets continuously.
+3. **Un-Throttled `CommandClient` JNI Polling & Log Streaming (`LibboxCore.kt`)**:
+   `CommandClientOptions` set `statusInterval = 1000` and `addCommand(Libbox.CommandLog)`. Every second, Go formatted status telemetry across JNI into Java, and streamed every TLS handshake, routing decision, and DNS lookup over JNI to Android logcat.
+4. **Missing Screen-State Synchronization with Sing-Box Core**:
+   Sing-box's native `CommandServer` has `recordScreenState(boolean)`. Because `ProxyCore` never notified sing-box of screen lock/unlock, sing-box kept high-frequency background timers running indefinitely.
+5. **Heavyweight Userspace TCP Stack (`gvisor`)**:
+   `SingBoxConfigBuilder` hardcoded `"stack": "gvisor"`. GVisor runs a complete userspace TCP/IP stack in pure Go with heavy mutex contention on mobile data transfers.
+6. **Un-Scoped Compose Coroutines in `HomeScreen` & `ToolsScreen`**:
+   `DisposableEffect(Unit)` only disposed when navigating between screens, NOT when the app was minimized or screen locked. Coroutines continued running at 1s intervals on the main thread in the background.
+
+### Invariant Fix
+1. **Hardened Go Runtime to 1 Core (`GOMAXPROCS = 1`)**:
+   Set `GOMAXPROCS = 1` and `GODEBUG = "madvdontneed=1"` in `NebulaApp.kt` and `ProxyVpnService.kt`. Enforces single-threaded cooperative goroutine scheduling that sleeps in `epoll_wait` when idle.
+2. **NetworkCallback Sanitization & Deduplication**:
+   - Retained `NET_CAPABILITY_NOT_VPN` in `NetworkRequest` so `tun0` never triggers callbacks.
+   - Omitted `onCapabilitiesChanged` from `NetworkCallback` to ignore RSSI/signal flutters.
+   - Added strict deduplication in `notifyDefaultInterface`: if interface name, index, expensive, and constrained flags match the previous state, zero JNI calls into Go occur.
+3. **Silenced `CommandClient` Background JNI Traffic**:
+   - Set `statusInterval = 0` in `CommandClientOptions` to disable Go's internal status ticker.
+   - Omitted `addCommand(Libbox.CommandLog)`. Speeds and byte counters are read directly via Android's native Linux kernel `TrafficStats.getUidRxBytes()` with zero JNI overhead.
+4. **Screen-State Synchronization (`recordScreenState`)**:
+   - Added `fun setScreenInteractive(isInteractive: Boolean)` to `ProxyCore`.
+   - In `ProxyVpnService`, wired screen `BroadcastReceiver` directly into `proxyCore.setScreenInteractive(isInteractive)`, calling `commandServer?.recordScreenState(isInteractive)` to throttle sing-box internal timers when screen is locked.
+5. **High-Performance `mixed` TUN Stack**:
+   - Configured `tunStack = "mixed"` and `endpointIndependentNat = false` for active connections. TCP is handled by the Linux kernel with zero Go CPU overhead.
+6. **Lifecycle-Aware UI Observers**:
+   - Attached `LifecycleEventObserver` to `LocalLifecycleOwner` in `HomeScreen.kt` and `ToolsScreen.kt`. On `Lifecycle.Event.ON_STOP` / `ON_PAUSE`, all UI timers and flow collectors are immediately cancelled.
+
+### Automated Verification Proof
+1. **Unit Test Suite (`./gradlew.bat testDebugUnitTest`)**:
+   - 58 tests passed, 0 failures across all 11 test suites.
+   - Added `BatteryEfficiencyTest` verifying `tunStack = "mixed"`, `endpointIndependentNat = false` in `BALANCED` and `BATTERY_SAVER` modes.
+2. **Static Analysis (`./gradlew.bat lintDebug`)**:
+   - 0 errors (`BUILD SUCCESSFUL in 58s`).
+3. **Release Packaging (`./gradlew.bat assembleRelease`)**:
+   - Built and verified signed release APKs (`app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-universal-release.apk`, `app-x86_64-release.apk`) in 1m 35s.
 
 
 

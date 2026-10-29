@@ -47,6 +47,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import app.nebula.vpn.R
 import app.nebula.vpn.core.model.PowerProfile
 import app.nebula.vpn.ui.theme.NebulaTheme
@@ -56,9 +59,22 @@ fun ToolsScreen(
     viewModel: ToolsViewModel,
     modifier: Modifier = Modifier
 ) {
-    DisposableEffect(Unit) {
-        viewModel.startReportTicker()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START, Lifecycle.Event.ON_RESUME -> {
+                    viewModel.startReportTicker()
+                }
+                Lifecycle.Event.ON_STOP, Lifecycle.Event.ON_PAUSE -> {
+                    viewModel.stopReportTicker()
+                }
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
             viewModel.stopReportTicker()
         }
     }

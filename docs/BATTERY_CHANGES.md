@@ -162,3 +162,67 @@ All changes maintain complete functional parity, multi-protocol support (VLESS/R
 - **File:** `app/src/main/java/app/nebula/vpn/vpn/ProxyVpnService.kt`
 - **Fix:**
   Added `.setUsesChronometer(true)` and `.setShowWhen(true)` to notification builders. Android SystemUI renders the ticking connection duration natively on the lockscreen and status bar without dispatching a single app process wakeup.
+
+---
+
+### 14. Native Go Runtime Concurrency Hardened to 1 Core (`GOMAXPROCS = 1`) & `GODEBUG=madvdontneed=1`
+- **Files:**
+  - `app/src/main/java/app/nebula/vpn/NebulaApp.kt`
+  - `app/src/main/java/app/nebula/vpn/vpn/ProxyVpnService.kt`
+- **Root Cause:**
+  When `GOMAXPROCS` was set to 2, Go maintained multiple OS threads executing work-stealing scheduler loops. On ARM big.LITTLE architectures, timer wakeups caused two CPU cores to stay awake concurrently (~1.82 cores active continuously, yielding 51 min CPU in 28 min wall clock).
+- **Fix:**
+  Set `GOMAXPROCS = 1` and `GODEBUG = "madvdontneed=1"`. Go goroutines multiplex cooperatively on a single thread that immediately enters Linux `epoll_wait` sleep when idle, physically preventing multi-core spinning while still easily achieving >500 Mbps throughput.
+
+---
+
+### 15. Elimination of NetworkCallback Storm & Infinite VPN Loop
+- **File:** `app/src/main/java/app/nebula/vpn/core/proxy/LibboxCore.kt`
+- **Root Cause:**
+  1. `startDefaultInterfaceMonitor` registered a network callback without `NET_CAPABILITY_NOT_VPN`, causing Android to report events for `tun0` (the VPN itself).
+  2. `onCapabilitiesChanged` was calling `notifyDefaultInterface` on every cellular RSSI, signal strength, and bandwidth probe (dozens of times per second).
+  3. Inside `notifyDefaultInterface`, every invocation scanned all network interfaces and unconditionally invoked Go's `listener.updateDefaultInterface(name, index, expensive, constrained)`. In sing-box, this acquired routing locks, flushed interface caches, and re-evaluated socket bindings repeatedly.
+- **Fix:**
+  1. Kept `NET_CAPABILITY_NOT_VPN` in the `NetworkRequest` so the VPN interface never triggers callbacks.
+  2. Omitted `onCapabilitiesChanged` from `NetworkCallback`. Network interface updates only run on physical state transitions (`onAvailable`, `onLost`, `onLinkPropertiesChanged`).
+  3. Added strict state deduplication against `lastReportedName`, `lastReportedIndex`, `lastReportedExpensive`, and `lastReportedConstrained`. If physical network attributes are unchanged, zero JNI calls into Go occur.
+
+---
+
+### 16. Elimination of Background JNI Polling & Log Streaming in `CommandClient`
+- **File:** `app/src/main/java/app/nebula/vpn/core/proxy/LibboxCore.kt`
+- **Root Cause:**
+  `initCommandClient()` registered `addCommand(Libbox.CommandStatus)` with a 1000ms timer, and `addCommand(Libbox.CommandLog)`. Every second, Go formatted and marshaled status objects across JNI into Java, and streamed every TLS handshake, routing decision, and DNS lookup over JNI to Android logcat.
+- **Fix:**
+  Set `statusInterval = 0` (disabling Go's internal status timer) and omitted `CommandLog`. Traffic speeds and byte counts are measured directly using Android's native Linux kernel `TrafficStats.getUidRxBytes()` with zero JNI/Go overhead.
+
+---
+
+### 17. Deep Screen-State Synchronization with `CommandServer`
+- **Files:**
+  - `app/src/main/java/app/nebula/vpn/core/proxy/ProxyCore.kt`
+  - `app/src/main/java/app/nebula/vpn/core/proxy/LibboxCore.kt`
+  - `app/src/main/java/app/nebula/vpn/vpn/ProxyVpnService.kt`
+- **Features:**
+  Wired `ProxyVpnService`'s screen state `BroadcastReceiver` (`Intent.ACTION_SCREEN_OFF` / `ON`) to `proxyCore.setScreenInteractive(isInteractive)`, invoking `commandServer?.recordScreenState(isInteractive)`. When the phone is locked, sing-box throttles internal connection timers and enters low-power sleep mode.
+
+---
+
+### 18. High-Efficiency `mixed` TUN Stack
+- **Files:**
+  - `app/src/main/java/app/nebula/vpn/core/builder/SingBoxConfigBuilder.kt`
+  - `app/src/main/java/app/nebula/vpn/core/model/PowerProfile.kt`
+  - `app/src/main/java/app/nebula/vpn/vpn/ProxyVpnService.kt`
+- **Features:**
+  Replaced userspace `gvisor` TCP stack with `mixed` in active proxy configurations. In `mixed` mode, TCP connections are handled directly by the Linux kernel stack, eliminating userspace sliding window, buffer, and mutex overhead in Go.
+
+---
+
+### 19. Compose Activity Lifecycle Synchronization
+- **Files:**
+  - `app/src/main/java/app/nebula/vpn/ui/home/HomeScreen.kt`
+  - `app/src/main/java/app/nebula/vpn/ui/tools/ToolsScreen.kt`
+- **Root Cause:**
+  Un-scoped `DisposableEffect(Unit)` only triggered when navigating between composables, remaining active when the app was minimized or screen locked.
+- **Fix:**
+  Attached `LifecycleEventObserver` to `LocalLifecycleOwner`. On `Lifecycle.Event.ON_STOP` / `ON_PAUSE`, UI timers and flow collectors are cancelled immediately, eliminating background Compose recompositions.

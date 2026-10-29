@@ -44,7 +44,9 @@ object SingBoxConfigBuilder {
         val localPortMixedInbound: Int? = null, // Optional local SOCKS/HTTP inbound
         val ipv6Enabled: Boolean = false,
         val blockQuic: Boolean = true,
-        val logLevel: String = "warn"
+        val logLevel: String = "warn",
+        val tunStack: String = "gvisor",
+        val endpointIndependentNat: Boolean = false
     )
 
     fun build(config: BuildConfig): String {
@@ -201,8 +203,8 @@ object SingBoxConfigBuilder {
                     put("mtu", config.mtu)
                     put("auto_route", true)
                     put("strict_route", config.killSwitchEnabled)
-                    put("endpoint_independent_nat", true)
-                    put("stack", "gvisor")
+                    put("endpoint_independent_nat", config.endpointIndependentNat)
+                    put("stack", config.tunStack)
                 })
 
                 if (config.localPortMixedInbound != null && config.localPortMixedInbound > 0) {
@@ -265,6 +267,7 @@ object SingBoxConfigBuilder {
             val finalTarget = if (allProfilesList.isNotEmpty()) "select" else "direct"
 
             putJsonObject("route") {
+                put("auto_detect_interface", true)
                 put("default_domain_resolver", "dns-local")
                 put("final", finalTarget)
 

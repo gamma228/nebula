@@ -13,4 +13,5 @@ interface ProxyCore {
     suspend fun urlTest(groupTag: String)
     suspend fun selectOutbound(groupTag: String, outboundTag: String): Boolean
     suspend fun reloadConfig(configJson: String)
+    fun setScreenInteractive(isInteractive: Boolean)
 }
