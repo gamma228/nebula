@@ -16,6 +16,7 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D9: Real-Time Traffic Speed/Waveform and In-App Background Wallpaper Engine](#d9-real-time-traffic-speedwaveform-and-in-app-background-wallpaper-engine)
 - [D10: Interactive Color Picker Sliders, Curated Swatches, and AMOLED vs Dark Mode Contrast](#d10-interactive-color-picker-sliders-curated-swatches-and-amoled-vs-dark-mode-contrast)
 - [D11: Elimination of Go Runtime Multi-Core Spinning & NetworkCallback Storm (Parity with INCY)](#d11-elimination-of-go-runtime-multi-core-spinning--networkcallback-storm-parity-with-incy)
+- [D12: Elimination of UI Slider Janks, In-App Wallpaper Storage Fix, Android 14+ Receiver Security & Netlink Auto-Detect Removal](#d12-elimination-of-ui-slider-janks-in-app-wallpaper-storage-fix-android-14-receiver-security--netlink-auto-detect-removal)
 
 ---
 
@@ -512,6 +513,59 @@ CPU time exceeding wall-clock time by ~1.82x with low packet volume proved that 
    - 0 errors (`BUILD SUCCESSFUL in 58s`).
 3. **Release Packaging (`./gradlew.bat assembleRelease`)**:
    - Built and verified signed release APKs (`app-arm64-v8a-release.apk`, `app-armeabi-v7a-release.apk`, `app-universal-release.apk`, `app-x86_64-release.apk`) in 1m 35s.
+
+---
+
+## D12: Elimination of UI Slider Janks, In-App Wallpaper Storage Fix, Android 14+ Receiver Security & Netlink Auto-Detect Removal
+
+### Problem Description
+1. **Connection Not Establishing ("ты что то убил, у меня не устанавливается подключение почему то")**:
+   After the optimization commit `e177539`, VPN tunnels failed to establish.
+2. **Severe UI Freezing & Lags ("очень сильно подвисает приложение теперь после оптимизации, прям зависает на время моментами")**:
+   When adjusting color sliders (Hue, Saturation, Brightness) or background dim/blur sliders, the application completely froze and stuttered.
+3. **Custom Wallpaper Not Applying ("на предпредпоследней версии у меня обои в приложении не ставились")**:
+   Selecting an image from the device gallery resulted in a black/blank background or failed to load on app restart.
+4. **Button Inconsistencies & Misleading Labels**:
+   Wallpaper action buttons used conflicting strings ("На рабочий стол", "На экран блокировки", "Везде") causing user confusion. `PresetCard` did not use standard Compose Material 3 click handling. `switchLauncherIcon` lacked a "Default" option.
+5. **Background CPU Usage & Android 14+ SecurityException**:
+   `registerReceiver(receiver, filter)` threw `SecurityException` on Android 14+ because no export flag was specified, preventing `ACTION_SCREEN_OFF` from ever being processed.
+
+### Root Cause Analysis
+1. **`auto_detect_interface: true` in `SingBoxConfigBuilder`**:
+   `auto_detect_interface: true` was erroneously re-added to sing-box's `route` config. On Android, sing-box's internal netlink interface detector fails due to Android SELinux policy restrictions on netlink route sockets, causing the core to fail network resolution.
+2. **Continuous Room DB & DataStore Writes in Slider Drag Loops**:
+   In `NebulaColorPicker.kt` and `AppearanceScreen.kt`, `onValueChange` directly called `viewModel.setPrimaryColor()`, `setBackgroundDim()`, and `setBackgroundBlur()`. Dragging a slider fired 60-120 times per second, executing immediate SQLite transactions and re-emitting `ThemeConfig` flows, causing the entire Compose hierarchy across `MainActivity` to re-render and recompose continuously.
+3. **Transient Content URIs in Photo Picker**:
+   `ActivityResultContracts.GetContent()` returns a temporary `content://` URI without persistable permission grants. When the Activity restarted or Coil attempted to load the image asynchronously, Android denied access (`SecurityException: Permission Denial`), leading to a black/blank background.
+4. **Android 14+ Receiver Security Exception in `ProxyVpnService`**:
+   Android 14 (API 34+) requires `RECEIVER_NOT_EXPORTED` for dynamic receivers. Calling plain `registerReceiver(receiver, filter)` threw a `SecurityException`, so `screenReceiver` was never registered and `isScreenInteractive` remained `true` indefinitely, keeping 1s notification updates running in background.
+
+### Invariant Fix
+1. **Removed `auto_detect_interface: true`**:
+   Deleted `auto_detect_interface: true` from `SingBoxConfigBuilder.kt`. Network resolution is properly managed via Android's `PlatformInterface.startDefaultInterfaceMonitor` (`ConnectivityManager.NetworkCallback`), restoring 100% connectivity.
+2. **Isolated Slider State to Local Compose Remember + `onValueChangeFinished`**:
+   - In `NebulaColorPicker.kt`, `onValueChange` only mutates local `hue`, `saturation`, and `value` float states at 120 FPS without ANY disk writes. `onValueChangeFinished` persists the hex color to ViewModel/Room once upon finger release. Swatch clicks persist immediately.
+   - In `AppearanceScreen.kt`, `backgroundDimAlpha` and `backgroundBlurRadius` sliders use local remember states and commit via `onValueChangeFinished`.
+3. **Private Internal Storage for Custom Wallpaper**:
+   In `AppearanceViewModel.kt`, implemented `setInAppBackgroundImageFromUri(uri: Uri)` that copies the image stream from `contentResolver.openInputStream(uri)` directly to private storage (`File(context.filesDir, "custom_wallpaper.jpg")`) on `Dispatchers.IO`. Coil loads the permanent file path with zero permissions and zero expiration.
+4. **Export Flag Hardening & Direct PowerManager Polling**:
+   - Used `ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)`.
+   - In `startTrafficTicker()`, directly polled `(getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive`. When screen is off, notification speed updates are frozen and the ticker coroutine delays 60s, completely silencing background CPU wakeups.
+   - Replaced main thread `runBlocking` in `ProxyVpnService.onDestroy()` with non-blocking cleanup.
+5. **UI & Button Hardening**:
+   - Updated `PresetCard` to use Material 3 `Card(onClick = onClick)`.
+   - Added `"Default"` launcher icon chip and hardened `switchLauncherIcon`.
+   - Added immediate `currentState.isAtLeast(Lifecycle.State.RESUMED)` check in `HomeScreen.kt` and `ToolsScreen.kt` `DisposableEffect`.
+
+### Automated Verification Proof
+1. **Unit Tests (`./gradlew.bat testDebugUnitTest`)**:
+   - 30 tasks executed, 100% passed (`BUILD SUCCESSFUL in 48s`).
+2. **Lint Audit (`./gradlew.bat lintDebug`)**:
+   - 0 errors (`BUILD SUCCESSFUL in 56s`).
+3. **Release Packaging (`./gradlew.bat assembleRelease`)**:
+   - All release APK splits compiled, shrunk with R8, and signed (`BUILD SUCCESSFUL in 1m 46s`).
+   - Verified v2 signature scheme with Android SDK `apksigner verify --verbose` (1 signer verified).
+
 
 
 

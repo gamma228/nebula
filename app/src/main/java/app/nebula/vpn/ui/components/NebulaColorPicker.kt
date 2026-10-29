@@ -146,9 +146,16 @@ fun NebulaColorPicker(
     val onActiveColorChanged = if (isEditingPrimary) onPrimaryColorChanged else onAccentColorChanged
 
     val initialHsv = remember(activeColorHex) { hexToHsv(activeColorHex) }
-    var hue by remember(activeColorHex) { mutableFloatStateOf(initialHsv.hue) }
-    var saturation by remember(activeColorHex) { mutableFloatStateOf(initialHsv.saturation) }
-    var value by remember(activeColorHex) { mutableFloatStateOf(initialHsv.value.coerceAtLeast(0.25f)) }
+    var hue by remember { mutableFloatStateOf(initialHsv.hue) }
+    var saturation by remember { mutableFloatStateOf(initialHsv.saturation) }
+    var value by remember { mutableFloatStateOf(initialHsv.value.coerceAtLeast(0.20f)) }
+
+    LaunchedEffect(activeColorHex) {
+        val hsv = hexToHsv(activeColorHex)
+        hue = hsv.hue
+        saturation = hsv.saturation
+        value = hsv.value.coerceAtLeast(0.20f)
+    }
 
     val currentColor = remember(hue, saturation, value) {
         hsvToColor(hue, saturation, value)
@@ -320,10 +327,8 @@ fun NebulaColorPicker(
                 )
                 Slider(
                     value = hue,
-                    onValueChange = {
-                        hue = it
-                        onActiveColorChanged(hsvToHex(hue, saturation, value))
-                    },
+                    onValueChange = { hue = it },
+                    onValueChangeFinished = { onActiveColorChanged(hsvToHex(hue, saturation, value)) },
                     valueRange = 0f..360f,
                     colors = SliderDefaults.colors(
                         thumbColor = currentColor,
@@ -372,10 +377,8 @@ fun NebulaColorPicker(
                 )
                 Slider(
                     value = saturation,
-                    onValueChange = {
-                        saturation = it
-                        onActiveColorChanged(hsvToHex(hue, saturation, value))
-                    },
+                    onValueChange = { saturation = it },
+                    onValueChangeFinished = { onActiveColorChanged(hsvToHex(hue, saturation, value)) },
                     valueRange = 0f..1f,
                     colors = SliderDefaults.colors(
                         thumbColor = currentColor,
@@ -424,10 +427,8 @@ fun NebulaColorPicker(
                 )
                 Slider(
                     value = value,
-                    onValueChange = {
-                        value = it
-                        onActiveColorChanged(hsvToHex(hue, saturation, value))
-                    },
+                    onValueChange = { value = it },
+                    onValueChangeFinished = { onActiveColorChanged(hsvToHex(hue, saturation, value)) },
                     valueRange = 0.20f..1f,
                     colors = SliderDefaults.colors(
                         thumbColor = currentColor,

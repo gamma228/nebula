@@ -267,7 +267,6 @@ object SingBoxConfigBuilder {
             val finalTarget = if (allProfilesList.isNotEmpty()) "select" else "direct"
 
             putJsonObject("route") {
-                put("auto_detect_interface", true)
                 put("default_domain_resolver", "dns-local")
                 put("final", finalTarget)
 

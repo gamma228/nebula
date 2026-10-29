@@ -130,7 +130,12 @@ class ProxyVpnService : VpnService(), TunProvider {
         }
         screenReceiver = receiver
         try {
-            registerReceiver(receiver, filter)
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                receiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
         } catch (e: Exception) {
             android.util.Log.w("ProxyVpnService", "Failed to register screen receiver: ${e.message}")
         }
@@ -601,7 +606,7 @@ class ProxyVpnService : VpnService(), TunProvider {
             tunNativeFd = -1
         }
 
-        kotlinx.coroutines.runBlocking(Dispatchers.IO) {
+        teardownScope.launch {
             try {
                 kotlinx.coroutines.withTimeoutOrNull(1000L) {
                     proxyCore.stop()
@@ -610,7 +615,6 @@ class ProxyVpnService : VpnService(), TunProvider {
         }
         isRunning = false
         activeProfileName = null
-        teardownScope.cancel()
     }
 
     private fun startForegroundNotification(title: String, content: String) {
@@ -749,12 +753,13 @@ class ProxyVpnService : VpnService(), TunProvider {
             while (isActive) {
                 val profileEnum = cachedPowerProfile
                 val showSpeed = cachedShowSpeed
-                val interactive = isScreenInteractive
+                val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                val interactive = powerManager?.isInteractive ?: isScreenInteractive
 
                 val delayMs = if (interactive) {
                     profileEnum.interactiveIntervalMs
                 } else {
-                    if (profileEnum.backgroundIntervalMs > 0L) profileEnum.backgroundIntervalMs else 60000L
+                    60000L // In background / screen-off, sleep 60s to completely eliminate CPU wakeups
                 }
 
                 kotlinx.coroutines.delay(delayMs)

@@ -283,3 +283,9 @@ Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully re
      - The VPN status key icon disappears from the Android system status bar.
      - `ProxyVpnService` stops.
      - All cellular connectivity returns directly to the carrier network with zero stalled connections.
+
+7. **UI Smoothness & Battery Verification (D12):**
+   - [ ] Open Settings -> Appearance.
+   - [ ] Drag Hue, Saturation, Brightness, Dimming, and Blur sliders back and forth rapidly. Verify zero frame drops or freezing.
+   - [ ] Pick an image from gallery via "Выбрать фото". Close the app from recent tasks and reopen it. Verify custom wallpaper remains visible and properly dimmed.
+   - [ ] Connect to VPN, lock phone for 1-2 hours, unlock, and check Samsung Battery -> Nebula -> CPU usage (expected: minutes, not hours, matching INCY).

@@ -103,27 +103,71 @@ class AppearanceViewModel @Inject constructor(
     }
 
     fun switchLauncherIcon(aliasSuffix: String) {
-        val pm = context.packageManager
-        val aliases = listOf(
-            "MainActivityAliasCrimson",
-            "MainActivityAliasViolet",
-            "MainActivityAliasMonochrome",
-            "MainActivityAliasStealth",
-            "MainActivityAliasNotes"
-        )
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val pm = context.packageManager
+                val mainComponent = ComponentName(context.packageName, "${context.packageName}.ui.MainActivity")
+                val aliases = listOf(
+                    "MainActivityAliasCrimson",
+                    "MainActivityAliasViolet",
+                    "MainActivityAliasMonochrome",
+                    "MainActivityAliasStealth",
+                    "MainActivityAliasNotes"
+                )
 
-        for (alias in aliases) {
-            val component = ComponentName(context.packageName, "${context.packageName}.$alias")
-            val targetState = if (alias.endsWith(aliasSuffix)) {
-                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-            } else {
-                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                if (aliasSuffix == "Default") {
+                    for (alias in aliases) {
+                        val component = ComponentName(context.packageName, "${context.packageName}.$alias")
+                        pm.setComponentEnabledSetting(
+                            component,
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                            PackageManager.DONT_KILL_APP
+                        )
+                    }
+                    pm.setComponentEnabledSetting(
+                        mainComponent,
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        PackageManager.DONT_KILL_APP
+                    )
+                } else {
+                    for (alias in aliases) {
+                        val component = ComponentName(context.packageName, "${context.packageName}.$alias")
+                        val targetState = if (alias.endsWith(aliasSuffix)) {
+                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                        } else {
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                        }
+                        pm.setComponentEnabledSetting(
+                            component,
+                            targetState,
+                            PackageManager.DONT_KILL_APP
+                        )
+                    }
+                    pm.setComponentEnabledSetting(
+                        mainComponent,
+                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        PackageManager.DONT_KILL_APP
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AppearanceViewModel", "switchLauncherIcon failed: ${e.message}", e)
             }
-            pm.setComponentEnabledSetting(
-                component,
-                targetState,
-                PackageManager.DONT_KILL_APP
-            )
+        }
+    }
+
+    fun setInAppBackgroundImageFromUri(uri: android.net.Uri) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val destFile = java.io.File(context.filesDir, "custom_wallpaper.jpg")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                setInAppBackgroundImage(destFile.absolutePath)
+            } catch (e: Exception) {
+                android.util.Log.e("AppearanceViewModel", "Failed to save wallpaper from URI: ${e.message}", e)
+            }
         }
     }
 

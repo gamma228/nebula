@@ -35,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -71,7 +72,7 @@ fun AppearanceScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            viewModel.setInAppBackgroundImage(uri.toString())
+            viewModel.setInAppBackgroundImageFromUri(uri)
         }
     }
 
@@ -406,15 +407,19 @@ fun AppearanceScreen(
 
                         Spacer(modifier = Modifier.height(spacing.sm))
 
+                        var localDimAlpha by remember(theme.backgroundDimAlpha) { mutableFloatStateOf(theme.backgroundDimAlpha) }
+                        var localBlurRadius by remember(theme.backgroundBlurRadius) { mutableFloatStateOf(theme.backgroundBlurRadius.toFloat()) }
+
                         // Dimming Slider
                         Text(
-                            text = "${stringResource(R.string.wallpaper_dim_label)}: ${(theme.backgroundDimAlpha * 100).toInt()}%",
+                            text = "${stringResource(R.string.wallpaper_dim_label)}: ${(localDimAlpha * 100).toInt()}%",
                             style = typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                             color = colors.textPrimary
                         )
                         Slider(
-                            value = theme.backgroundDimAlpha,
-                            onValueChange = { viewModel.setBackgroundDim(it) },
+                            value = localDimAlpha,
+                            onValueChange = { localDimAlpha = it },
+                            onValueChangeFinished = { viewModel.setBackgroundDim(localDimAlpha) },
                             valueRange = 0.15f..0.90f,
                             colors = SliderDefaults.colors(
                                 thumbColor = colors.primary,
@@ -427,13 +432,14 @@ fun AppearanceScreen(
 
                         // Blur Slider
                         Text(
-                            text = "${stringResource(R.string.wallpaper_blur_label)}: ${theme.backgroundBlurRadius} dp",
+                            text = "${stringResource(R.string.wallpaper_blur_label)}: ${localBlurRadius.toInt()} dp",
                             style = typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                             color = colors.textPrimary
                         )
                         Slider(
-                            value = theme.backgroundBlurRadius.toFloat(),
-                            onValueChange = { viewModel.setBackgroundBlur(it.toInt()) },
+                            value = localBlurRadius,
+                            onValueChange = { localBlurRadius = it },
+                            onValueChangeFinished = { viewModel.setBackgroundBlur(localBlurRadius.toInt()) },
                             valueRange = 0f..25f,
                             steps = 25,
                             colors = SliderDefaults.colors(
@@ -467,6 +473,7 @@ fun AppearanceScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(spacing.xxs)
                     ) {
+                        IconChip("Default", modifier = Modifier.weight(1f)) { viewModel.switchLauncherIcon("Default") }
                         IconChip("Crimson", modifier = Modifier.weight(1f)) { viewModel.switchLauncherIcon("Crimson") }
                         IconChip("Violet", modifier = Modifier.weight(1f)) { viewModel.switchLauncherIcon("Violet") }
                         IconChip("Mono", modifier = Modifier.weight(1f)) { viewModel.switchLauncherIcon("Monochrome") }
@@ -574,6 +581,7 @@ private fun PresetCard(
     val typography = NebulaTheme.typography
 
     Card(
+        onClick = onClick,
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) color.copy(alpha = 0.2f) else colors.surface
         ),
@@ -584,7 +592,6 @@ private fun PresetCard(
                 color = if (isSelected) color else colors.borderSubtle,
                 shape = shapes.card
             )
-            .clickable { onClick() }
             .defaultMinSize(minHeight = 48.dp)
     ) {
         Column(
