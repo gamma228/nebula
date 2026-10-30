@@ -144,7 +144,9 @@ class ProxyVpnService : VpnService(), TunProvider {
     private fun onScreenStateChanged(screenOn: Boolean) {
         proxyCore.setScreenInteractive(screenOn)
         if (!screenOn) {
-            // Screen is OFF: freeze notification speed updates immediately to let CPU sleep
+            // Screen is OFF: cancel ticker immediately and freeze notification speed updates to let CPU sleep
+            trafficTickerJob?.cancel()
+            trafficTickerJob = null
             val name = currentProfileName
             if (name != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
                 updateForegroundNotification("Connected: $name", "Protected via Nebula")
@@ -294,7 +296,9 @@ class ProxyVpnService : VpnService(), TunProvider {
                         }
                     }
 
-                    startTrafficTicker()
+                    if (isScreenInteractive) {
+                        startTrafficTicker()
+                    }
 
                 } catch (e: Exception) {
                     android.util.Log.e("ProxyVpnService", "startVpnTunnel error: ${e.message}", e)
@@ -741,6 +745,10 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     private fun startTrafficTicker() {
         trafficTickerJob?.cancel()
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val interactive = powerManager?.isInteractive ?: isScreenInteractive
+        if (!interactive) return // Screen locked: zero background tickers
+
         lastUidRxBytes = android.net.TrafficStats.getUidRxBytes(android.os.Process.myUid())
         lastUidTxBytes = android.net.TrafficStats.getUidTxBytes(android.os.Process.myUid())
         lastTrafficSampleTimeMs = System.currentTimeMillis()
@@ -753,16 +761,15 @@ class ProxyVpnService : VpnService(), TunProvider {
             while (isActive) {
                 val profileEnum = cachedPowerProfile
                 val showSpeed = cachedShowSpeed
-                val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
-                val interactive = powerManager?.isInteractive ?: isScreenInteractive
+                val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                val isCurrentInteractive = pm?.isInteractive ?: isScreenInteractive
 
-                val delayMs = if (interactive) {
-                    profileEnum.interactiveIntervalMs
-                } else {
-                    60000L // In background / screen-off, sleep 60s to completely eliminate CPU wakeups
+                if (!isCurrentInteractive) {
+                    // Screen locked: exit ticker loop cleanly to conserve 100% CPU
+                    break
                 }
 
-                kotlinx.coroutines.delay(delayMs)
+                kotlinx.coroutines.delay(profileEnum.interactiveIntervalMs)
                 if (!isActive) break
 
                 val now = System.currentTimeMillis()

@@ -288,28 +288,54 @@ class LibboxCore(
             var isExpensive = false
             var isConstrained = false
 
-            // 1. Check all physical networks that provide Internet and are not VPNs
+            // 1. Check all physical networks that are not VPNs
             val allNetworks = connectivityManager.allNetworks
+            var candidateIface: String? = null
+            var candidateExpensive = false
+            var candidateConstrained = false
+
             for (net in allNetworks) {
                 val caps = connectivityManager.getNetworkCapabilities(net) ?: continue
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue
-                if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue
+                val isPhysical = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                        caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+                if (!isPhysical) continue
 
                 val lp = connectivityManager.getLinkProperties(net)
-                if (!lp?.interfaceName.isNullOrBlank()) {
-                    ifaceName = lp?.interfaceName
-                    isExpensive = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-                    isConstrained = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val name = lp?.interfaceName
+                if (!name.isNullOrBlank()) {
+                    val expensive = !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+                    val constrained = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                         !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED)
                     } else false
+
+                    if (candidateIface == null) {
+                        candidateIface = name
+                        candidateExpensive = expensive
+                        candidateConstrained = constrained
+                    }
 
                     // Prefer WiFi / Ethernet over cellular for stability
                     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
                         caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
                     ) {
+                        ifaceName = name
+                        isExpensive = expensive
+                        isConstrained = constrained
                         break
+                    } else if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+                        ifaceName = name
+                        isExpensive = expensive
+                        isConstrained = constrained
                     }
                 }
+            }
+
+            if (ifaceName == null) {
+                ifaceName = candidateIface
+                isExpensive = candidateExpensive
+                isConstrained = candidateConstrained
             }
 
             // 2. Fallback to activeNetwork if not VPN

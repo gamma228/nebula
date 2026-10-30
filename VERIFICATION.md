@@ -289,3 +289,9 @@ Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully re
    - [ ] Drag Hue, Saturation, Brightness, Dimming, and Blur sliders back and forth rapidly. Verify zero frame drops or freezing.
    - [ ] Pick an image from gallery via "Выбрать фото". Close the app from recent tasks and reopen it. Verify custom wallpaper remains visible and properly dimmed.
    - [ ] Connect to VPN, lock phone for 1-2 hours, unlock, and check Samsung Battery -> Nebula -> CPU usage (expected: minutes, not hours, matching INCY).
+
+8. **Connectivity Restoration & Zero-Ticker Screen-Off Verification (D13):**
+   - [x] `./gradlew.bat testDebugUnitTest` (58 unit tests passed 100% green).
+   - [x] `./gradlew.bat assembleRelease` (Release APKs compiled, shrunk with R8, signed with v2 scheme).
+   - [ ] Real-Device Traffic Verification: Connect to VPN node. Open browser (Google/YouTube/Telegram). Confirm TCP packets flow smoothly without blackholing or connection timeouts.
+   - [ ] Real-Device Autonomy Verification: Leave phone locked for 2+ hours with VPN connected. Check Samsung Battery -> Nebula -> CPU usage. Confirm CPU time remains low single-digit minutes (matching INCY's benchmark of ~0.68 min CPU per hour).

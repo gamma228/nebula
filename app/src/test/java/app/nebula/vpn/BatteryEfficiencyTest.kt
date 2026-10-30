@@ -29,23 +29,23 @@ class BatteryEfficiencyTest {
         assertEquals(1000L, balanced.interactiveIntervalMs)
         assertEquals(0L, balanced.backgroundIntervalMs)
         assertEquals("warn", balanced.coreLogLevel)
-        assertEquals("mixed", balanced.tunStack)
-        org.junit.Assert.assertFalse(balanced.endpointIndependentNat)
+        assertEquals("gvisor", balanced.tunStack)
+        assertTrue(balanced.endpointIndependentNat)
         assertTrue(balanced.description.isNotBlank())
 
         val saver = PowerProfile.BATTERY_SAVER
         assertEquals(2000L, saver.interactiveIntervalMs)
         assertEquals(0L, saver.backgroundIntervalMs)
         assertEquals("error", saver.coreLogLevel)
-        assertEquals("mixed", saver.tunStack)
-        org.junit.Assert.assertFalse(saver.endpointIndependentNat)
+        assertEquals("gvisor", saver.tunStack)
+        assertTrue(saver.endpointIndependentNat)
         assertTrue(saver.description.isNotBlank())
 
         val perf = PowerProfile.HIGH_PERFORMANCE
         assertEquals(1000L, perf.interactiveIntervalMs)
         assertEquals(5000L, perf.backgroundIntervalMs)
         assertEquals("info", perf.coreLogLevel)
-        assertEquals("mixed", perf.tunStack)
+        assertEquals("gvisor", perf.tunStack)
         assertTrue(perf.endpointIndependentNat)
         assertTrue(perf.description.isNotBlank())
     }
