@@ -218,7 +218,6 @@ class ProxyVpnService : VpnService(), TunProvider {
                     currentProfileName = activeProfile.name
                     connectionStartTime = System.currentTimeMillis()
 
-                    val allProfiles = profileRepository.allProfiles.first()
                     val customRules = routingRepository.allRules.first()
                     val routingMode = settingsRepository.routingMode.first()
                     val targetPackages = settingsRepository.targetPackages.first()
@@ -237,7 +236,6 @@ class ProxyVpnService : VpnService(), TunProvider {
                     val configJson = SingBoxConfigBuilder.build(
                         SingBoxConfigBuilder.BuildConfig(
                             activeProfile = activeProfile,
-                            allProfiles = allProfiles,
                             customRules = customRules,
                             routingMode = routingMode,
                             targetPackages = targetPackages,
@@ -331,44 +329,35 @@ class ProxyVpnService : VpnService(), TunProvider {
                     activeProfileName = targetProfile.name
                     settingsRepository.setSelectedProfileId(targetProfile.id)
 
-                    val groupTag = "select"
-                    val outboundTag = "proxy-${targetProfile.id}"
-                    val switched = proxyCore.selectOutbound(groupTag, outboundTag)
+                    val customRules = routingRepository.allRules.first()
+                    val routingMode = settingsRepository.routingMode.first()
+                    val targetPackages = settingsRepository.targetPackages.first()
+                    val remoteDns = settingsRepository.remoteDnsUrl.first()
+                    val fakeDns = settingsRepository.fakeDnsEnabled.first()
+                    val killSwitch = settingsRepository.killSwitchEnabled.first()
+                    val ipv6 = settingsRepository.ipv6Enabled.first()
+                    val blockQuic = settingsRepository.blockQuic.first()
+                    val powerProfileId = settingsRepository.powerProfile.first()
+                    val profileEnum = PowerProfile.fromId(powerProfileId)
 
-                    if (!switched) {
-                        android.util.Log.i("ProxyVpnService", "selectOutbound returned false, reloading full config in-place")
-                        val allProfiles = profileRepository.allProfiles.first()
-                        val customRules = routingRepository.allRules.first()
-                        val routingMode = settingsRepository.routingMode.first()
-                        val targetPackages = settingsRepository.targetPackages.first()
-                        val remoteDns = settingsRepository.remoteDnsUrl.first()
-                        val fakeDns = settingsRepository.fakeDnsEnabled.first()
-                        val killSwitch = settingsRepository.killSwitchEnabled.first()
-                        val ipv6 = settingsRepository.ipv6Enabled.first()
-                        val blockQuic = settingsRepository.blockQuic.first()
-                        val powerProfileId = settingsRepository.powerProfile.first()
-                        val profileEnum = PowerProfile.fromId(powerProfileId)
-
-                        val configJson = SingBoxConfigBuilder.build(
-                            SingBoxConfigBuilder.BuildConfig(
-                                activeProfile = targetProfile,
-                                allProfiles = allProfiles,
-                                customRules = customRules,
-                                routingMode = routingMode,
-                                targetPackages = targetPackages,
-                                remoteDnsUrl = remoteDns,
-                                fakeDnsEnabled = fakeDns,
-                                killSwitchEnabled = killSwitch,
-                                localPortMixedInbound = 2080,
-                                ipv6Enabled = ipv6,
-                                blockQuic = blockQuic,
-                                logLevel = profileEnum.coreLogLevel,
-                                tunStack = profileEnum.tunStack,
-                                endpointIndependentNat = profileEnum.endpointIndependentNat
-                            )
+                    val configJson = SingBoxConfigBuilder.build(
+                        SingBoxConfigBuilder.BuildConfig(
+                            activeProfile = targetProfile,
+                            customRules = customRules,
+                            routingMode = routingMode,
+                            targetPackages = targetPackages,
+                            remoteDnsUrl = remoteDns,
+                            fakeDnsEnabled = fakeDns,
+                            killSwitchEnabled = killSwitch,
+                            localPortMixedInbound = 2080,
+                            ipv6Enabled = ipv6,
+                            blockQuic = blockQuic,
+                            logLevel = profileEnum.coreLogLevel,
+                            tunStack = profileEnum.tunStack,
+                            endpointIndependentNat = profileEnum.endpointIndependentNat
                         )
-                        proxyCore.reloadConfig(configJson)
-                    }
+                    )
+                    proxyCore.reloadConfig(configJson)
 
                     // Update UI and notification quietly with no disconnect flicker
                     val startT = if (connectionStartTime > 0L) connectionStartTime else System.currentTimeMillis()

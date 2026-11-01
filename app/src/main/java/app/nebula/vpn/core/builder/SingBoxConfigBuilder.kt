@@ -59,33 +59,11 @@ object SingBoxConfigBuilder {
 
             // 2. DNS configuration
             val hasProfiles = config.activeProfile != null || config.allProfiles.isNotEmpty()
-            val proxyDetourTag = if (hasProfiles) "select" else "direct"
+            val proxyDetourTag = if (hasProfiles) "proxy" else "direct"
 
             putJsonObject("dns") {
                 putJsonArray("servers") {
-                    // 1. User configured remote DNS if provided (DoH or custom UDP)
-                    if (config.remoteDnsUrl.startsWith("https://")) {
-                        val withoutScheme = config.remoteDnsUrl.removePrefix("https://")
-                        val serverHost = withoutScheme.substringBefore("/")
-                        val path = "/" + withoutScheme.substringAfter("/", "dns-query")
-                        add(buildJsonObject {
-                            put("type", "https")
-                            put("tag", "dns-remote-custom")
-                            put("server", serverHost)
-                            put("path", path)
-                            put("detour", proxyDetourTag)
-                        })
-                    } else if (config.remoteDnsUrl.isNotBlank() && !config.remoteDnsUrl.startsWith("http://")) {
-                        val serverHost = config.remoteDnsUrl.removePrefix("udp://").substringBefore(":")
-                        add(buildJsonObject {
-                            put("type", "udp")
-                            put("tag", "dns-remote-custom")
-                            put("server", serverHost)
-                            put("detour", proxyDetourTag)
-                        })
-                    }
-
-                    // 2. Google DoH over TCP 443 through proxy (globally reliable, works through 100% of proxy nodes)
+                    // 1. Google DoH over TCP 443 through proxy (globally reliable, circumvents TSPU)
                     add(buildJsonObject {
                         put("type", "https")
                         put("tag", "dns-remote-google")
@@ -94,7 +72,7 @@ object SingBoxConfigBuilder {
                         put("detour", proxyDetourTag)
                     })
 
-                    // 3. Cloudflare DoH through proxy
+                    // 2. Cloudflare DoH through proxy
                     add(buildJsonObject {
                         put("type", "https")
                         put("tag", "dns-remote-doh")
@@ -102,6 +80,30 @@ object SingBoxConfigBuilder {
                         put("path", "/dns-query")
                         put("detour", proxyDetourTag)
                     })
+
+                    // 3. User configured remote DNS if provided (DoH or custom UDP)
+                    if (config.remoteDnsUrl.isNotBlank() && config.remoteDnsUrl != "https://1.1.1.1/dns-query") {
+                        if (config.remoteDnsUrl.startsWith("https://")) {
+                            val withoutScheme = config.remoteDnsUrl.removePrefix("https://")
+                            val serverHost = withoutScheme.substringBefore("/")
+                            val path = "/" + withoutScheme.substringAfter("/", "dns-query")
+                            add(buildJsonObject {
+                                put("type", "https")
+                                put("tag", "dns-remote-custom")
+                                put("server", serverHost)
+                                put("path", path)
+                                put("detour", proxyDetourTag)
+                            })
+                        } else if (!config.remoteDnsUrl.startsWith("http://")) {
+                            val serverHost = config.remoteDnsUrl.removePrefix("udp://").substringBefore(":")
+                            add(buildJsonObject {
+                                put("type", "udp")
+                                put("tag", "dns-remote-custom")
+                                put("server", serverHost)
+                                put("detour", proxyDetourTag)
+                            })
+                        }
+                    }
 
                     // 4. Fast UDP remote DNS (for nodes with native UDP support)
                     add(buildJsonObject {
@@ -178,11 +180,12 @@ object SingBoxConfigBuilder {
                         }
                         put("server", "dns-remote-doh")
                     })
-                    // FakeIP for all other traffic when enabled
+                    // FakeIP for all other traffic when enabled (both tun and mixed inbounds)
                     if (config.fakeDnsEnabled) {
                         add(buildJsonObject {
                             putJsonArray("inbound") {
                                 add(JsonPrimitive("tun-in"))
+                                add(JsonPrimitive("mixed-in"))
                             }
                             put("server", "dns-fakeip")
                         })
@@ -221,32 +224,21 @@ object SingBoxConfigBuilder {
 
             // 4. Outbounds
             val outboundsList = mutableListOf<JsonObject>()
-            val allProfilesList = if (config.allProfiles.isNotEmpty()) {
-                config.allProfiles
-            } else if (config.activeProfile != null) {
-                listOf(config.activeProfile)
-            } else {
-                emptyList()
-            }
+            val activeP = config.activeProfile ?: config.allProfiles.firstOrNull()
 
-            if (allProfilesList.isNotEmpty()) {
-                val activeId = config.activeProfile?.id ?: allProfilesList.first().id
-                val profileTags = allProfilesList.map { "proxy-${it.id}" }
+            if (activeP != null) {
+                // Primary proxy outbound for the active server
+                outboundsList.add(buildOutboundForProfile(activeP, "proxy"))
 
-                // Selector outbound for instant, seamless hot-switching
+                // Selector outbound pointing directly to proxy for group reference compatibility
                 outboundsList.add(buildJsonObject {
                     put("type", "selector")
                     put("tag", "select")
                     putJsonArray("outbounds") {
-                        for (tag in profileTags) add(JsonPrimitive(tag))
+                        add(JsonPrimitive("proxy"))
                     }
-                    put("default", "proxy-$activeId")
+                    put("default", "proxy")
                 })
-
-                // Add all individual node outbounds
-                for (p in allProfilesList) {
-                    outboundsList.add(buildOutboundForProfile(p, "proxy-${p.id}"))
-                }
             }
 
             // Built-in outbounds
@@ -266,7 +258,7 @@ object SingBoxConfigBuilder {
             }
 
             // 5. Route rules
-            val finalTarget = if (allProfilesList.isNotEmpty()) "select" else "direct"
+            val finalTarget = if (activeP != null) "proxy" else "direct"
 
             putJsonObject("route") {
                 put("default_domain_resolver", "dns-local")
@@ -402,6 +394,14 @@ object SingBoxConfigBuilder {
         return jsonSerializer.encodeToString(JsonObject.serializer(), root)
     }
 
+    private fun isIpAddress(host: String): Boolean {
+        if (host.isEmpty()) return false
+        val parts = host.split('.')
+        if (parts.size == 4 && parts.all { it.toIntOrNull() in 0..255 }) return true
+        if (host.contains(':')) return true
+        return false
+    }
+
     private fun buildTlsObject(
         tls: TlsConfig,
         defaultServerName: String,
@@ -411,10 +411,13 @@ object SingBoxConfigBuilder {
         return buildJsonObject {
             put("enabled", true)
             val sni = tls.serverName.ifEmpty { defaultServerName }
-            if (sni.isNotEmpty()) {
+            val sniIsIp = isIpAddress(sni)
+            // RFC 6066: Literal IP addresses are forbidden in TLS SNI
+            if (sni.isNotEmpty() && !sniIsIp) {
                 put("server_name", sni)
             }
-            if (tls.realityPublicKey.isEmpty() && tls.insecure) {
+            // Allow insecure if requested OR if connecting directly to an IP without Reality/domain SNI
+            if (tls.realityPublicKey.isEmpty() && (tls.insecure || sniIsIp)) {
                 put("insecure", true)
             }
             val alpnToUse = if (tls.alpn.isNotEmpty()) {
@@ -542,8 +545,8 @@ object SingBoxConfigBuilder {
                     put("uuid", profile.authSecret)
                     put("packet_encoding", "xudp")
                     val flowVal = when {
-                        profile.transport.type == TransportType.TCP && profile.tls.flow.isNotEmpty() -> profile.tls.flow
-                        profile.transport.type == TransportType.TCP && profile.tls.realityPublicKey.isNotEmpty() -> "xtls-rprx-vision"
+                        profile.tls.enabled && profile.transport.type == TransportType.TCP && profile.tls.flow.isNotEmpty() -> profile.tls.flow
+                        profile.tls.enabled && profile.transport.type == TransportType.TCP && profile.tls.realityPublicKey.isNotEmpty() -> "xtls-rprx-vision"
                         else -> null
                     }
                     if (flowVal != null) {

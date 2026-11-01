@@ -144,13 +144,27 @@ class DoctorViewModel @Inject constructor(
 
             // 4. DNS Hijack & Remote DoH Check (Tested through tunnel proxy when connected)
             if (isConnected) {
-                val dohResult = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 3500, proxy = tunnelProxy)
-                val dohPassed = dohResult != null
+                var dohPassed = false
+                var dohLatency = -1L
+                val dohStart = System.currentTimeMillis()
+
+                // Try Google DoH first (universally available and circumvents TSPU), fallback to Cloudflare DoH
+                val googleDoh = testHttp("https://8.8.8.8/dns-query?name=google.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
+                if (googleDoh != null) {
+                    dohPassed = true
+                    dohLatency = System.currentTimeMillis() - dohStart
+                } else {
+                    val cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
+                    if (cfDoh != null) {
+                        dohPassed = true
+                        dohLatency = System.currentTimeMillis() - dohStart
+                    }
+                }
                 results.add(
                     DiagnosticCheckItem(
                         title = "Безопасный DNS (DoH Detour)",
                         isPassed = dohPassed,
-                        details = if (dohPassed) "DoH 1.1.1.1 успешно защищен и отвечает через туннель" else "DoH не ответил через прокси-туннель",
+                        details = if (dohPassed) "DoH успешно защищен и отвечает через туннель (${dohLatency} ms)" else "DoH не ответил через прокси-туннель",
                         canFix = false
                     )
                 )
@@ -165,9 +179,22 @@ class DoctorViewModel @Inject constructor(
                 )
             }
 
-            // 5. Exit IP Discovery
+            // 5. Exit IP Discovery (with multiple fallback endpoints)
             if (isConnected) {
-                val exitIp = testHttp("https://api.ipify.org", timeoutMs = 4000, proxy = tunnelProxy)
+                var exitIp: String? = null
+                val ipEndpoints = listOf(
+                    "https://api.ipify.org",
+                    "https://ifconfig.me/ip",
+                    "https://icanhazip.com",
+                    "https://checkip.amazonaws.com"
+                )
+                for (endpoint in ipEndpoints) {
+                    val res = testHttp(endpoint, timeoutMs = 7000, proxy = tunnelProxy)
+                    if (!res.isNullOrBlank() && res.length in 7..45 && !res.contains("<html", ignoreCase = true)) {
+                        exitIp = res.trim()
+                        break
+                    }
+                }
                 results.add(
                     DiagnosticCheckItem(
                         title = "Внешний IP адрес (Exit IP)",
@@ -196,7 +223,7 @@ class DoctorViewModel @Inject constructor(
                     "GitHub CDN" to "https://raw.githubusercontent.com"
                 )
                 val targetResults = testTargets.map { (name, url) ->
-                    val code = getResponseCode(url, timeoutMs = 3500, proxy = tunnelProxy)
+                    val code = getResponseCode(url, timeoutMs = 6000, proxy = tunnelProxy)
                     name to code
                 }
                 val anyPassed = targetResults.any { it.second in 200..399 }
@@ -258,7 +285,7 @@ class DoctorViewModel @Inject constructor(
 
             // 8. YouTube HTTPS Handshake
             if (isConnected) {
-                val ytCode = getResponseCode("https://www.youtube.com/generate_204", timeoutMs = 3500, proxy = tunnelProxy)
+                val ytCode = getResponseCode("https://www.youtube.com/generate_204", timeoutMs = 7000, proxy = tunnelProxy)
                 val ytPassed = ytCode in 200..399
                 results.add(
                     DiagnosticCheckItem(

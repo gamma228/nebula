@@ -69,6 +69,12 @@ class LibboxCore(
 
     init {
         try {
+            // Delete stale cache.db so Go runtime never restores stale selector or outbound state
+            val filesDir = context.filesDir
+            File(filesDir, "cache.db").delete()
+            File(filesDir, "cache.db-shm").delete()
+            File(filesDir, "cache.db-wal").delete()
+
             val setupOptions = SetupOptions().apply {
                 basePath = context.filesDir.absolutePath
                 workingPath = context.filesDir.absolutePath
