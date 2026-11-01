@@ -202,7 +202,10 @@
 - **AAR Size:** 119,472,644 bytes
 
 ## Generated Release Artifacts
-- ARM64-v8a APK: `app/build/outputs/apk/release/app-arm64-v8a-release.apk` (81,929,921 bytes, verified v2 signature scheme, 01.11.2026)
+- ARM64-v8a APK: `app/build/outputs/apk/release/app-arm64-v8a-release.apk` (82,640,130 bytes, verified v2 signature scheme, 01.11.2026 21:04)
+- Windows EXE Installer: `desktop/build/compose/binaries/main/exe/Nebula-1.2.0.exe` (100,357,632 bytes)
+- Windows MSI Installer: `desktop/build/compose/binaries/main/msi/Nebula-1.2.0.msi` (99,676,297 bytes)
+- Windows Portable ZIP: `desktop/build/compose/binaries/main/Nebula-v1.2.0-windows-portable.zip` (129,321,292 bytes)
 
 ## Known Limitations
 - None. All defects (D1-D9) resolved, verified on real proxy core, stressed with 10k monkey events, soak tested with 0 leaks, and signed with v2 scheme.
