@@ -13,9 +13,25 @@ import app.nebula.vpn.desktop.tray.DesktopTray
 import app.nebula.vpn.desktop.ui.DesktopApp
 import kotlinx.coroutines.runBlocking
 import java.awt.Dimension
+import java.io.File
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
+    // Dynamically locate skiko native library in packaged application layout
+    try {
+        val jarDir = File(SingleInstanceGuard::class.java.protectionDomain.codeSource.location.toURI()).parentFile
+        val candidates = listOfNotNull(
+            jarDir,
+            jarDir?.parentFile,
+            File(System.getProperty("user.dir", ".")),
+            File(System.getProperty("user.dir", "."), "app")
+        )
+        val skikoDir = candidates.firstOrNull { File(it, "skiko-windows-x64.dll").exists() }
+        if (skikoDir != null) {
+            System.setProperty("skiko.library.path", skikoDir.absolutePath)
+        }
+    } catch (_: Exception) {}
+
     var isMinimizedStartup = args.contains("--minimized")
 
     val appState = DesktopAppState()
