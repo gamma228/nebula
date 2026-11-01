@@ -103,6 +103,8 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
+
     // Official sing-box libbox core
     implementation(files("libs/libbox.aar"))
 

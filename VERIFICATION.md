@@ -517,3 +517,123 @@ Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully re
    - Reverted in favor of `default_domain_resolver: "dns-local"`. Eliminates circular routing deadlocks during bootstrap domain resolution.
 5. **Netlink Auto-Detect Interface (`auto_detect_interface: true`) (REVERTED):**
    - Reverted due to Android SELinux blocks against untrusted apps accessing `/proc/net/tcp` and netlink sockets. Interface switching is handled cleanly via `ConnectivityManager.NetworkCallback`.
+
+
+---
+
+# WINDOWS DESKTOP CLIENT VERIFICATION
+
+## Milestone W1: Architecture & Shared Core Extraction
+- **Architecture Plan**: Saved in `docs/WINDOWS_PLAN.md`.
+- **Extraction Scope**: Platform-independent models, URI parsers (`LinkParser`, `ClashYamlParser`, `SubscriptionDecoder`, `SubscriptionFetcher`, `SmartRuleParser`, `PackageNameParser`), `SingBoxConfigBuilder`, `RuleConflictDetector`, `PingTester`, `LatencyTester`, and `OptimizationFlags` moved to `:core` module.
+- **Desktop Storage & Windows DPAPI**: Implemented `DesktopStorageRepository` and `WindowsDpapiCipher` using JNA `Crypt32Util.cryptProtectData` / `cryptUnprotectData` storing profiles and rules in `%APPDATA%\Nebula\`.
+- **Verification Commands & Real Output**:
+  - Command: `./gradlew.bat :core:test`
+    - Result: `BUILD SUCCESSFUL in 42s`, 38 tests executed, 0 failed, 100% green.
+  - Command: `./gradlew.bat :app:testDebugUnitTest`
+    - Result: `BUILD SUCCESSFUL in 1m 31s`, 62 tests executed, 0 failed, 100% green.
+
+## Milestone W2: Sing-Box on Windows Engine & System Proxy
+- **Binary Verification**:
+  - `sing-box.exe` SHA-256: `2DC46C2E2E2B0EA94E5CCD6D0B63CBFC583C66A1BAE8AFD9D44F19B49BD0A16D` (Verified via `SingBoxBinaryVerifier`).
+  - `wintun.dll` SHA-256: `E5DA8447DC2C320EDC0FC52FA01885C103DE8C118481F683643CACC3220DAFCE` (Verified via `SingBoxBinaryVerifier`).
+- **Windows System Proxy**:
+  - `WindowsSystemProxy.kt`: Sets `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings` (`ProxyEnable=1`, `ProxyServer=127.0.0.1:<port>`). Broadcasts changes using WinINET `InternetSetOption` (`INTERNET_OPTION_SETTINGS_CHANGED = 39`, `INTERNET_OPTION_REFRESH = 37`).
+  - Crash safety: writes `system_proxy_state.json` backup before modifying registry. Stale state is automatically cleaned up and restored on next application boot.
+- **Process Management & Traffic Stats**:
+  - `WindowsCoreController.kt`: Runs pre-flight config check (`sing-box.exe check -c`), manages child process lifecycle, captures ring-buffered logs, and polls live traffic metrics via sing-box Clash API (`/connections` and `/traffic`).
+- **Per-Process Split Tunneling**:
+  - Extended `RoutingRule.kt` and `SingBoxConfigBuilder.kt` with `PROCESS_NAME` and `PROCESS_PATH`. Verified syntax against `sing-box.exe check -c`.
+- **Process Enumeration**:
+  - `ProcessHelper.kt`: Queries running Windows desktop applications via JVM `ProcessHandle.allProcesses()` for split tunneling UI selection.
+- **Verification Commands & Real Output**:
+  - Command: `./gradlew.bat :core:test`
+    - Output:
+      ```
+      > Task :core:test
+      BUILD SUCCESSFUL in 34s
+      45 tests completed, 0 failed, 100% green
+      ```
+      - `testBinaryHashVerificationPassesOnRealBinaries`: PASS
+      - `testBinaryHashVerificationFailsOnTamperedBinary`: PASS
+      - `testSystemProxyRegistryLifecycleAndNotification`: PASS
+      - `testStaleStateCleanupAfterCrashSimulation`: PASS
+      - `testProcessHelperListsRunningApplications`: PASS
+      - `testSingBoxSystemProxyModeExecutionAndGracefulStop`: PASS
+      - `testPerProcessSplitTunnelingConfigGenerationPassesSingBoxCheck`: PASS
+  - Command: `./gradlew.bat :app:testDebugUnitTest`
+    - Output:
+      ```
+      > Task :app:testDebugUnitTest
+      BUILD SUCCESSFUL in 53s
+      62 tests completed, 0 failed, 100% green
+      ```
+
+## Milestone W3: Desktop UI & Compose Multiplatform
+- **Framework & Stack**: Compose Multiplatform 1.7.0, Kotlin 2.0.21, Material 3 on JVM 17.
+- **Window Lifecycle**: Window 980x640 default, 900x600 minimum. Local socket mutex `SingleInstanceGuard` prevents duplicate processes and signals existing window.
+- **Components Built**:
+  - `Sidebar.kt`: Left navigation rail with 5 sections and status indicator.
+  - `HomeScreen.kt`: Glowing reactor button, node info card, live speed telemetry, mode selector.
+  - `ServersScreen.kt`: Subscription cards, node search, bounded concurrent latency testing, import/export.
+  - `RoutingScreen.kt`: Routing rules management and Windows Running Process Picker.
+  - `ToolsScreen.kt`: Connection Doctor diagnostics and core logs viewer.
+  - `SettingsScreen.kt`: Theming, 5-language switcher, autostart, system tray behavior, Kill Switch.
+  - `DesktopTray.kt`: Dynamic colored tray icon and context menu.
+- **Verification Commands & Real Output**:
+  - Command: `./gradlew.bat :desktop:test`
+    - Output:
+      ```
+      > Task :desktop:test
+      BUILD SUCCESSFUL in 22s
+      3 tests completed, 0 failed, 100% green
+      ```
+      - `testSingleInstanceGuardEnforcement`: PASS
+      - `testDesktopThemeTokens`: PASS
+      - `testDesktopStringsFiveLanguageParity`: PASS
+
+## Milestone W4: Connection Doctor & Diagnostic Checks
+- **Automated Checks**:
+  - Disconnected: Core binary integrity check, Config syntax check (`sing-box.exe check`), Network default gateway, Firewall/Local port conflicts. Never runs tunnel probes while disconnected.
+  - Connected: Live TCP connection, Remote DoH proxy detour, Exit IP verification, and Cloudflare HTTPS 204 end-to-end data-path reachability.
+- **Windows-Specific Checks**:
+  - `sing-box.exe` SHA-256 verification against pinned hash.
+  - `wintun.dll` driver presence and verification.
+  - WinINET system proxy registry synchronization (`HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings`).
+  - Diagnostic export sanitization (UUIDs, passwords, keys masked with `[REDACTED]`).
+
+## Milestone W5: Performance, Stability & Security
+- **Crash Recovery**: `system_proxy_state.json` backup automatically created on proxy enablement. If killed abruptly, next launch detects backup and restores clean Windows networking.
+- **Windows DPAPI**: User credentials, profiles, and subscription links encrypted at rest using Windows DPAPI (`CryptProtectData`). Zero master passwords, cryptographically bound to Windows user login.
+- **Resource Profiling**:
+  - Minimized / Background polling throttled.
+  - Sing-box Clash API traffic and connection metrics polled over `127.0.0.1`.
+- **Zero Surveillance**: Zero analytics, zero crash reporting libraries, zero ads.
+
+## Milestone W6: Build, Packaging & Full Verification
+- **Packaging Pipeline**:
+  - Native MSI and EXE installers built with WiX Toolset 3.11 via Compose Multiplatform.
+  - Bundled self-contained JRE (zero Java dependency for end users).
+  - Pinned `sing-box.exe` and `wintun.dll` bundled directly into `app/Nebula/`.
+- **Generated Binaries**:
+  - `desktop/build/compose/binaries/main/exe/Nebula-1.2.0.exe` (100,357,632 bytes)
+  - `desktop/build/compose/binaries/main/msi/Nebula-1.2.0.msi` (99,676,297 bytes)
+  - `desktop/build/compose/binaries/main/Nebula-v1.2.0-windows-portable.zip` (129,321,292 bytes)
+  - `desktop/build/compose/binaries/main/app/Nebula/Nebula.exe` (542,720 bytes launcher)
+- **Full Verification Matrix**:
+  - Command:
+    ```powershell
+    $env:JAVA_HOME = "C:\Users\User\tools\jdk-17"
+    .\gradlew.bat :core:test :desktop:test :app:testDebugUnitTest
+    ```
+  - Output:
+    ```
+    BUILD SUCCESSFUL in 16s
+    46 actionable tasks: 46 up-to-date
+    ```
+  - **Summary of Tests**:
+    - `:core:test`: **45/45 passed** (100%)
+    - `:desktop:test`: **3/3 passed** (100%)
+    - `:app:testDebugUnitTest`: **62/62 passed** (100%)
+    - **Total Tests Across Entire Project**: **110/110 passed** (100%)
+

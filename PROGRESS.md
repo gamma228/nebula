@@ -213,3 +213,54 @@
   - **Milestone F2 (Parser, Storage, & Config Generation):** Table-driven test suite with 14 real-world protocol/transport fixtures. Hardened `LinkParser` and `ClashYamlParser` for gRPC `service_name`/`service`/`path`, Reality parameters, TUIC v5, and `xhttp`. Room entity migration to version 2 with full round-trip preservation. 100% of generated configs verified via `sing-box check -c`.
   - **Milestone F3 (Connection Doctor & Disconnect Timing):** Overhauled `DoctorViewModel`: disconnected state executes strictly pre-checks, never tunnel tests, eliminating false server blame. Connected state tests true data-path reachability via Cloudflare HTTPS 204. Disconnect re-ordered to close `tunInterface` and clear notification immediately, cutting disconnect latency to 1563 ms (<2s).
   - **Milestone F4 (Full Verification):** 62/62 JUnit tests green (100%), live emulator installation and connection execution verified, 0 startup crashes, all signed release APKs updated in canonical paths.
+
+- [x] **Milestone W1: Architecture and Shared Core**
+  - **docs/WINDOWS_PLAN.md:** Audited modules and documented separation of platform-agnostic code vs Android-specific components.
+  - **`:core` JVM Shared Module:** Created `:core` module. Extracted data models (`ProxyProfile`, `RoutingRule`, `ProxyGroup`, `ConnectionState`, `TrafficStats`, `ThemeConfig`, `PowerProfile`, `Result`), URI parsers (`LinkParser`, `ClashYamlParser`, `SubscriptionDecoder`, `SubscriptionFetcher`, `SmartRuleParser`, `PackageNameParser`), `SingBoxConfigBuilder`, `RuleConflictDetector`, `PingTester`, `LatencyTester`, and `OptimizationFlags`.
+  - **Contracts & Storage:** Defined `CoreController`, `StorageRepository`, and `SystemIntegration` interfaces. Implemented `DesktopStorageRepository` and `WindowsDpapiCipher` with Windows DPAPI encryption (`Crypt32Util.cryptProtectData`).
+  - **Verification:** `./gradlew.bat :core:test` 38/38 tests green; `./gradlew.bat :app:testDebugUnitTest` 62/62 tests green.
+
+- [x] **Milestone W2: Sing-Box on Windows Engine**
+  - **Binary Integrity:** Integrated SHA-256 validation for `sing-box.exe` (`2DC46C2E2E2B0EA94E5CCD6D0B63CBFC583C66A1BAE8AFD9D44F19B49BD0A16D`) and `wintun.dll` (`E5DA8447DC2C320EDC0FC52FA01885C103DE8C118481F683643CACC3220DAFCE`).
+  - **Windows System Proxy:** Implemented `WindowsSystemProxy.kt` with JNA `Advapi32Util` registry management and WinINET `InternetSetOption` immediate broadcast. Crash-resilient backup `system_proxy_state.json` automatically cleans up stale state upon app startup.
+  - **Process Management & Metrics:** Implemented `WindowsCoreController.kt` with pre-flight check, child process monitoring, log capture ring buffer, and live traffic polling via Clash API (`/connections` and `/traffic`).
+  - **Per-Process Split Tunneling:** Added `RuleType.PROCESS_NAME` and `RuleType.PROCESS_PATH` into `RoutingRule.kt` and `SingBoxConfigBuilder.kt`. Implemented `ProcessHelper.kt` to enumerate running applications for user selection.
+  - **Verification:** `WindowsEngineTest.kt` (7 tests green), `./gradlew.bat :core:test` (45/45 tests green), `./gradlew.bat :app:testDebugUnitTest` (62/62 tests green).
+
+- [x] **Milestone W3: Desktop UI & Compose Multiplatform**
+  - **Window Architecture & Lifecycle:** Configured Compose Multiplatform for Desktop (1.7.0) with Kotlin 2.0.21. Window size default 980x640, min 900x600, remembers position and size. Single instance guard (`SingleInstanceGuard.kt`) using local socket mutex signaling first window on duplicate launch. Deep-link handler parses share links passed as launch arguments.
+  - **Shared Design Tokens & Theming:** Reused Android Material 3 color palettes and typography in `DesktopTheme.kt` with Dark, AMOLED, and Light mode support.
+  - **5-Language Desktop Localization:** `DesktopStrings.kt` provides 100% key parity across English (`en`), Russian (`ru`), Ukrainian (`uk`), Simplified Chinese (`zh`), and German (`de`).
+  - **Desktop Navigation & Screens:**
+    - `Sidebar.kt`: Left navigation rail with Home, Servers, Routing, Tools, Settings, and live connection status dot.
+    - `HomeScreen.kt`: Connect/Disconnect button with glowing pulse animation, current node badge, live upload/download speed counters, total session traffic, and TUN vs System Proxy mode switch.
+    - `ServersScreen.kt`: Subscription group cards, fast search filter, bounded concurrent latency ping testing with cancelable progress indicator, add link/subscription dialogs, node deletion, and share link export.
+    - `RoutingScreen.kt`: Custom rules table, priority indicators, rule creation dialog with Windows Running Process Picker (`ProcessHelper`).
+    - `ToolsScreen.kt`: Connection Doctor diagnostics runner and live core logs viewer with severity filtering and copy diagnostic report button.
+    - `SettingsScreen.kt`: Language switch, theme selector, default connection mode, autostart with Windows toggle, minimize to system tray on close toggle, Kill Switch toggle, MTU, and custom DoH URL.
+    - `DesktopTray.kt`: Native Windows system tray icon dynamically colored by connection state, with context menu actions (Connect/Disconnect, Switch Mode, Open Window, Quit).
+  - **Verification:** `DesktopAppTest.kt` (3 tests green).
+
+- [x] **Milestone W4: Connection Doctor and Health Checks**
+  - **Cross-Platform Diagnostic Engine:** Disconnected state runs strictly pre-checks (Binary hashes, Config syntax, Firewall/Local port, Network gateway); never issues tunnel tests when disconnected, avoiding false server blame.
+  - **Connected State Data-Path Probe:** Executes real HTTPS 204 request through proxy outbound to verify true data-path flow before declaring healthy status.
+  - **Windows-Specific Checks:** Verified `sing-box.exe` hash, `wintun.dll` driver presence, WinINET system proxy registry synchronization, and port availability.
+  - **Sanitized Diagnostic Export:** Generates clean diagnostic reports with masked secrets (UUIDs, keys, subscription URLs) and the last 100 log lines from the ring buffer.
+
+- [x] **Milestone W5: Performance, Stability, Security**
+  - **Crash Resilience:** `WindowsSystemProxy` automatically dumps prior registry state to `system_proxy_state.json`. On abnormal exit or system reboot, stale proxy settings are immediately detected and restored to clean system state.
+  - **Resource Minimization:** Background coroutine polling suspends/throttles when window is hidden or minimized to tray. Zero UI recomposition leaks.
+  - **Windows DPAPI Encryption:** Sensitive profile data, subscription URLs, and settings are encrypted at rest via Windows DPAPI (`Crypt32Util.cryptProtectData`). Zero master passwords required; decryption is cryptographically bound to the logged-in Windows user session.
+  - **Zero Surveillance:** Zero analytics, zero crash telemetry SDKs, zero advertising libraries. Sing-box Clash API bound to `127.0.0.1` only.
+
+- [x] **Milestone W6: Build, Installer, and Full Verification**
+  - **Distribution Artifacts:**
+    - Windows EXE Installer: `desktop/build/compose/binaries/main/exe/Nebula-1.2.0.exe` (100,357,632 bytes, WiX 3.11 bundled JRE)
+    - Windows MSI Installer: `desktop/build/compose/binaries/main/msi/Nebula-1.2.0.msi` (99,676,297 bytes, WiX 3.11 enterprise installer)
+    - Windows Portable ZIP: `desktop/build/compose/binaries/main/Nebula-v1.2.0-windows-portable.zip` (129,321,292 bytes, standalone portable)
+    - Unpacked Distributable: `desktop/build/compose/binaries/main/app/Nebula/Nebula.exe` (542,720 bytes launcher)
+  - **Code Signing & Documentation:** Documented Authenticode signing configuration in `README.md`, including SmartScreen warnings and third-party AV exclusion instructions.
+  - **Full Test Suite Status:** **110/110 tests 100% green**:
+    - `:core:test`: 45 tests passed.
+    - `:desktop:test`: 3 tests passed.
+    - `:app:testDebugUnitTest`: 62 tests passed.

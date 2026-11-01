@@ -46,7 +46,11 @@ object SingBoxConfigBuilder {
         val blockQuic: Boolean = true,
         val logLevel: String = "warn",
         val tunStack: String = "gvisor",
-        val endpointIndependentNat: Boolean = false
+        val endpointIndependentNat: Boolean = false,
+        val isTunEnabled: Boolean = true,
+        val clashApiPort: Int? = null,
+        val clashApiSecret: String? = null,
+        val autoDetectInterface: Boolean = false
     )
 
     fun build(config: BuildConfig): String {
@@ -55,6 +59,18 @@ object SingBoxConfigBuilder {
             putJsonObject("log") {
                 put("level", config.logLevel)
                 put("timestamp", true)
+            }
+
+            // Optional Clash API for traffic stats and control
+            if (config.clashApiPort != null && config.clashApiPort > 0) {
+                putJsonObject("experimental") {
+                    putJsonObject("clash_api") {
+                        put("external_controller", "127.0.0.1:${config.clashApiPort}")
+                        if (!config.clashApiSecret.isNullOrBlank()) {
+                            put("secret", config.clashApiSecret)
+                        }
+                    }
+                }
             }
 
             // 2. DNS configuration
@@ -202,8 +218,12 @@ object SingBoxConfigBuilder {
                     if (config.fakeDnsEnabled) {
                         add(buildJsonObject {
                             putJsonArray("inbound") {
-                                add(JsonPrimitive("tun-in"))
-                                add(JsonPrimitive("mixed-in"))
+                                if (config.isTunEnabled) {
+                                    add(JsonPrimitive("tun-in"))
+                                }
+                                if (config.localPortMixedInbound != null || !config.isTunEnabled) {
+                                    add(JsonPrimitive("mixed-in"))
+                                }
                             }
                             put("server", "dns-fakeip")
                         })
@@ -214,28 +234,31 @@ object SingBoxConfigBuilder {
 
             // 3. Inbounds
             putJsonArray("inbounds") {
-                add(buildJsonObject {
-                    put("type", "tun")
-                    put("tag", "tun-in")
-                    putJsonArray("address") {
-                        add(JsonPrimitive("172.19.0.1/30"))
-                        if (config.ipv6Enabled) {
-                            add(JsonPrimitive("fdfe:dcba:9876::1/126"))
+                if (config.isTunEnabled) {
+                    add(buildJsonObject {
+                        put("type", "tun")
+                        put("tag", "tun-in")
+                        putJsonArray("address") {
+                            add(JsonPrimitive("172.19.0.1/30"))
+                            if (config.ipv6Enabled) {
+                                add(JsonPrimitive("fdfe:dcba:9876::1/126"))
+                            }
                         }
-                    }
-                    put("mtu", config.mtu)
-                    put("auto_route", true)
-                    put("strict_route", config.killSwitchEnabled)
-                    put("endpoint_independent_nat", config.endpointIndependentNat)
-                    put("stack", config.tunStack)
-                })
+                        put("mtu", config.mtu)
+                        put("auto_route", true)
+                        put("strict_route", config.killSwitchEnabled)
+                        put("endpoint_independent_nat", config.endpointIndependentNat)
+                        put("stack", config.tunStack)
+                    })
+                }
 
-                if (config.localPortMixedInbound != null && config.localPortMixedInbound > 0) {
+                val mixedPort = config.localPortMixedInbound ?: if (!config.isTunEnabled) 2080 else null
+                if (mixedPort != null && mixedPort > 0) {
                     add(buildJsonObject {
                         put("type", "mixed")
                         put("tag", "mixed-in")
                         put("listen", "127.0.0.1")
-                        put("listen_port", config.localPortMixedInbound)
+                        put("listen_port", mixedPort)
                     })
                 }
             }
@@ -279,6 +302,9 @@ object SingBoxConfigBuilder {
             val finalTarget = if (activeP != null) "proxy" else "direct"
 
             putJsonObject("route") {
+                if (config.autoDetectInterface) {
+                    put("auto_detect_interface", true)
+                }
                 put("default_domain_resolver", "dns-local")
                 put("final", finalTarget)
 
@@ -419,6 +445,8 @@ object SingBoxConfigBuilder {
                                 RuleType.IP_CIDR -> putJsonArray("ip_cidr") { add(JsonPrimitive(rule.value)) }
                                 RuleType.PACKAGE_NAME -> putJsonArray("package_name") { add(JsonPrimitive(rule.value)) }
                                 RuleType.RULE_SET -> putJsonArray("rule_set") { add(JsonPrimitive(rule.value)) }
+                                RuleType.PROCESS_NAME -> putJsonArray("process_name") { add(JsonPrimitive(rule.value)) }
+                                RuleType.PROCESS_PATH -> putJsonArray("process_path") { add(JsonPrimitive(rule.value)) }
                             }
                             put("outbound", ruleTarget)
                         })

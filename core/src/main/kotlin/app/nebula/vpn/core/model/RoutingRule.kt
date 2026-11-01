@@ -10,7 +10,9 @@ enum class RuleType {
     DOMAIN_REGEX,
     IP_CIDR,
     PACKAGE_NAME,
-    RULE_SET
+    RULE_SET,
+    PROCESS_NAME,
+    PROCESS_PATH
 }
 
 @Serializable

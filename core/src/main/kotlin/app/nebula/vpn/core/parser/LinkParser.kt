@@ -17,12 +17,10 @@ object LinkParser {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    var warningLogger: ((String) -> Unit)? = null
+
     private fun logWarning(msg: String) {
-        try {
-            android.util.Log.w("LinkParser", msg)
-        } catch (_: Throwable) {
-            System.err.println("[WARN LinkParser] $msg")
-        }
+        warningLogger?.invoke(msg) ?: System.err.println("[WARN LinkParser] $msg")
     }
 
     private data class SimpleUri(

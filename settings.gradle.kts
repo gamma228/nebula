@@ -24,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Nebula"
 include(":app")
+include(":core")
+include(":desktop")

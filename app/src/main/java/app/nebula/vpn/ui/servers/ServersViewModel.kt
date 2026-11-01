@@ -184,7 +184,7 @@ class ServersViewModel @Inject constructor(
         if (filter.sortPing) {
             filtered.sortedWith(
                 compareBy(
-                    { it.lastPingMs == null || it.lastPingMs <= 0L },
+                    { (it.lastPingMs ?: 0L) <= 0L },
                     { it.lastPingMs ?: Long.MAX_VALUE }
                 )
             )

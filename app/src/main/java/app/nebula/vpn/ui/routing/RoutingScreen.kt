@@ -528,7 +528,7 @@ fun CompactRuleRow(
                 val typeIcon = when (rule.type) {
                     RuleType.DOMAIN, RuleType.DOMAIN_SUFFIX, RuleType.DOMAIN_KEYWORD, RuleType.DOMAIN_REGEX -> Icons.Default.Language
                     RuleType.IP_CIDR -> Icons.Default.Public
-                    RuleType.PACKAGE_NAME -> Icons.Default.FilterCenterFocus
+                    RuleType.PACKAGE_NAME, RuleType.PROCESS_NAME, RuleType.PROCESS_PATH -> Icons.Default.FilterCenterFocus
                     RuleType.RULE_SET -> Icons.Default.Shield
                 }
                 Icon(
