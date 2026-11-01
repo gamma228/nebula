@@ -3,13 +3,16 @@
 /local.properties
 /.idea
 .DS_Store
-/build
+build/
+**/build/
 /captures
 .externalNativeBuild
 .cxx
 *.apk
 *.aab
 app/build/
+desktop/build/
+core/build/
 *.hprof
 *.jks
 *.keystore
