@@ -93,7 +93,12 @@ class ProxyVpnService : VpnService(), TunProvider {
     override fun onCreate() {
         super.onCreate()
         try {
-            android.system.Os.setenv("GOMAXPROCS", "1", true)
+            val procs = if (app.nebula.vpn.core.OptimizationFlags.limitGoConcurrency) {
+                app.nebula.vpn.core.OptimizationFlags.goMaxProcsValue.toString()
+            } else {
+                Runtime.getRuntime().availableProcessors().toString()
+            }
+            android.system.Os.setenv("GOMAXPROCS", procs, true)
             android.system.Os.setenv("GODEBUG", "madvdontneed=1", true)
         } catch (_: Exception) {}
         val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
@@ -250,6 +255,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                             endpointIndependentNat = profileEnum.endpointIndependentNat
                         )
                     )
+                    // Dump sanitized config to debug file
+                    dumpSanitizedConfig(configJson)
                     android.util.Log.i("ProxyVpnService", "Starting sing-box with activeProfile=${activeProfile.name}, logLevel=${profileEnum.coreLogLevel}, config length=${configJson.length}")
 
                     // Hand-off: start core with this as TunProvider
@@ -357,6 +364,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                             endpointIndependentNat = profileEnum.endpointIndependentNat
                         )
                     )
+                    dumpSanitizedConfig(configJson)
                     proxyCore.reloadConfig(configJson)
 
                     // Update UI and notification quietly with no disconnect flicker
@@ -386,7 +394,7 @@ class ProxyVpnService : VpnService(), TunProvider {
         tunnelJob = null
         teardownScope.launch {
             try {
-                kotlinx.coroutines.withTimeout(5000L) {
+                kotlinx.coroutines.withTimeout(1500L) {
                     vpnMutex.withLock {
                         stopVpnTunnelInternal()
                     }
@@ -411,16 +419,7 @@ class ProxyVpnService : VpnService(), TunProvider {
 
         vpnRepository.updateState(ConnectionState.Disconnecting)
 
-        // 1. First stop proxyCore so libbox stops forwarding and unblocks native Go read loops
-        try {
-            kotlinx.coroutines.withTimeoutOrNull(2000L) {
-                proxyCore.stop()
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("ProxyVpnService", "proxyCore.stop error: ${e.message}", e)
-        }
-
-        // 2. Close Java TUN file descriptor so Linux kernel immediately tears down tun0
+        // 1. Immediately close TUN file descriptors so Linux kernel instantly removes tun0 and releases OS socket binds
         try {
             tunInterface?.close()
             android.util.Log.i("ProxyVpnService", "tunInterface closed successfully")
@@ -436,10 +435,19 @@ class ProxyVpnService : VpnService(), TunProvider {
             tunNativeFd = -1
         }
 
-        // 3. Tear down foreground service and notification immediately so user sees status bar icon clear
+        // 2. Tear down foreground service and notification immediately so system status bar key icon clears in <200ms
         stopForeground(STOP_FOREGROUND_REMOVE)
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
         nm?.cancel(NOTIFICATION_ID)
+
+        // 3. Stop proxyCore so libbox stops forwarding and frees Go runtime memory
+        try {
+            kotlinx.coroutines.withTimeoutOrNull(1000L) {
+                proxyCore.stop()
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ProxyVpnService", "proxyCore.stop error: ${e.message}", e)
+        }
 
         currentProfileId = null
         currentProfileName = null
@@ -867,6 +875,21 @@ class ProxyVpnService : VpnService(), TunProvider {
             notificationManager.notify(NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             android.util.Log.w("ProxyVpnService", "Failed to update notification: ${e.message}")
+        }
+    }
+
+    private fun dumpSanitizedConfig(configJson: String) {
+        if (!app.nebula.vpn.core.OptimizationFlags.dumpConfigOnStart) return
+        try {
+            val sanitized = configJson
+                .replace(Regex("\"uuid\"\\s*:\\s*\"[^\"]+\""), "\"uuid\": \"[REDACTED]\"")
+                .replace(Regex("\"password\"\\s*:\\s*\"[^\"]+\""), "\"password\": \"[REDACTED]\"")
+                .replace(Regex("\"public_key\"\\s*:\\s*\"[^\"]+\""), "\"public_key\": \"[REDACTED]\"")
+            val targetFile = java.io.File(filesDir, "last_generated_config.json")
+            targetFile.writeText(sanitized)
+            android.util.Log.d("ProxyVpnService", "Dumped sanitized sing-box config (${sanitized.length} chars) to ${targetFile.name}")
+        } catch (e: Exception) {
+            android.util.Log.w("ProxyVpnService", "Failed to dump sanitized config: ${e.message}")
         }
     }
 }

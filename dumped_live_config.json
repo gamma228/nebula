@@ -1,0 +1,250 @@
+{
+    "log": {
+        "level": "warn",
+        "timestamp": true
+    },
+    "dns": {
+        "servers": [
+            {
+                "type": "https",
+                "tag": "dns-remote-doh",
+                "server": "1.1.1.1",
+                "path": "/dns-query",
+                "detour": "proxy",
+                "tls": {
+                    "enabled": true,
+                    "server_name": "cloudflare-dns.com"
+                }
+            },
+            {
+                "type": "https",
+                "tag": "dns-remote-google",
+                "server": "8.8.8.8",
+                "path": "/dns-query",
+                "detour": "proxy",
+                "tls": {
+                    "enabled": true,
+                    "server_name": "dns.google"
+                }
+            },
+            {
+                "type": "udp",
+                "tag": "dns-remote-udp",
+                "server": "8.8.8.8",
+                "detour": "proxy"
+            },
+            {
+                "type": "udp",
+                "tag": "dns-direct-google",
+                "server": "8.8.8.8"
+            },
+            {
+                "type": "udp",
+                "tag": "dns-direct-yandex",
+                "server": "77.88.8.8"
+            },
+            {
+                "type": "local",
+                "tag": "dns-local"
+            },
+            {
+                "type": "fakeip",
+                "tag": "dns-fakeip",
+                "inet4_range": "198.18.0.0/15"
+            }
+        ],
+        "rules": [
+            {
+                "domain_suffix": [
+                    "local",
+                    "lan",
+                    "home.arpa",
+                    "internal"
+                ],
+                "server": "dns-local"
+            },
+            {
+                "domain_suffix": [
+                    "ru",
+                    "su",
+                    "xn--p1ai"
+                ],
+                "server": "dns-local"
+            },
+            {
+                "domain_suffix": [
+                    "ru",
+                    "su",
+                    "xn--p1ai"
+                ],
+                "server": "dns-local"
+            },
+            {
+                "domain": [
+                    "dns.google",
+                    "1dot1dot1dot1.cloudflare-dns.com",
+                    "cloudflare-dns.com",
+                    "one.one.one.one",
+                    "dns.alidns.com"
+                ],
+                "server": "dns-remote-doh"
+            },
+            {
+                "inbound": [
+                    "tun-in",
+                    "mixed-in"
+                ],
+                "server": "dns-fakeip"
+            }
+        ],
+        "strategy": "ipv4_only"
+    },
+    "inbounds": [
+        {
+            "type": "tun",
+            "tag": "tun-in",
+            "address": [
+                "172.19.0.1/30"
+            ],
+            "mtu": 1400,
+            "auto_route": true,
+            "strict_route": false,
+            "endpoint_independent_nat": true,
+            "stack": "gvisor"
+        },
+        {
+            "type": "mixed",
+            "tag": "mixed-in",
+            "listen": "127.0.0.1",
+            "listen_port": 2080
+        }
+    ],
+    "outbounds": [
+        {
+            "type": "vless",
+            "tag": "proxy",
+            "server": "87.242.127.115",
+            "server_port": 443,
+            "uuid": "[REDACTED]",
+            "packet_encoding": "xudp",
+            "tls": {
+                "enabled": true,
+                "server_name": "lk.x5.ru",
+                "insecure": true,
+                "alpn": [
+                    "h2"
+                ],
+                "utls": {
+                    "enabled": true,
+                    "fingerprint": "chrome"
+                }
+            },
+            "transport": {
+                "type": "grpc",
+                "service_name": "x5.lk.v1.AccountService",
+                "idle_timeout": "15s",
+                "ping_timeout": "15s",
+                "permit_without_stream": true
+            }
+        },
+        {
+            "type": "selector",
+            "tag": "select",
+            "outbounds": [
+                "proxy"
+            ],
+            "default": "proxy"
+        },
+        {
+            "type": "direct",
+            "tag": "direct"
+        },
+        {
+            "type": "block",
+            "tag": "block"
+        }
+    ],
+    "route": {
+        "default_domain_resolver": "dns-local",
+        "final": "proxy",
+        "rules": [
+            {
+                "action": "sniff",
+                "sniffer": [
+                    "http",
+                    "tls",
+                    "quic"
+                ],
+                "timeout": "100ms"
+            },
+            {
+                "protocol": "quic",
+                "action": "reject"
+            },
+            {
+                "network": "udp",
+                "port": [
+                    443
+                ],
+                "action": "reject"
+            },
+            {
+                "protocol": "dns",
+                "action": "hijack-dns"
+            },
+            {
+                "port": [
+                    53
+                ],
+                "action": "hijack-dns"
+            },
+            {
+                "ip_is_private": true,
+                "outbound": "direct"
+            },
+            {
+                "ip_cidr": [
+                    "91.108.4.0/22",
+                    "91.108.8.0/22",
+                    "91.108.12.0/22",
+                    "91.108.16.0/22",
+                    "91.108.20.0/22",
+                    "91.108.56.0/22",
+                    "149.154.160.0/20",
+                    "149.154.164.0/22",
+                    "149.154.168.0/22",
+                    "149.154.172.0/22"
+                ],
+                "outbound": "proxy"
+            },
+            {
+                "domain_suffix": [
+                    "telegram.org",
+                    "t.me",
+                    "telegram.me",
+                    "telesco.pe",
+                    "tdesktop.com"
+                ],
+                "outbound": "proxy"
+            },
+            {
+                "domain_suffix": [
+                    "ru"
+                ],
+                "outbound": "direct"
+            },
+            {
+                "domain_suffix": [
+                    "su"
+                ],
+                "outbound": "direct"
+            },
+            {
+                "domain_suffix": [
+                    "xn--p1ai"
+                ],
+                "outbound": "direct"
+            }
+        ]
+    }
+}

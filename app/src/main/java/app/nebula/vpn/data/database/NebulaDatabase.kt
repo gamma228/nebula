@@ -24,7 +24,7 @@ import app.nebula.vpn.data.database.entity.TrafficStatEntity
         TrafficStatEntity::class,
         ThemeEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class NebulaDatabase : RoomDatabase() {

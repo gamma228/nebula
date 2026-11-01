@@ -166,14 +166,14 @@ object SingBoxConfigBuilder {
                         }
                         put("server", "dns-local")
                     })
-                    // Russian domestic domains resolve directly via direct Yandex DNS
+                    // Russian domestic domains resolve directly via local/direct system DNS outside tunnel
                     add(buildJsonObject {
                         putJsonArray("domain_suffix") {
                             add(JsonPrimitive("ru"))
                             add(JsonPrimitive("su"))
                             add(JsonPrimitive("xn--p1ai"))
                         }
-                        put("server", "dns-direct-yandex")
+                        put("server", "dns-local")
                     })
                     // User configured direct domains
                     val directDomains = config.customRules
@@ -184,7 +184,7 @@ object SingBoxConfigBuilder {
                             putJsonArray("domain_suffix") {
                                 for (d in directDomains) add(JsonPrimitive(d))
                             }
-                            put("server", "dns-direct-yandex")
+                            put("server", "dns-local")
                         })
                     }
                     // Android Private DNS popular domains resolve through remote proxy DoH
@@ -279,7 +279,7 @@ object SingBoxConfigBuilder {
             val finalTarget = if (activeP != null) "proxy" else "direct"
 
             putJsonObject("route") {
-                put("default_domain_resolver", "dns-direct-yandex")
+                put("default_domain_resolver", "dns-local")
                 put("final", finalTarget)
 
                 val referencedRuleSets = config.customRules
@@ -461,7 +461,7 @@ object SingBoxConfigBuilder {
             }
             val alpnToUse = if (tls.alpn.isNotEmpty()) {
                 tls.alpn
-            } else if (transportType == TransportType.WS) {
+            } else if (transportType == TransportType.WS || transportType == TransportType.HTTP_UPGRADE) {
                 listOf("http/1.1")
             } else if (transportType == TransportType.GRPC) {
                 listOf("h2")
@@ -502,8 +502,8 @@ object SingBoxConfigBuilder {
                 }
             }
             // TLS ClientHello Fragmentation for TSPU/DPI anti-censorship bypass (identical to INCY / Xray fragment)
-            // NOTE: Do NOT fragment gRPC or QUIC connections, as gRPC HTTP/2 multiplexing resets on fragmented frames.
-            if (!isQuic && transportType != TransportType.GRPC) {
+            // NOTE: Do NOT fragment gRPC, QUIC, or Reality connections (Reality manages TLS ClientHello natively)
+            if (!isQuic && transportType != TransportType.GRPC && tls.realityPublicKey.isEmpty()) {
                 put("fragment", true)
                 put("fragment_fallback_delay", "500ms")
             }
@@ -548,6 +548,9 @@ object SingBoxConfigBuilder {
                     if (transport.serviceName.isNotEmpty()) {
                         put("service_name", transport.serviceName)
                     }
+                    if (transport.authority.isNotEmpty()) {
+                        put("authority", transport.authority)
+                    }
                     put("idle_timeout", "15s")
                     put("ping_timeout", "15s")
                     put("permit_without_stream", true)
@@ -579,7 +582,7 @@ object SingBoxConfigBuilder {
     private fun buildOutboundForProfile(profile: ProxyProfile, tag: String): JsonObject {
         return buildJsonObject {
             if (!isIpAddress(profile.server)) {
-                put("domain_resolver", "dns-direct-yandex")
+                put("domain_resolver", "dns-local")
             }
             when (profile.protocol) {
                 ProtocolType.SHADOWSOCKS -> {
@@ -596,7 +599,7 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("uuid", profile.authSecret)
-                    put("packet_encoding", "xudp")
+                    put("packet_encoding", profile.packetEncoding.ifEmpty { "xudp" })
                     val flowVal = when {
                         profile.tls.enabled && profile.transport.type == TransportType.TCP && profile.tls.flow.isNotEmpty() -> profile.tls.flow
                         profile.tls.enabled && profile.transport.type == TransportType.TCP && profile.tls.realityPublicKey.isNotEmpty() -> "xtls-rprx-vision"
@@ -620,7 +623,7 @@ object SingBoxConfigBuilder {
                     put("uuid", profile.authSecret)
                     put("security", profile.encryption.ifEmpty { "auto" })
                     put("alter_id", 0)
-                    put("packet_encoding", "xudp")
+                    put("packet_encoding", profile.packetEncoding.ifEmpty { "xudp" })
                     if (profile.tls.enabled) {
                         put("tls", buildTlsObject(profile.tls, profile.server, profile.transport.type))
                     }
@@ -648,6 +651,22 @@ object SingBoxConfigBuilder {
                     put("password", profile.authSecret)
                     val tlsToUse = if (profile.tls.enabled) profile.tls else profile.tls.copy(enabled = true)
                     put("tls", buildTlsObject(tlsToUse, profile.server, isQuic = true))
+                }
+                ProtocolType.TUIC -> {
+                    put("type", "tuic")
+                    put("tag", tag)
+                    put("server", profile.server)
+                    put("server_port", profile.port)
+                    val parts = profile.authSecret.split(":")
+                    val uuid = parts[0]
+                    val pass = if (parts.size > 1) parts[1] else ""
+                    put("uuid", uuid)
+                    if (pass.isNotEmpty()) {
+                        put("password", pass)
+                    }
+                    val tlsToUse = if (profile.tls.enabled) profile.tls else profile.tls.copy(enabled = true)
+                    put("tls", buildTlsObject(tlsToUse, profile.server, isQuic = true))
+                    put("congestion_control", "bbr")
                 }
             }
         }

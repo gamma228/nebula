@@ -137,9 +137,9 @@ class DefaultLatencyTester(
     constructor(probe: LatencyProbe) : this(
         probe = probe,
         dispatcher = Dispatchers.IO,
-        parallelism = 12,
-        perServerTimeoutMs = 1500L,
-        globalTimeoutMs = 20000L
+        parallelism = 6,
+        perServerTimeoutMs = 5000L,
+        globalTimeoutMs = 45000L
     )
 
     private val _progress = MutableStateFlow(BatchTestProgress())

@@ -10,11 +10,13 @@ import android.provider.Settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.nebula.vpn.core.model.ConnectionState
+import app.nebula.vpn.core.model.ProtocolType
 import app.nebula.vpn.core.model.ProxyProfile
+import app.nebula.vpn.core.model.TransportType
+import app.nebula.vpn.core.proxy.ProxyCore
 import app.nebula.vpn.data.repository.ProfileRepository
 import app.nebula.vpn.data.repository.SettingsRepository
 import app.nebula.vpn.data.repository.VpnRepository
-import app.nebula.vpn.vpn.ProxyVpnService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -24,12 +26,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.net.ConnectException
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.Proxy
 import java.net.Socket
+import java.net.SocketTimeoutException
 import java.net.URL
+import java.net.UnknownHostException
+import javax.crypto.BadPaddingException
 import javax.inject.Inject
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLException
 
 data class DiagnosticCheckItem(
     val title: String,
@@ -45,12 +54,20 @@ data class DiagnosticVerdict(
     val isSuccess: Boolean
 )
 
+data class HttpProbeResult(
+    val statusCode: Int = -1,
+    val body: String? = null,
+    val latencyMs: Long = -1L,
+    val errorClass: String? = null
+)
+
 @HiltViewModel
 class DoctorViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val profileRepository: ProfileRepository,
     private val settingsRepository: SettingsRepository,
-    private val vpnRepository: VpnRepository
+    private val vpnRepository: VpnRepository,
+    private val proxyCore: ProxyCore
 ) : ViewModel() {
 
     private val _checks = MutableStateFlow<List<DiagnosticCheckItem>>(emptyList())
@@ -70,14 +87,13 @@ class DoctorViewModel @Inject constructor(
             val results = mutableListOf<DiagnosticCheckItem>()
             val isConnected = vpnRepository.connectionState.value is ConnectionState.Connected
 
-            // Local mixed HTTP/SOCKS inbound exposed by sing-box at port 2080
-            val tunnelProxy: Proxy? = if (isConnected) {
-                Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", 2080))
-            } else {
-                null
-            }
+            // Retrieve active or selected profile
+            val savedProfileId = settingsRepository.selectedProfileId.first()
+            val activeProfile = savedProfileId?.let { profileRepository.getProfileById(it) }
+                ?: profileRepository.allProfiles.first().firstOrNull()
+            activeProfileCached = activeProfile
 
-            // 1. VPN Permission Check
+            // 1. VPN Permission Check (Pre-check)
             val vpnIntent = VpnService.prepare(context)
             val vpnPassed = vpnIntent == null
             results.add(
@@ -89,7 +105,7 @@ class DoctorViewModel @Inject constructor(
                 )
             )
 
-            // 2. Battery Restrictions
+            // 2. Battery Restrictions (Pre-check)
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
             val batteryIgnoring = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && powerManager != null) {
                 powerManager.isIgnoringBatteryOptimizations(context.packageName)
@@ -104,33 +120,39 @@ class DoctorViewModel @Inject constructor(
                 )
             )
 
-            // 3. Active Server Reachability (Direct physical socket test)
-            val savedProfileId = settingsRepository.selectedProfileId.first()
-            val activeProfile = savedProfileId?.let { profileRepository.getProfileById(it) }
-            activeProfileCached = activeProfile
+            // 3. Server Direct TCP Socket Reachability
+            var tcpPortReachable = false
+            var tcpLatencyMs = -1L
             if (activeProfile != null) {
-                var serverPassed = false
-                var latencyMs = -1L
                 val start = System.currentTimeMillis()
+                var tcpError: String? = null
                 try {
                     Socket().use { socket ->
                         socket.tcpNoDelay = true
                         socket.soTimeout = 3000
                         socket.connect(InetSocketAddress(activeProfile.server, activeProfile.port), 3000)
                     }
-                    latencyMs = System.currentTimeMillis() - start
-                    serverPassed = true
+                    tcpLatencyMs = System.currentTimeMillis() - start
+                    tcpPortReachable = true
                 } catch (e: Exception) {
-                    serverPassed = false
+                    tcpError = classifyException(e)
                 }
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Сервер прокси (${activeProfile.name})",
-                        isPassed = serverPassed,
-                        details = if (serverPassed) "Доступен: ${activeProfile.server}:${activeProfile.port} (${latencyMs} ms)" else "Недоступен: ${activeProfile.server}:${activeProfile.port}",
-                        canFix = false
+
+                if (!isConnected) {
+                    // Pre-check while disconnected: TCP alone shows port open, data not verified
+                    results.add(
+                        DiagnosticCheckItem(
+                            title = "Сервер прокси (${activeProfile.name})",
+                            isPassed = tcpPortReachable,
+                            details = if (tcpPortReachable) {
+                                "Порт открыт: ${activeProfile.server}:${activeProfile.port} (${tcpLatencyMs} ms, данные не проверены)"
+                            } else {
+                                "Порт закрыт или недоступен: ${activeProfile.server}:${activeProfile.port} ($tcpError)"
+                            },
+                            canFix = false
+                        )
                     )
-                )
+                }
             } else {
                 results.add(
                     DiagnosticCheckItem(
@@ -142,201 +164,7 @@ class DoctorViewModel @Inject constructor(
                 )
             }
 
-            // 4. DNS Hijack & Remote DoH Check (Tested through tunnel proxy when connected)
-            if (isConnected) {
-                var dohPassed = false
-                var dohLatency = -1L
-                val dohStart = System.currentTimeMillis()
-
-                // Try Cloudflare DoH first (with Accept: application/dns-json RFC 8484 header), fallback to Google DoH /resolve
-                val dohHeaders = mapOf("Accept" to "application/dns-json")
-                var cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 6000, proxy = tunnelProxy, headers = dohHeaders)
-                if (cfDoh != null) {
-                    dohPassed = true
-                    dohLatency = System.currentTimeMillis() - dohStart
-                } else {
-                    var googleDoh = testHttp("https://8.8.8.8/resolve?name=google.com&type=A", timeoutMs = 6000, proxy = tunnelProxy, headers = dohHeaders)
-                    if (googleDoh != null) {
-                        dohPassed = true
-                        dohLatency = System.currentTimeMillis() - dohStart
-                    }
-                }
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Безопасный DNS (DoH Detour)",
-                        isPassed = dohPassed,
-                        details = if (dohPassed) "DoH успешно защищен и отвечает через туннель (${dohLatency} ms)" else "DoH не ответил через прокси-туннель",
-                        canFix = false
-                    )
-                )
-            } else {
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Безопасный DNS (DoH Detour)",
-                        isPassed = true,
-                        details = "VPN отключен. Защита DoH активируется при подключении",
-                        canFix = false
-                    )
-                )
-            }
-
-            // 5. Exit IP Discovery (with multiple fallback endpoints and dual proxy/tun channel)
-            if (isConnected) {
-                var exitIp: String? = null
-                val ipEndpoints = listOf(
-                    "https://api.ipify.org",
-                    "https://ifconfig.me/ip",
-                    "https://icanhazip.com",
-                    "https://checkip.amazonaws.com"
-                )
-                for (endpoint in ipEndpoints) {
-                    val res = testHttp(endpoint, timeoutMs = 7000, proxy = tunnelProxy)
-                    if (!res.isNullOrBlank() && res.length in 7..45 && !res.contains("<html", ignoreCase = true)) {
-                        exitIp = res.trim()
-                        break
-                    }
-                }
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Внешний IP адрес (Exit IP)",
-                        isPassed = exitIp != null,
-                        details = if (exitIp != null) "Текущий IP: $exitIp (Туннель активен, защита включена)" else "Не удалось определить внешний IP через туннель",
-                        canFix = false
-                    )
-                )
-            } else {
-                val exitIp = testHttp("https://api.ipify.org", timeoutMs = 3000, proxy = null)
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Внешний IP адрес (Exit IP)",
-                        isPassed = true,
-                        details = if (exitIp != null) "Текущий IP: $exitIp (Прямое подключение, VPN выключен)" else "Не удалось определить внешний IP",
-                        canFix = false
-                    )
-                )
-            }
-
-            // 6. Censored / Restricted Endpoints Connectivity
-            if (isConnected) {
-                val testTargets = listOf(
-                    "Cloudflare CP" to "https://cp.cloudflare.com/generate_204",
-                    "Google Gen204" to "https://www.google.com/generate_204",
-                    "GitHub CDN" to "https://raw.githubusercontent.com"
-                )
-                val targetResults = testTargets.map { (name, url) ->
-                    val code = getResponseCode(url, timeoutMs = 6000, proxy = tunnelProxy)
-                    name to code
-                }
-                val anyPassed = targetResults.any { it.second in 200..399 }
-                val targetDetails = targetResults.joinToString(", ") { "${it.first}: ${if (it.second > 0) "HTTP ${it.second}" else "Сбой"}" }
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Обход блокировок веб-ресурсов",
-                        isPassed = anyPassed,
-                        details = targetDetails,
-                        canFix = false
-                    )
-                )
-            } else {
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Обход блокировок веб-ресурсов",
-                        isPassed = true,
-                        details = "Проверка обхода блокировок активна при включенном VPN",
-                        canFix = false
-                    )
-                )
-            }
-
-            // 7. Telegram Direct Connectivity Check
-            var tgPassed = false
-            var tgLatency = -1L
-            val tgStart = System.currentTimeMillis()
-            if (isConnected) {
-                // Test 1: Direct TCP/SOCKS connection to Telegram DC (149.154.167.50:443) via local mixed inbound
-                try {
-                    val socksProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 2080))
-                    Socket(socksProxy).use { s ->
-                        s.tcpNoDelay = true
-                        s.soTimeout = 4000
-                        s.connect(InetSocketAddress("149.154.167.50", 443), 4000)
-                    }
-                    tgPassed = true
-                    tgLatency = System.currentTimeMillis() - tgStart
-                } catch (_: Exception) {}
-
-                // Test 2: HTTP Web Telegram / API probe fallback
-                if (!tgPassed) {
-                    val tgCode = getResponseCode("https://web.telegram.org", timeoutMs = 6000, proxy = tunnelProxy)
-                    if (tgCode in 200..399) {
-                        tgPassed = true
-                        tgLatency = System.currentTimeMillis() - tgStart
-                    } else {
-                        val apiCode = getResponseCode("https://api.telegram.org", timeoutMs = 5000, proxy = tunnelProxy)
-                        if (apiCode in 200..499) { // 404/401 from API also confirms connectivity
-                            tgPassed = true
-                            tgLatency = System.currentTimeMillis() - tgStart
-                        }
-                    }
-                }
-            } else {
-                try {
-                    Socket().use { s ->
-                        s.tcpNoDelay = true
-                        s.soTimeout = 2500
-                        s.connect(InetSocketAddress("149.154.167.50", 443), 2500)
-                    }
-                    tgLatency = System.currentTimeMillis() - tgStart
-                    tgPassed = true
-                } catch (_: Exception) {
-                    tgPassed = false
-                }
-            }
-            results.add(
-                DiagnosticCheckItem(
-                    title = "Соединение с Telegram",
-                    isPassed = tgPassed,
-                    details = if (tgPassed) {
-                        if (isConnected) "Telegram доступен через туннель ($tgLatency ms)" else "Telegram доступен напрямую ($tgLatency ms)"
-                    } else {
-                        if (isConnected) "Telegram не отвечает через туннель" else "Telegram недоступен напрямую через текущую сеть"
-                    },
-                    canFix = false
-                )
-            )
-
-            // 8. YouTube HTTPS Handshake
-            if (isConnected) {
-                var ytCode = getResponseCode("https://www.youtube.com/generate_204", timeoutMs = 6000, proxy = tunnelProxy)
-                if (ytCode !in 200..399 && ytCode != 429) {
-                    val mYtCode = getResponseCode("https://m.youtube.com", timeoutMs = 6000, proxy = tunnelProxy)
-                    if (mYtCode in 200..399 || mYtCode == 429) {
-                        ytCode = mYtCode
-                    }
-                }
-                val ytPassed = ytCode in 200..399 || ytCode == 429
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Доступность YouTube по HTTPS",
-                        isPassed = ytPassed,
-                        details = if (ytPassed) {
-                            if (ytCode == 429) "YouTube отвечает через туннель (HTTP 429)" else "YouTube отвечает без ограничений (HTTP $ytCode)"
-                        } else "YouTube не отвечает через туннель",
-                        canFix = false
-                    )
-                )
-            } else {
-                results.add(
-                    DiagnosticCheckItem(
-                        title = "Доступность YouTube по HTTPS",
-                        isPassed = true,
-                        details = "VPN выключен (в РФ прямой доступ к YouTube может замедляться)",
-                        canFix = false
-                    )
-                )
-            }
-
-            // 9. IPv6 Routing Strategy Check
+            // 4. IPv6 Strategy (Pre-check)
             val isIpv6On = settingsRepository.ipv6Enabled.first()
             results.add(
                 DiagnosticCheckItem(
@@ -352,7 +180,7 @@ class DoctorViewModel @Inject constructor(
                 )
             )
 
-            // 10. QUIC (UDP 443) Anti-Censorship Check
+            // 5. QUIC Blocking (Pre-check)
             val isQuicBlocked = settingsRepository.blockQuic.first()
             results.add(
                 DiagnosticCheckItem(
@@ -368,41 +196,245 @@ class DoctorViewModel @Inject constructor(
                 )
             )
 
-            // 11. UDP Connectivity
+            // If disconnected, complete diagnostics with pre-checks only. Do NOT run tunnel tests.
+            if (!isConnected) {
+                val preCheckFailed = results.filter { !it.isPassed }
+                val verdict = DiagnosticVerdict(
+                    title = "VPN не подключен",
+                    description = if (preCheckFailed.isEmpty()) {
+                        "Предварительные проверки пройдены. Подключите VPN на Главной для проверки защищенного интернет-канала."
+                    } else {
+                        "VPN выключен. Обнаружены замечания в предварительных настройках (${preCheckFailed.size})."
+                    },
+                    isSuccess = preCheckFailed.isEmpty()
+                )
+
+                withContext(Dispatchers.Main) {
+                    _checks.value = results
+                    _verdict.value = verdict
+                    _isRunning.value = false
+                }
+                return@launch
+            }
+
+            // ==========================================
+            // TUNNEL TESTS (RUN ONLY WHEN CONNECTED)
+            // ==========================================
+            val tunnelProxy = Proxy(Proxy.Type.HTTP, InetSocketAddress("127.0.0.1", 2080))
+
+            // 6. Profile Configuration Integrity & Suspicion Check
+            val suspiciousFields = mutableListOf<String>()
+            if (activeProfile != null) {
+                if (activeProfile.transport.type == TransportType.GRPC && activeProfile.transport.serviceName.isBlank()) {
+                    suspiciousFields.add("gRPC serviceName пустой (сервер отклонит запрос с 404)")
+                }
+                if (activeProfile.protocol == ProtocolType.VLESS && activeProfile.tls.realityPublicKey.isEmpty() && activeProfile.tls.flow.contains("vision")) {
+                    suspiciousFields.add("Vision flow указан без Reality Public Key")
+                }
+                if (activeProfile.tls.enabled && activeProfile.tls.alpn.isEmpty() && activeProfile.transport.type == TransportType.GRPC) {
+                    suspiciousFields.add("gRPC TLS без ALPN [h2]")
+                }
+            }
+            if (suspiciousFields.isNotEmpty()) {
+                results.add(
+                    DiagnosticCheckItem(
+                        title = "Конфигурация профиля",
+                        isPassed = false,
+                        details = "Подозрительные параметры: ${suspiciousFields.joinToString("; ")}",
+                        canFix = false
+                    )
+                )
+            }
+
+            // 7. Active Node Data Path Verification (Real HTTPS GET 204 through tunnel)
+            var nodeDataPassed = false
+            val gen204Probe = probeHttp("https://cp.cloudflare.com/generate_204", timeoutMs = 5000, proxy = tunnelProxy)
+            val gen204Fallback = if (gen204Probe.statusCode !in 200..399) {
+                probeHttp("https://www.google.com/generate_204", timeoutMs = 5000, proxy = tunnelProxy)
+            } else gen204Probe
+
+            if (gen204Probe.statusCode in 200..399 || gen204Fallback.statusCode in 200..399) {
+                nodeDataPassed = true
+                val latency = if (gen204Probe.statusCode in 200..399) gen204Probe.latencyMs else gen204Fallback.latencyMs
+                val code = if (gen204Probe.statusCode in 200..399) gen204Probe.statusCode else gen204Fallback.statusCode
+                results.add(
+                    DiagnosticCheckItem(
+                        title = "Сервер прокси (${activeProfile?.name ?: "Активный"})",
+                        isPassed = true,
+                        details = "Передача данных подтверждена: HTTP $code (${latency} ms)",
+                        canFix = false
+                    )
+                )
+            } else {
+                val err = gen204Probe.errorClass ?: gen204Fallback.errorClass ?: "Сбой передачи данных"
+                results.add(
+                    DiagnosticCheckItem(
+                        title = "Сервер прокси (${activeProfile?.name ?: "Активный"})",
+                        isPassed = false,
+                        details = if (tcpPortReachable) {
+                            "Порт открыт ($tcpLatencyMs ms), но данные не передаются через прокси ($err)"
+                        } else {
+                            "Сервер не отвечает: $err"
+                        },
+                        canFix = false
+                    )
+                )
+            }
+
+            // 8. DNS Detour Check (DoH via proxy)
+            val dohHeaders = mapOf("Accept" to "application/dns-json")
+            val cfDoh = probeHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 5000, proxy = tunnelProxy, headers = dohHeaders)
+            val dohPassed: Boolean
+            val dohDetails: String
+            if (cfDoh.statusCode in 200..399) {
+                dohPassed = true
+                dohDetails = "DoH успешно защищен и отвечает через туннель (${cfDoh.latencyMs} ms)"
+            } else {
+                val googleDoh = probeHttp("https://8.8.8.8/resolve?name=google.com&type=A", timeoutMs = 5000, proxy = tunnelProxy, headers = dohHeaders)
+                if (googleDoh.statusCode in 200..399) {
+                    dohPassed = true
+                    dohDetails = "DoH (Google) успешно защищен и отвечает через туннель (${googleDoh.latencyMs} ms)"
+                } else {
+                    dohPassed = false
+                    val dohErr = cfDoh.errorClass ?: googleDoh.errorClass ?: "DoH не ответил"
+                    dohDetails = "DoH не ответил через прокси-туннель: $dohErr"
+                }
+            }
             results.add(
                 DiagnosticCheckItem(
-                    title = "UDP/QUIC проходимость",
-                    isPassed = true,
-                    details = if (isConnected) "Транспортный шлюз sing-box активен и обрабатывает UDP/TCP" else "VPN отключен. Включите туннель для маршрутизации UDP",
+                    title = "Безопасный DNS (DoH Detour)",
+                    isPassed = dohPassed,
+                    details = dohDetails,
                     canFix = false
                 )
             )
 
-            // Verdict Computation
+            // 9. Exit IP Discovery
+            var exitIp: String? = null
+            var ipError: String? = null
+            val ipEndpoints = listOf(
+                "https://api.ipify.org",
+                "https://ifconfig.me/ip",
+                "https://icanhazip.com",
+                "https://checkip.amazonaws.com"
+            )
+            for (endpoint in ipEndpoints) {
+                val probe = probeHttp(endpoint, timeoutMs = 5000, proxy = tunnelProxy)
+                if (probe.body != null && probe.body.length in 7..45 && !probe.body.contains("<html", ignoreCase = true)) {
+                    exitIp = probe.body.trim()
+                    break
+                } else if (probe.errorClass != null && ipError == null) {
+                    ipError = probe.errorClass
+                }
+            }
+            results.add(
+                DiagnosticCheckItem(
+                    title = "Внешний IP адрес (Exit IP)",
+                    isPassed = exitIp != null,
+                    details = if (exitIp != null) "Текущий IP: $exitIp (Туннель активен, защита включена)" else "Не удалось определить внешний IP через туннель (${ipError ?: "Таймаут"})",
+                    canFix = false
+                )
+            )
+
+            // 10. Web Resources Bypass
+            val testTargets = listOf(
+                "Cloudflare CP" to "https://cp.cloudflare.com/generate_204",
+                "Google Gen204" to "https://www.google.com/generate_204",
+                "GitHub CDN" to "https://raw.githubusercontent.com"
+            )
+            val targetResults = testTargets.map { (name, url) ->
+                val probe = probeHttp(url, timeoutMs = 5000, proxy = tunnelProxy)
+                name to probe
+            }
+            val anyPassed = targetResults.any { it.second.statusCode in 200..399 }
+            val targetDetails = targetResults.joinToString(", ") { (name, p) ->
+                "$name: ${if (p.statusCode > 0) "HTTP ${p.statusCode}" else (p.errorClass ?: "Сбой")}"
+            }
+            results.add(
+                DiagnosticCheckItem(
+                    title = "Обход блокировок веб-ресурсов",
+                    isPassed = anyPassed,
+                    details = targetDetails,
+                    canFix = false
+                )
+            )
+
+            // 11. Telegram Connectivity
+            var tgPassed = false
+            var tgLatency = -1L
+            var tgError: String? = null
+            val tgStart = System.currentTimeMillis()
+            try {
+                val socksProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 2080))
+                Socket(socksProxy).use { s ->
+                    s.tcpNoDelay = true
+                    s.soTimeout = 4000
+                    s.connect(InetSocketAddress("149.154.167.50", 443), 4000)
+                }
+                tgPassed = true
+                tgLatency = System.currentTimeMillis() - tgStart
+            } catch (e: Exception) {
+                tgError = classifyException(e)
+            }
+            if (!tgPassed) {
+                val webTg = probeHttp("https://web.telegram.org", timeoutMs = 5000, proxy = tunnelProxy)
+                if (webTg.statusCode in 200..399) {
+                    tgPassed = true
+                    tgLatency = webTg.latencyMs
+                } else {
+                    val apiTg = probeHttp("https://api.telegram.org", timeoutMs = 4000, proxy = tunnelProxy)
+                    if (apiTg.statusCode in 200..499) {
+                        tgPassed = true
+                        tgLatency = apiTg.latencyMs
+                    }
+                }
+            }
+            results.add(
+                DiagnosticCheckItem(
+                    title = "Соединение с Telegram",
+                    isPassed = tgPassed,
+                    details = if (tgPassed) "Telegram доступен через туннель ($tgLatency ms)" else "Telegram не отвечает через туннель (${tgError ?: "Сбой подключения"})",
+                    canFix = false
+                )
+            )
+
+            // 12. YouTube HTTPS Handshake
+            val ytProbe = probeHttp("https://www.youtube.com/generate_204", timeoutMs = 5000, proxy = tunnelProxy)
+            val mYtProbe = if (ytProbe.statusCode !in 200..399 && ytProbe.statusCode != 429) {
+                probeHttp("https://m.youtube.com", timeoutMs = 5000, proxy = tunnelProxy)
+            } else ytProbe
+            val ytPassed = ytProbe.statusCode in 200..399 || ytProbe.statusCode == 429 || mYtProbe.statusCode in 200..399 || mYtProbe.statusCode == 429
+            val ytCode = if (ytProbe.statusCode > 0) ytProbe.statusCode else mYtProbe.statusCode
+            results.add(
+                DiagnosticCheckItem(
+                    title = "Доступность YouTube по HTTPS",
+                    isPassed = ytPassed,
+                    details = if (ytPassed) {
+                        if (ytCode == 429) "YouTube отвечает через туннель (HTTP 429)" else "YouTube отвечает без ограничений (HTTP $ytCode, ${ytProbe.latencyMs} ms)"
+                    } else "YouTube не отвечает через туннель: ${ytProbe.errorClass ?: "Сбой"}",
+                    canFix = false
+                )
+            )
+
+            // 13. Verdict Computation (strictly backed by real results)
             val failedChecks = results.filter { !it.isPassed }
             val verdict = when {
-                !isConnected -> DiagnosticVerdict(
-                    title = "VPN отключен",
-                    description = "Туннель выключен. Подключитесь на Главной, чтобы активировать защиту и обход блокировок.",
-                    isSuccess = true
+                suspiciousFields.isNotEmpty() -> DiagnosticVerdict(
+                    title = "Проблема в профиле",
+                    description = "Обнаружены некорректные параметры: ${suspiciousFields.first()}. Проверьте настройки узла.",
+                    isSuccess = false
                 )
                 failedChecks.isEmpty() -> DiagnosticVerdict(
                     title = "Все системы в норме",
                     description = "Туннель, DNS и маршрутизация функционируют исправно.",
                     isSuccess = true
                 )
-                failedChecks.any { it.title.contains("Сервер") } -> DiagnosticVerdict(
-                    title = "Сервер недоступен",
-                    description = "Не удается установить соединение с сервером прокси. Попробуйте другой узел.",
-                    isSuccess = false
-                )
-                failedChecks.any { it.title.contains("Exit IP") || it.title.contains("Внешний IP") } &&
-                failedChecks.any { it.title.contains("Обход") } -> DiagnosticVerdict(
+                !nodeDataPassed -> DiagnosticVerdict(
                     title = "Сервер не передает данные",
-                    description = "Узел подключен, но удаленный сервер не пропускает интернет-трафик. Выберите другой рабочий узел из списка.",
+                    description = "Узел подключен, но удаленный сервер не пропускает трафик. Проверьте правильность ключей или выберите другой узел.",
                     isSuccess = false
                 )
-                failedChecks.any { it.title.contains("DNS") } -> DiagnosticVerdict(
+                !dohPassed -> DiagnosticVerdict(
                     title = "Сбой DNS в туннеле",
                     description = "Запросы DNS не проходят через туннель. Проверьте настройки DoH или узел.",
                     isSuccess = false
@@ -422,78 +454,53 @@ class DoctorViewModel @Inject constructor(
         }
     }
 
-    private fun testHttp(
+    private fun probeHttp(
         urlStr: String,
-        timeoutMs: Int = 3000,
+        timeoutMs: Int = 4000,
         proxy: Proxy? = null,
         headers: Map<String, String> = emptyMap()
-    ): String? {
-        fun doRequest(p: Proxy?): String? {
-            return try {
-                val url = URL(urlStr)
-                val conn = (if (p != null) url.openConnection(p) else url.openConnection()) as HttpURLConnection
-                conn.connectTimeout = timeoutMs
-                conn.readTimeout = timeoutMs
-                conn.instanceFollowRedirects = true
-                conn.requestMethod = "GET"
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
-                for ((k, v) in headers) {
-                    conn.setRequestProperty(k, v)
-                }
-                try {
-                    if (conn.responseCode in 200..399) {
-                        conn.inputStream.bufferedReader().use { it.readText().trim() }
-                    } else null
-                } finally {
-                    conn.disconnect()
-                }
-            } catch (e: Exception) {
-                null
+    ): HttpProbeResult {
+        val start = System.currentTimeMillis()
+        var conn: HttpURLConnection? = null
+        return try {
+            val url = URL(urlStr)
+            conn = (if (proxy != null) url.openConnection(proxy) else url.openConnection()) as HttpURLConnection
+            conn.connectTimeout = timeoutMs
+            conn.readTimeout = timeoutMs
+            conn.instanceFollowRedirects = true
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
+            for ((k, v) in headers) {
+                conn.setRequestProperty(k, v)
             }
+            val code = conn.responseCode
+            val latency = (System.currentTimeMillis() - start).coerceAtLeast(1L)
+            val body = if (code in 200..399) {
+                try {
+                    conn.inputStream.bufferedReader().use { it.readText().trim() }
+                } catch (_: Exception) { null }
+            } else null
+            HttpProbeResult(statusCode = code, body = body, latencyMs = latency)
+        } catch (e: Exception) {
+            val latency = (System.currentTimeMillis() - start).coerceAtLeast(1L)
+            HttpProbeResult(statusCode = -1, latencyMs = latency, errorClass = classifyException(e))
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (_: Exception) {}
         }
-
-        val res = doRequest(proxy)
-        if (res != null) return res
-        if (proxy != null) {
-            return doRequest(null)
-        }
-        return null
     }
 
-    private fun getResponseCode(
-        urlStr: String,
-        timeoutMs: Int = 3000,
-        proxy: Proxy? = null,
-        headers: Map<String, String> = emptyMap()
-    ): Int {
-        fun doRequest(p: Proxy?): Int {
-            return try {
-                val url = URL(urlStr)
-                val conn = (if (p != null) url.openConnection(p) else url.openConnection()) as HttpURLConnection
-                conn.connectTimeout = timeoutMs
-                conn.readTimeout = timeoutMs
-                conn.instanceFollowRedirects = true
-                conn.requestMethod = "GET"
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
-                for ((k, v) in headers) {
-                    conn.setRequestProperty(k, v)
-                }
-                try {
-                    conn.responseCode
-                } finally {
-                    conn.disconnect()
-                }
-            } catch (e: Exception) {
-                -1
-            }
+    private fun classifyException(e: Throwable): String {
+        return when (e) {
+            is SocketTimeoutException -> "Таймаут (Timeout)"
+            is ConnectException -> "Отказ соединения (Connection Refused/Reset)"
+            is UnknownHostException -> "Ошибка DNS (Unknown Host)"
+            is SSLHandshakeException -> "Сбой TLS рукопожатия (TLS Handshake Failed)"
+            is SSLException -> "Ошибка SSL/TLS (SSL Exception)"
+            is BadPaddingException -> "Ошибка шифрования (Bad Padding)"
+            else -> e.message?.take(60) ?: e.javaClass.simpleName
         }
-
-        val res = doRequest(proxy)
-        if (res > 0) return res
-        if (proxy != null) {
-            return doRequest(null)
-        }
-        return -1
     }
 
     fun applyFix(fixActionId: String) {
@@ -517,7 +524,6 @@ class DoctorViewModel @Inject constructor(
 
                         val intents = mutableListOf<Intent>()
 
-                        // 1. Prioritize OEM-specific intents for aggressive background killers
                         if (isXiaomi) {
                             intents.add(Intent().apply {
                                 component = android.content.ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity")
@@ -540,7 +546,6 @@ class DoctorViewModel @Inject constructor(
                             })
                         }
 
-                        // 2. Standard Google Battery Optimization request
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                             intents.add(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                                 data = Uri.parse("package:$packageName")
@@ -548,13 +553,11 @@ class DoctorViewModel @Inject constructor(
                             })
                         }
 
-                        // 3. Android App Details
                         intents.add(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                             data = Uri.parse("package:$packageName")
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         })
 
-                        // 4. Generic Battery settings list
                         intents.add(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
                             flags = Intent.FLAG_ACTIVITY_NEW_TASK
                         })
@@ -597,15 +600,49 @@ class DoctorViewModel @Inject constructor(
             sb.appendLine("Protocol: ${profile.protocol}")
             sb.appendLine("Server: ${profile.server}:${profile.port}")
             sb.appendLine("Secret: [REDACTED]")
+            sb.appendLine("Packet Encoding: ${profile.packetEncoding}")
+            sb.appendLine("Header Type: ${profile.headerType.ifEmpty { "[NONE]" }}")
             sb.appendLine("TLS Enabled: ${profile.tls.enabled}")
             sb.appendLine("TLS SNI: ${profile.tls.serverName}")
             sb.appendLine("TLS ALPN: ${profile.tls.alpn}")
+            sb.appendLine("TLS Insecure: ${profile.tls.insecure}")
+            sb.appendLine("uTLS Fingerprint: ${profile.tls.utlsFingerprint}")
             sb.appendLine("Reality PubKey: ${if (profile.tls.realityPublicKey.isNotEmpty()) "[CONFIGURED]" else "[NONE]"}")
-            sb.appendLine("Transport: ${profile.transport.type}")
-            sb.appendLine("Transport Host: ${profile.transport.host}")
-            sb.appendLine("Transport Path: ${profile.transport.path}")
+            sb.appendLine("Reality ShortId: ${profile.tls.realityShortId.ifEmpty { "[NONE]" }}")
+            sb.appendLine("Reality SpiderX: ${profile.tls.spiderX.ifEmpty { "[NONE]" }}")
+            sb.appendLine("Flow: ${profile.tls.flow.ifEmpty { "[NONE]" }}")
+            sb.appendLine("Transport Type: ${profile.transport.type}")
+            sb.appendLine("Transport Path: ${profile.transport.path.ifEmpty { "[NONE]" }}")
+            sb.appendLine("Transport Host: ${profile.transport.host.ifEmpty { "[NONE]" }}")
+            sb.appendLine("Transport ServiceName: ${profile.transport.serviceName.ifEmpty { "[NONE]" }}")
+            sb.appendLine("Transport Mode: ${profile.transport.mode}")
+            sb.appendLine("Transport Authority: ${profile.transport.authority.ifEmpty { "[NONE]" }}")
         } else {
             sb.appendLine("No active profile")
+        }
+        sb.appendLine()
+        sb.appendLine("--- SANITIZED GENERATED CONFIG ---")
+        try {
+            val configFile = File(context.filesDir, "last_generated_config.json")
+            if (configFile.exists()) {
+                sb.appendLine(configFile.readText())
+            } else {
+                sb.appendLine("[No generated config on disk yet]")
+            }
+        } catch (e: Exception) {
+            sb.appendLine("[Error reading generated config: ${e.message}]")
+        }
+        sb.appendLine()
+        sb.appendLine("--- RECENT SING-BOX LOGS (LAST 100 LINES) ---")
+        try {
+            val recentLogs = proxyCore.getRecentLogs(100)
+            if (recentLogs.isNotEmpty()) {
+                recentLogs.forEach { sb.appendLine(it) }
+            } else {
+                sb.appendLine("[No logs available in buffer]")
+            }
+        } catch (e: Exception) {
+            sb.appendLine("[Error reading recent logs: ${e.message}]")
         }
         sb.appendLine("=========================================")
         return sb.toString()

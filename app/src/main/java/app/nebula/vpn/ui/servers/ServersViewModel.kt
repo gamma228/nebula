@@ -368,4 +368,9 @@ class ServersViewModel @Inject constructor(
             }
         }
     }
+
+    override fun onCleared() {
+        super.onCleared()
+        cancelPing()
+    }
 }

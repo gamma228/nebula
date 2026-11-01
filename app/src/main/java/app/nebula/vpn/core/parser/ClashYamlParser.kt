@@ -132,20 +132,44 @@ object ClashYamlParser {
         val id = UUID.randomUUID().toString()
         val isTls = (map["tls"] as? Boolean) ?: false
         val sni = map["sni"]?.toString() ?: server
+        val insecure = (map["skip-cert-verify"] as? Boolean) ?: false
+        val fp = map["client-fingerprint"]?.toString() ?: "chrome"
+
+        val rawAlpn = map["alpn"]
+        val alpnList = when (rawAlpn) {
+            is List<*> -> rawAlpn.mapNotNull { it?.toString() }
+            is String -> rawAlpn.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+            else -> emptyList()
+        }
 
         val network = map["network"]?.toString()?.lowercase() ?: "tcp"
         val transportType = when (network) {
             "ws" -> TransportType.WS
             "grpc" -> TransportType.GRPC
-            "httpupgrade" -> TransportType.HTTP_UPGRADE
+            "httpupgrade", "xhttp", "splithttp" -> TransportType.HTTP_UPGRADE
             else -> TransportType.TCP
         }
+
         val wsOpts = map["ws-opts"] as? Map<*, *>
         val wsPath = wsOpts?.get("path")?.toString() ?: ""
+        val wsHeaders = wsOpts?.get("headers") as? Map<*, *>
+        val hostHeader = wsHeaders?.get("Host")?.toString() ?: wsHeaders?.get("host")?.toString() ?: ""
+
+        val grpcOpts = map["grpc-opts"] as? Map<*, *>
+        val grpcServiceName = grpcOpts?.get("grpc-service-name")?.toString() ?: ""
 
         val realityOpts = map["reality-opts"] as? Map<*, *>
         val pbk = realityOpts?.get("public-key")?.toString() ?: ""
         val sid = realityOpts?.get("short-id")?.toString() ?: ""
+        val spx = realityOpts?.get("spider-x")?.toString() ?: ""
+        val flow = map["flow"]?.toString() ?: if (pbk.isNotEmpty() && transportType == TransportType.TCP) "xtls-rprx-vision" else ""
+
+        val finalAlpn = when {
+            alpnList.isNotEmpty() -> alpnList
+            transportType == TransportType.GRPC -> listOf("h2")
+            transportType == TransportType.WS -> listOf("http/1.1")
+            else -> emptyList()
+        }
 
         return when (type) {
             "ss" -> {
@@ -172,8 +196,19 @@ object ClashYamlParser {
                     port = port,
                     authSecret = uuid,
                     encryption = cipher,
-                    tls = TlsConfig(enabled = isTls, serverName = sni),
-                    transport = TransportConfig(type = transportType, path = wsPath)
+                    tls = TlsConfig(
+                        enabled = isTls,
+                        serverName = sni,
+                        insecure = insecure,
+                        alpn = finalAlpn,
+                        utlsFingerprint = fp
+                    ),
+                    transport = TransportConfig(
+                        type = transportType,
+                        path = wsPath,
+                        host = hostHeader,
+                        serviceName = grpcServiceName
+                    )
                 )
             }
             "vless" -> {
@@ -188,10 +223,20 @@ object ClashYamlParser {
                     tls = TlsConfig(
                         enabled = isTls || pbk.isNotEmpty(),
                         serverName = sni,
+                        insecure = insecure,
+                        alpn = finalAlpn,
+                        utlsFingerprint = fp,
                         realityPublicKey = pbk,
-                        realityShortId = sid
+                        realityShortId = sid,
+                        spiderX = spx,
+                        flow = flow
                     ),
-                    transport = TransportConfig(type = transportType, path = wsPath)
+                    transport = TransportConfig(
+                        type = transportType,
+                        path = wsPath,
+                        host = hostHeader,
+                        serviceName = grpcServiceName
+                    )
                 )
             }
             "trojan" -> {
@@ -203,8 +248,19 @@ object ClashYamlParser {
                     server = server,
                     port = port,
                     authSecret = password,
-                    tls = TlsConfig(enabled = true, serverName = sni),
-                    transport = TransportConfig(type = transportType, path = wsPath)
+                    tls = TlsConfig(
+                        enabled = true,
+                        serverName = sni,
+                        insecure = insecure,
+                        alpn = finalAlpn,
+                        utlsFingerprint = fp
+                    ),
+                    transport = TransportConfig(
+                        type = transportType,
+                        path = wsPath,
+                        host = hostHeader,
+                        serviceName = grpcServiceName
+                    )
                 )
             }
             "hysteria2", "hy2" -> {
@@ -216,7 +272,31 @@ object ClashYamlParser {
                     server = server,
                     port = port,
                     authSecret = password,
-                    tls = TlsConfig(enabled = true, serverName = sni)
+                    tls = TlsConfig(
+                        enabled = true,
+                        serverName = sni,
+                        insecure = insecure,
+                        alpn = if (alpnList.isNotEmpty()) alpnList else listOf("h3"),
+                        utlsFingerprint = fp
+                    )
+                )
+            }
+            "tuic" -> {
+                val uuid = map["uuid"]?.toString() ?: ""
+                val password = map["password"]?.toString() ?: ""
+                ProxyProfile(
+                    id = id,
+                    name = name,
+                    protocol = ProtocolType.TUIC,
+                    server = server,
+                    port = port,
+                    authSecret = if (password.isNotEmpty()) "$uuid:$password" else uuid,
+                    tls = TlsConfig(
+                        enabled = true,
+                        serverName = sni,
+                        insecure = insecure,
+                        alpn = if (alpnList.isNotEmpty()) alpnList else listOf("h3")
+                    )
                 )
             }
             else -> null

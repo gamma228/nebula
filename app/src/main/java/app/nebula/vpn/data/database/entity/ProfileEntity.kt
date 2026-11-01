@@ -18,5 +18,7 @@ data class ProfileEntity(
     val subscriptionId: String?,
     val isFavorite: Boolean,
     val lastPingMs: Long?,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val packetEncoding: String = "xudp",
+    val headerType: String = ""
 )

@@ -87,6 +87,8 @@ class ProfileRepository @Inject constructor(
             encryption = encryption,
             tls = tls,
             transport = transport,
+            packetEncoding = packetEncoding,
+            headerType = headerType,
             detour = detour,
             subscriptionId = subscriptionId,
             isFavorite = isFavorite,
@@ -111,7 +113,9 @@ class ProfileRepository @Inject constructor(
             subscriptionId = subscriptionId,
             isFavorite = isFavorite,
             lastPingMs = lastPingMs,
-            updatedAt = updatedAt
+            updatedAt = updatedAt,
+            packetEncoding = packetEncoding,
+            headerType = headerType
         )
     }
 }

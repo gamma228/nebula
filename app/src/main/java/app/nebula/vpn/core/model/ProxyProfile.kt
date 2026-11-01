@@ -8,7 +8,8 @@ enum class ProtocolType {
     VMESS,
     TROJAN,
     SHADOWSOCKS,
-    HYSTERIA2
+    HYSTERIA2,
+    TUIC
 }
 
 @Serializable
@@ -37,7 +38,9 @@ data class TransportConfig(
     val type: TransportType = TransportType.TCP,
     val path: String = "",
     val host: String = "",
-    val serviceName: String = ""
+    val serviceName: String = "",
+    val mode: String = "gun",
+    val authority: String = ""
 )
 
 @Serializable
@@ -51,6 +54,8 @@ data class ProxyProfile(
     val encryption: String = "none", // SS cipher or VMess security
     val tls: TlsConfig = TlsConfig(),
     val transport: TransportConfig = TransportConfig(),
+    val packetEncoding: String = "xudp",
+    val headerType: String = "",
     val detour: String? = null,
     val subscriptionId: String? = null,
     val isFavorite: Boolean = false,

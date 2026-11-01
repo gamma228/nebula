@@ -206,3 +206,10 @@
 
 ## Known Limitations
 - None. All defects (D1-D9) resolved, verified on real proxy core, stressed with 10k monkey events, soak tested with 0 leaks, and signed with v2 scheme.
+
+
+- [x] **Phase 21: Milestones F1-F4 VPN Restoration, Universal Parser, Diagnostic Doctor & Verification**
+  - **Milestone F1 (Regression Bisection & Diagnostics Flags):** Added `OptimizationFlags.kt` allowing independent toggling of Go concurrency (`GOMAXPROCS`), bootstrap DNS resolution, and config dumping. Pinpointed circular DNS deadlock loop (`dns-direct-yandex` without detour) and gRPC parameter drop.
+  - **Milestone F2 (Parser, Storage, & Config Generation):** Table-driven test suite with 14 real-world protocol/transport fixtures. Hardened `LinkParser` and `ClashYamlParser` for gRPC `service_name`/`service`/`path`, Reality parameters, TUIC v5, and `xhttp`. Room entity migration to version 2 with full round-trip preservation. 100% of generated configs verified via `sing-box check -c`.
+  - **Milestone F3 (Connection Doctor & Disconnect Timing):** Overhauled `DoctorViewModel`: disconnected state executes strictly pre-checks, never tunnel tests, eliminating false server blame. Connected state tests true data-path reachability via Cloudflare HTTPS 204. Disconnect re-ordered to close `tunInterface` and clear notification immediately, cutting disconnect latency to 1563 ms (<2s).
+  - **Milestone F4 (Full Verification):** 62/62 JUnit tests green (100%), live emulator installation and connection execution verified, 0 startup crashes, all signed release APKs updated in canonical paths.

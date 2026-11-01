@@ -230,7 +230,7 @@ class SingBoxConfigBuilderTest {
         assertTrue("Must contain dns-local", config.contains("\"tag\": \"dns-local\""))
         assertTrue("Must contain dns-direct-yandex with Yandex 77.88.8.8", config.contains("\"server\": \"77.88.8.8\""))
         assertTrue("Must contain dns-direct-google with 8.8.8.8", config.contains("\"tag\": \"dns-direct-google\""))
-        assertTrue("Default domain resolver must be dns-direct-yandex", config.contains("\"default_domain_resolver\": \"dns-direct-yandex\""))
+        assertTrue("Default domain resolver must be dns-local", config.contains("\"default_domain_resolver\": \"dns-local\""))
 
         // Verifies remote DNS provides DoH (TCP 443) through proxy for 100% proxy compatibility (including Cloudflare CDN)
         assertTrue("Must contain dns-remote-doh", config.contains("\"tag\": \"dns-remote-doh\""))

@@ -196,6 +196,12 @@ class LibboxCore(
         }
     }
 
+    override fun getRecentLogs(limit: Int): List<String> {
+        synchronized(logBuffer) {
+            return logBuffer.takeLast(limit)
+        }
+    }
+
     override suspend fun selectOutbound(groupTag: String, outboundTag: String): Boolean = withContext(Dispatchers.IO) {
         val client = commandClient ?: return@withContext false
         try {
@@ -220,6 +226,7 @@ class LibboxCore(
             val clientOptions = CommandClientOptions().apply {
                 statusInterval = 0 // Disable background JNI status polling ticker in Go runtime
                 addCommand(Libbox.CommandGroup) // Required for selector outbound management and hot-switching
+                addCommand(Libbox.CommandLog) // Buffer recent core logs for diagnostic reporting
             }
 
             val clientHandler = object : CommandClientHandler {
@@ -241,7 +248,21 @@ class LibboxCore(
 
                 override fun writeGroups(groups: OutboundGroupIterator?) {}
 
-                override fun writeLogs(logs: LogIterator?) {}
+                override fun writeLogs(logs: LogIterator?) {
+                    if (logs == null) return
+                    synchronized(logBuffer) {
+                        while (logs.hasNext()) {
+                            val entry = logs.next()
+                            val line = entry?.message ?: ""
+                            if (line.isNotBlank()) {
+                                logBuffer.addLast(line)
+                                if (logBuffer.size > 256) {
+                                    logBuffer.removeFirst()
+                                }
+                            }
+                        }
+                    }
+                }
 
                 override fun writeOutbounds(outbounds: OutboundGroupItemIterator?) {}
 

@@ -14,4 +14,5 @@ interface ProxyCore {
     suspend fun selectOutbound(groupTag: String, outboundTag: String): Boolean
     suspend fun reloadConfig(configJson: String)
     fun setScreenInteractive(isInteractive: Boolean)
+    fun getRecentLogs(limit: Int = 100): List<String> = emptyList()
 }
