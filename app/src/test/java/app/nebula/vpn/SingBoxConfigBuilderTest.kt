@@ -230,7 +230,7 @@ class SingBoxConfigBuilderTest {
         assertTrue("Must contain dns-local", config.contains("\"tag\": \"dns-local\""))
         assertTrue("Must contain dns-direct-yandex with Yandex 77.88.8.8", config.contains("\"server\": \"77.88.8.8\""))
         assertTrue("Must contain dns-direct-google with 8.8.8.8", config.contains("\"tag\": \"dns-direct-google\""))
-        assertTrue("Default domain resolver must be dns-remote-google", config.contains("\"default_domain_resolver\": \"dns-remote-google\""))
+        assertTrue("Default domain resolver must be dns-local", config.contains("\"default_domain_resolver\": \"dns-local\""))
 
         // Verifies remote DNS provides DoH (TCP 443) through proxy for 100% proxy compatibility (including Cloudflare CDN)
         assertTrue("Must contain dns-remote-doh", config.contains("\"tag\": \"dns-remote-doh\""))
@@ -308,6 +308,7 @@ class SingBoxConfigBuilderTest {
         )
         assertTrue("Config must route Telegram CIDRs through proxy", config.contains("91.108.56.0/22"))
         assertTrue("Config must route Telegram CIDRs through proxy", config.contains("149.154.160.0/20"))
+        assertTrue("Config must route Telegram domains through proxy", config.contains("telegram.org"))
         validateWithDesktopSingBox(config, "test-telegram-cidr.json")
     }
 

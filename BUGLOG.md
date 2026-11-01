@@ -23,6 +23,7 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D16: Connection Doctor False Negatives, Selector Desync via `cache.db` & RFC 6066 IP SNI Guard](#d16-connection-doctor-false-negatives-selector-desync-via-cachedb--rfc-6066-ip-sni-guard)
 - [D17: Complete Anti-Censorship Parity with INCY (TLS ClientHello Fragmentation, Cellular MTU 1400 Clamping & DNS Leak Elimination)](#d17-complete-anti-censorship-parity-with-incy)
 - [D18: Instant Startup Crash (`Expected an activity context for creating a HiltViewModelFactory`)](#d18-instant-startup-crash-hilt-activity-context-unwrapping)
+- [D19: Sing-Box Empty Direct Outbound Detour Crash on Startup & Telegram Domain Bypass](#d19-sing-box-empty-direct-outbound-detour-crash-on-startup--telegram-domain-bypass)
 
 ---
 
@@ -819,6 +820,52 @@ java.lang.IllegalStateException: Expected an activity context for creating a Hil
 3. **Signed Release Packaging (`./gradlew.bat assembleRelease`)**:
    - `app-arm64-v8a-release.apk` (81,929,921 bytes) compiled and signed (`BUILD SUCCESSFUL in 2m 11s`).
    - Signature verified with `apksigner.bat` (v2 verified).
+
+---
+
+## D19: Sing-Box Empty Direct Outbound Detour Crash on Startup & Telegram Domain Bypass
+
+### Problem Description
+User reported: "всё равно не работает впн, ну в телеграмме например нет подключения, то есть не обходит. Фикси, это в обоих твоих приложениях, также убери зеркало и пусть нормально файлы обновляются в одном и том же репозитории".
+The VPN connected on Android (key icon displayed), but no internet traffic passed, Telegram remained in infinite "connecting..." state, and the Connection Doctor reported DoH failure and tunnel DNS failure.
+
+### Root Cause Analysis
+1. **Sing-Box Startup Crash (`FATAL: detour to an empty direct outbound makes no sense`)**:
+   - Running sing-box core under live execution with the generated configuration revealed:
+     `FATAL[0000] start service: start dns-transport: start dns/udp[dns-direct-google]: detour to an empty direct outbound makes no sense`
+   - While `sing-box check` validated schema structure statically, sing-box 1.11+ Go runtime terminates with a fatal error if a DNS server specifies `"detour": "direct"` when the direct outbound has no custom network/binding configuration.
+   - When the core crashed immediately on startup, Android `VpnService` held an open TUN interface with no backing proxy engine, blocking 100% of packets and leading to apparent "connected but no traffic".
+2. **Domain Resolver Deadlock**:
+   - `route.default_domain_resolver` was set to `"dns-remote-google"`, which routes through `"proxy"`. When sing-box started, it needed to resolve the remote server's hostname before connecting to the proxy, but could not do so because resolving required the proxy to already be connected.
+3. **Missing Telegram Domain Suffix Routing**:
+   - Telegram uses both datacenter CIDRs (`91.108.0.0/16`, `149.154.160.0/20`) and domains (`telegram.org`, `t.me`, `telegram.me`, `telesco.pe`, `tdesktop.com`). While CIDRs were present in routing rules, domain suffixes were not explicitly prioritized before application rules.
+4. **Mirror APK Confusion**:
+   - Previously, a secondary alias file `nebula-arm64-v8a-release.apk` was placed in `release/` alongside `app-arm64-v8a-release.apk`. The user perceived these as two divergent apps rather than mirrors.
+
+### Invariant Fix
+1. **Removed `detour: direct` from DNS Servers**:
+   - `dns-direct-google` and `dns-direct-yandex` omit `detour`.
+   - `dns-local` uses native `type: "local"` system resolver.
+   - Remote DNS servers only receive `"detour": "proxy"` when `hasProfiles` is true; otherwise `detour` is omitted.
+2. **Set Default Domain Resolver to `dns-local`**:
+   - `route.default_domain_resolver` is `"dns-local"`. Outbound server hostnames are resolved directly via the local Android DNS resolver without proxy chicken-and-egg deadlocks.
+3. **Added Telegram Domain Suffix Rule**:
+   - Added `telegram.org`, `t.me`, `telegram.me`, `telesco.pe`, `tdesktop.com` to `route.rules` routed to `proxy`.
+4. **Removed Mirror APKs**:
+   - Removed `nebula-arm64-v8a-release.apk` and `nebula-universal-release.apk`. Canonical release files are `app-arm64-v8a-release.apk` and `app-universal-release.apk`.
+
+### Automated Verification Proof
+1. **Live Proxy & Telegram Verification (`C:/Users/User/tools/sing-box.exe run`)**:
+   - Verified sing-box starts cleanly with 0 errors and 0 warnings.
+   - Live HTTP request through proxy: `http://ip.sb` -> HTTP 200, Exit IP `51.158.105.199`.
+   - Live Telegram Web request through proxy: `https://web.telegram.org` -> HTTP 200.
+   - Route rule matched: `router: match[5] domain_suffix=[telegram.org t.me...] => route(proxy)`.
+2. **Unit Tests (`./gradlew.bat testDebugUnitTest`)**:
+   - `SingBoxConfigBuilderTest` (all tests including `testTelegramCidrsRoutedToProxy` and `testDnsConfigurationRobustness`) passed 100% green (`BUILD SUCCESSFUL`).
+3. **Release Build & Verification**:
+   - `assembleRelease` passed (`BUILD SUCCESSFUL in 1m 51s`).
+   - `apksigner verify` confirms valid v2 signature.
+
 
 
 

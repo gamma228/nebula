@@ -59,7 +59,7 @@ object SingBoxConfigBuilder {
 
             // 2. DNS configuration
             val hasProfiles = config.activeProfile != null || config.allProfiles.isNotEmpty()
-            val proxyDetourTag = if (hasProfiles) "proxy" else "direct"
+            val proxyDetourTag = if (hasProfiles) "proxy" else null
 
             putJsonObject("dns") {
                 putJsonArray("servers") {
@@ -69,7 +69,7 @@ object SingBoxConfigBuilder {
                         put("tag", "dns-remote-google")
                         put("server", "8.8.8.8")
                         put("path", "/dns-query")
-                        put("detour", proxyDetourTag)
+                        proxyDetourTag?.let { put("detour", it) }
                         putJsonObject("tls") {
                             put("enabled", true)
                             put("server_name", "dns.google")
@@ -84,7 +84,7 @@ object SingBoxConfigBuilder {
                         put("tag", "dns-remote-doh")
                         put("server", "1.1.1.1")
                         put("path", "/dns-query")
-                        put("detour", proxyDetourTag)
+                        proxyDetourTag?.let { put("detour", it) }
                         putJsonObject("tls") {
                             put("enabled", true)
                             put("server_name", "cloudflare-dns.com")
@@ -104,7 +104,7 @@ object SingBoxConfigBuilder {
                                 put("tag", "dns-remote-custom")
                                 put("server", serverHost)
                                 put("path", path)
-                                put("detour", proxyDetourTag)
+                                proxyDetourTag?.let { put("detour", it) }
                                 putJsonObject("tls") {
                                     put("enabled", true)
                                     if (!isIpAddress(serverHost)) {
@@ -120,7 +120,7 @@ object SingBoxConfigBuilder {
                                 put("type", "udp")
                                 put("tag", "dns-remote-custom")
                                 put("server", serverHost)
-                                put("detour", proxyDetourTag)
+                                proxyDetourTag?.let { put("detour", it) }
                             })
                         }
                     }
@@ -130,7 +130,7 @@ object SingBoxConfigBuilder {
                         put("type", "udp")
                         put("tag", "dns-remote-udp")
                         put("server", "8.8.8.8")
-                        put("detour", proxyDetourTag)
+                        proxyDetourTag?.let { put("detour", it) }
                     })
 
                     // 5. Direct DNS fallback (Google 8.8.8.8)
@@ -138,15 +138,19 @@ object SingBoxConfigBuilder {
                         put("type", "udp")
                         put("tag", "dns-direct-google")
                         put("server", "8.8.8.8")
-                        put("detour", "direct")
                     })
 
-                    // 6. Direct DNS via Yandex (77.88.8.8) - works on Russian domestic networks for .ru/.su
+                    // 6. Direct DNS fallback via Yandex (77.88.8.8)
                     add(buildJsonObject {
                         put("type", "udp")
-                        put("tag", "dns-local")
+                        put("tag", "dns-direct-yandex")
                         put("server", "77.88.8.8")
-                        put("detour", "direct")
+                    })
+
+                    // 7. Direct system/local DNS resolver
+                    add(buildJsonObject {
+                        put("type", "local")
+                        put("tag", "dns-local")
                     })
 
                     if (config.fakeDnsEnabled) {
@@ -281,7 +285,7 @@ object SingBoxConfigBuilder {
             val finalTarget = if (activeP != null) "proxy" else "direct"
 
             putJsonObject("route") {
-                put("default_domain_resolver", "dns-remote-google")
+                put("default_domain_resolver", "dns-local")
                 put("final", finalTarget)
 
                 val referencedRuleSets = config.customRules
@@ -361,6 +365,18 @@ object SingBoxConfigBuilder {
                             add(JsonPrimitive("149.154.164.0/22"))
                             add(JsonPrimitive("149.154.168.0/22"))
                             add(JsonPrimitive("149.154.172.0/22"))
+                        }
+                        put("outbound", finalTarget)
+                    })
+
+                    // Route Telegram domains through proxy
+                    add(buildJsonObject {
+                        putJsonArray("domain_suffix") {
+                            add(JsonPrimitive("telegram.org"))
+                            add(JsonPrimitive("t.me"))
+                            add(JsonPrimitive("telegram.me"))
+                            add(JsonPrimitive("telesco.pe"))
+                            add(JsonPrimitive("tdesktop.com"))
                         }
                         put("outbound", finalTarget)
                     })
@@ -560,7 +576,7 @@ object SingBoxConfigBuilder {
     private fun buildOutboundForProfile(profile: ProxyProfile, tag: String): JsonObject {
         return buildJsonObject {
             if (!isIpAddress(profile.server)) {
-                put("domain_resolver", "dns-direct-google")
+                put("domain_resolver", "dns-local")
             }
             when (profile.protocol) {
                 ProtocolType.SHADOWSOCKS -> {
