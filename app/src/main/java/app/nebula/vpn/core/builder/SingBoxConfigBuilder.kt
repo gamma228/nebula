@@ -40,7 +40,7 @@ object SingBoxConfigBuilder {
         val remoteDnsUrl: String = "https://1.1.1.1/dns-query",
         val fakeDnsEnabled: Boolean = true,
         val killSwitchEnabled: Boolean = false,
-        val mtu: Int = 1500,
+        val mtu: Int = 1400,
         val localPortMixedInbound: Int? = null, // Optional local SOCKS/HTTP inbound
         val ipv6Enabled: Boolean = false,
         val blockQuic: Boolean = true,
@@ -63,13 +63,19 @@ object SingBoxConfigBuilder {
 
             putJsonObject("dns") {
                 putJsonArray("servers") {
-                    // 1. Google DoH over TCP 443 through proxy (globally reliable, circumvents TSPU)
+                    // 1. Google DoH over TCP 443 through proxy (globally reliable, circumvents TSPU with TLS fragment)
                     add(buildJsonObject {
                         put("type", "https")
                         put("tag", "dns-remote-google")
                         put("server", "8.8.8.8")
                         put("path", "/dns-query")
                         put("detour", proxyDetourTag)
+                        putJsonObject("tls") {
+                            put("enabled", true)
+                            put("server_name", "dns.google")
+                            put("fragment", true)
+                            put("fragment_fallback_delay", "500ms")
+                        }
                     })
 
                     // 2. Cloudflare DoH through proxy
@@ -79,6 +85,12 @@ object SingBoxConfigBuilder {
                         put("server", "1.1.1.1")
                         put("path", "/dns-query")
                         put("detour", proxyDetourTag)
+                        putJsonObject("tls") {
+                            put("enabled", true)
+                            put("server_name", "cloudflare-dns.com")
+                            put("fragment", true)
+                            put("fragment_fallback_delay", "500ms")
+                        }
                     })
 
                     // 3. User configured remote DNS if provided (DoH or custom UDP)
@@ -93,6 +105,14 @@ object SingBoxConfigBuilder {
                                 put("server", serverHost)
                                 put("path", path)
                                 put("detour", proxyDetourTag)
+                                putJsonObject("tls") {
+                                    put("enabled", true)
+                                    if (!isIpAddress(serverHost)) {
+                                        put("server_name", serverHost)
+                                    }
+                                    put("fragment", true)
+                                    put("fragment_fallback_delay", "500ms")
+                                }
                             })
                         } else if (!config.remoteDnsUrl.startsWith("http://")) {
                             val serverHost = config.remoteDnsUrl.removePrefix("udp://").substringBefore(":")
@@ -113,19 +133,19 @@ object SingBoxConfigBuilder {
                         put("detour", proxyDetourTag)
                     })
 
-                    // 5. Direct DNS via Yandex (77.88.8.8) - works on 100% of Russian ISPs with 5-15ms latency
-                    add(buildJsonObject {
-                        put("type", "udp")
-                        put("tag", "dns-local")
-                        put("server", "77.88.8.8")
-                        put("detour", "direct")
-                    })
-
-                    // 6. Direct DNS fallback (Google 8.8.8.8)
+                    // 5. Direct DNS fallback (Google 8.8.8.8)
                     add(buildJsonObject {
                         put("type", "udp")
                         put("tag", "dns-direct-google")
                         put("server", "8.8.8.8")
+                        put("detour", "direct")
+                    })
+
+                    // 6. Direct DNS via Yandex (77.88.8.8) - works on Russian domestic networks for .ru/.su
+                    add(buildJsonObject {
+                        put("type", "udp")
+                        put("tag", "dns-local")
+                        put("server", "77.88.8.8")
                         put("detour", "direct")
                     })
 
@@ -261,7 +281,7 @@ object SingBoxConfigBuilder {
             val finalTarget = if (activeP != null) "proxy" else "direct"
 
             putJsonObject("route") {
-                put("default_domain_resolver", "dns-local")
+                put("default_domain_resolver", "dns-remote-google")
                 put("final", finalTarget)
 
                 val referencedRuleSets = config.customRules
@@ -284,9 +304,15 @@ object SingBoxConfigBuilder {
                 }
 
                 putJsonArray("rules") {
-                    // Protocol sniffing
+                    // Protocol sniffing with full protocol inspection (HTTP, TLS, QUIC) and fast timeout
                     add(buildJsonObject {
                         put("action", "sniff")
+                        putJsonArray("sniffer") {
+                            add(JsonPrimitive("http"))
+                            add(JsonPrimitive("tls"))
+                            add(JsonPrimitive("quic"))
+                        }
+                        put("timeout", "300ms")
                     })
 
                     // Block/Reject QUIC (UDP 443) to force fast TCP HTTP/2 fallback on filtered networks
@@ -460,6 +486,11 @@ object SingBoxConfigBuilder {
                     }
                 }
             }
+            // TLS ClientHello Fragmentation for TSPU/DPI anti-censorship bypass (identical to INCY / Xray fragment)
+            if (!isQuic) {
+                put("fragment", true)
+                put("fragment_fallback_delay", "500ms")
+            }
         }
     }
 
@@ -528,6 +559,9 @@ object SingBoxConfigBuilder {
 
     private fun buildOutboundForProfile(profile: ProxyProfile, tag: String): JsonObject {
         return buildJsonObject {
+            if (!isIpAddress(profile.server)) {
+                put("domain_resolver", "dns-direct-google")
+            }
             when (profile.protocol) {
                 ProtocolType.SHADOWSOCKS -> {
                     put("type", "shadowsocks")

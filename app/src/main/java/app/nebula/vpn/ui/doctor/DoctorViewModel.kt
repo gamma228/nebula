@@ -148,13 +148,19 @@ class DoctorViewModel @Inject constructor(
                 var dohLatency = -1L
                 val dohStart = System.currentTimeMillis()
 
-                // Try Google DoH first (universally available and circumvents TSPU), fallback to Cloudflare DoH
-                val googleDoh = testHttp("https://8.8.8.8/dns-query?name=google.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
+                // Try Google DoH first, fallback to Cloudflare DoH (through mixed-in or directly through tun0)
+                var googleDoh = testHttp("https://8.8.8.8/dns-query?name=google.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
+                if (googleDoh == null) {
+                    googleDoh = testHttp("https://8.8.8.8/dns-query?name=google.com&type=A", timeoutMs = 7000, proxy = null)
+                }
                 if (googleDoh != null) {
                     dohPassed = true
                     dohLatency = System.currentTimeMillis() - dohStart
                 } else {
-                    val cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
+                    var cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
+                    if (cfDoh == null) {
+                        cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 7000, proxy = null)
+                    }
                     if (cfDoh != null) {
                         dohPassed = true
                         dohLatency = System.currentTimeMillis() - dohStart
@@ -179,7 +185,7 @@ class DoctorViewModel @Inject constructor(
                 )
             }
 
-            // 5. Exit IP Discovery (with multiple fallback endpoints)
+            // 5. Exit IP Discovery (with multiple fallback endpoints and dual proxy/tun channel)
             if (isConnected) {
                 var exitIp: String? = null
                 val ipEndpoints = listOf(
@@ -189,7 +195,10 @@ class DoctorViewModel @Inject constructor(
                     "https://checkip.amazonaws.com"
                 )
                 for (endpoint in ipEndpoints) {
-                    val res = testHttp(endpoint, timeoutMs = 7000, proxy = tunnelProxy)
+                    var res = testHttp(endpoint, timeoutMs = 7000, proxy = tunnelProxy)
+                    if (res.isNullOrBlank()) {
+                        res = testHttp(endpoint, timeoutMs = 7000, proxy = null)
+                    }
                     if (!res.isNullOrBlank() && res.length in 7..45 && !res.contains("<html", ignoreCase = true)) {
                         exitIp = res.trim()
                         break

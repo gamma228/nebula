@@ -343,3 +343,12 @@ Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully re
    - [x] `./gradlew.bat assembleRelease` (Release APKs compiled, shrunk with R8, signed with v2 scheme).
    - [ ] Real-Device Traffic Verification: Connect to VPN node. Open browser (Google/YouTube/Telegram). Confirm TCP packets flow smoothly without blackholing or connection timeouts.
    - [ ] Real-Device Autonomy Verification: Leave phone locked for 2+ hours with VPN connected. Check Samsung Battery -> Nebula -> CPU usage. Confirm CPU time remains low single-digit minutes (matching INCY's benchmark of ~0.68 min CPU per hour).
+
+9. **INCY Parity & Anti-Censorship TSPU Circumvention (D17):**
+   - [x] Unit Tests: `./gradlew.bat testDebugUnitTest` (58 passed, including `SingBoxConfigBuilderTest` and `SnapshotParityTest`).
+   - [x] Snapshot Parity Test: All 63 subscription nodes from `black_ss_all_rus_20261026.txt` (including Swedish node `87.242.127.115:443`) validated with desktop `sing-box.exe check` (0 errors).
+   - [x] Release APK Build: `./gradlew.bat assembleRelease` (55 tasks, `BUILD SUCCESSFUL in 1m 53s`).
+   - [x] APK Signing Verification: Android SDK `apksigner.bat verify --verbose` (APK Signature Scheme v2 verified).
+   - [x] Release Output Artifacts:
+     - `C:\Users\User\.gemini\antigravity\scratch\nebula\release\nebula-arm64-v8a-release.apk` (81.9 MB)
+     - `C:\Users\User\.gemini\antigravity\scratch\nebula\release\nebula-universal-release.apk` (237.3 MB)

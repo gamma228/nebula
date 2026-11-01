@@ -21,6 +21,7 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D14: Xiaomi 15 (HyperOS 2.0 / Android 15) Startup Deadlock & GPU Texture Overflow](#d14-xiaomi-15-hyperos-20--android-15-startup-deadlock--gpu-texture-overflow)
 - [D15: Direct DNS Resolution ("Connected But No Internet" Root Cause) & Static Go Concurrency Cap](#d15-direct-dns-resolution-connected-but-no-internet-root-cause--static-go-concurrency-cap)
 - [D16: Connection Doctor False Negatives, Selector Desync via `cache.db` & RFC 6066 IP SNI Guard](#d16-connection-doctor-false-negatives-selector-desync-via-cachedb--rfc-6066-ip-sni-guard)
+- [D17: Complete Anti-Censorship Parity with INCY (TLS ClientHello Fragmentation, Cellular MTU 1400 Clamping & DNS Leak Elimination)](#d17-complete-anti-censorship-parity-with-incy)
 
 ---
 
@@ -712,6 +713,53 @@ On Xiaomi 15 running HyperOS 2.0 (Android 15, Snapdragon 8 Elite), the applicati
 4. **Release Packaging (`./gradlew.bat assembleRelease`)**:
    - `app-arm64-v8a-release.apk` (81,929,921 bytes) compiled, minified with R8, and signed (`BUILD SUCCESSFUL in 2m 29s`).
    - Signature verified via Android SDK `apksigner.bat verify --verbose` (v2 scheme verified).
+
+---
+
+## D17: Complete Anti-Censorship Parity with INCY
+
+### Problem Description
+The user reported that the exact same server (`🇸🇪 🎮 ⚡ ⭐ 0.1X - LTE №89 - Швеция`, IP: `87.242.127.115:443`) connected and bypassed blocks normally in INCY, but failed to connect or browse through Nebula ("не все равно чет, один и тот же сервер на incy работает и обходит нормально, а у нас с тобой нет").
+
+### Root Cause Analysis (Disassembly & Reverse Engineering of `incy.apk`)
+1. **TSPU DPI TLS ClientHello Blocking**:
+   Disassembly of `classes3.dex` in `incy.apk` revealed that INCY explicitly routes all outbound proxy traffic through a TLS ClientHello fragmentation dialer:
+   - Dialer Proxy type: `"fragment"`
+   - `packets: "tlshello"`
+   - `length: "100-200"`
+   - `interval: "10-20"`
+   In Russia, TSPU (ТСПУ / РКН) hardware actively inspects and drops unfragmented TLS ClientHello packets and SNIs directed at foreign proxy servers. Without fragmentation, Russian TSPU detects the proxy TLS handshake and injects TCP RSTs or drops packets.
+2. **DNS Leak & TSPU DNS Poisoning in `VpnService.Builder`**:
+   `ProxyVpnService.kt` previously added `77.88.8.8` (Yandex DNS) to Android's `VpnService.Builder.addDnsServer`. On mobile networks, Android sent unencrypted DNS queries to Yandex DNS, which returns TSPU block pages or `127.0.0.1` for blocked domains. Reverse engineering of INCY showed that INCY strictly configures only `1.1.1.1` and `8.8.8.8` (and IPv6 `fd6e:a81b:704f:1211::2`), never adding local Russian DNS servers.
+3. **Cellular MTU Clamping (1400 vs 1500)**:
+   In `classes.dex` of INCY, `Builder.setMtu(1400)` is hardcoded. On LTE/5G cellular carriers (the user was on LTE+ / 5G), GTP-U encapsulation leaves ~1420 bytes of MTU. Running at 1500 bytes causes Path MTU blackholing and dropped fragmented packets.
+4. **Link Parser Missing `peer` Parameter**:
+   Certain VLESS/Trojan links in INCY specify the SNI using the `peer` URL query parameter (`?peer=example.com`). `LinkParser.kt` did not check `peer`, falling back to IP or failing SNI resolution.
+
+### Invariant Fix
+1. **TLS ClientHello Fragmentation in `SingBoxConfigBuilder.kt`**:
+   Added native sing-box TLS ClientHello fragmentation (`fragment: true`, `fragment_fallback_delay: "500ms"`) to all TLS-enabled proxy outbounds (VLESS Reality & Vision, VMess, Trojan, ShadowTLS) and DoH servers (`dns-remote-google`, `dns-remote-doh`).
+2. **DNS Remote Google Default Resolver**:
+   Changed `route.default_domain_resolver` from `"dns-local"` to `"dns-remote-google"`, ensuring all bootstrap domain resolution is protected from TSPU sniffing and poisoning.
+3. **Cellular MTU Clamping to 1400**:
+   Updated default TUN MTU in `SingBoxConfigBuilder.BuildConfig` to `1400`.
+4. **DNS Leak Purged in `ProxyVpnService.kt`**:
+   Removed `77.88.8.8` from `builder.addDnsServer`, configuring only virtual DNS (`1.1.1.1` and `8.8.8.8`) intercepted by sing-box `hijack-dns`.
+5. **Support for `peer` Query Parameter in `LinkParser.kt`**:
+   Extended VLESS, Trojan, and Hysteria2 URI parsing to check `peer` in addition to `sni` and `serverName`.
+6. **Dual Proxy/TUN Channel Fallback in `DoctorViewModel.kt`**:
+   Ensured Doctor queries fall back from local proxy (`127.0.0.1:2080`) to direct `tun0` interface queries if the local HTTP proxy is unreachable.
+
+### Automated Verification Proof
+1. **`SingBoxConfigBuilderTest`**:
+   - `testDnsConfigurationRobustness`: Verified `dns-remote-google`, `dns-remote-doh`, `fragment: true`, and `default_domain_resolver: "dns-remote-google"` (PASS).
+2. **`SnapshotParityTest`**:
+   - All 63 subscription nodes (including the Swedish node) parsed and validated with desktop `sing-box.exe check` (100% PASS).
+3. **Full Test Suite (`./gradlew.bat testDebugUnitTest`)**:
+   - All 58 unit tests passed cleanly (`BUILD SUCCESSFUL in 30s`).
+4. **Release Packaging & Signing (`./gradlew.bat assembleRelease`)**:
+   - `app-arm64-v8a-release.apk` (81,929,921 bytes) assembled and signed (`BUILD SUCCESSFUL in 1m 53s`).
+   - Signature verified via Android SDK `apksigner.bat` (APK Signature Scheme v2 verified).
 
 
 

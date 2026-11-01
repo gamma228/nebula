@@ -106,7 +106,10 @@ object LinkParser {
 
         val security = uri.getQueryParameter("security") ?: "none"
         val isTls = security.equals("tls", true) || security.equals("reality", true)
-        val rawSni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val rawSni = uri.getQueryParameter("sni")?.ifBlank { null }
+            ?: uri.getQueryParameter("serverName")?.ifBlank { null }
+            ?: uri.getQueryParameter("peer")?.ifBlank { null }
+            ?: host
         val sni = sanitizeSni(rawSni, host)
         val pbk = uri.getQueryParameter("pbk") ?: uri.getQueryParameter("publicKey") ?: ""
         val sid = uri.getQueryParameter("sid") ?: uri.getQueryParameter("shortId") ?: ""
@@ -239,7 +242,10 @@ object LinkParser {
         }
 
         val name = decodeFragment(uri.fragment, "Trojan-$host:$port")
-        val rawSni = uri.getQueryParameter("sni")?.ifBlank { null } ?: uri.getQueryParameter("serverName")?.ifBlank { null } ?: host
+        val rawSni = uri.getQueryParameter("sni")?.ifBlank { null }
+            ?: uri.getQueryParameter("serverName")?.ifBlank { null }
+            ?: uri.getQueryParameter("peer")?.ifBlank { null }
+            ?: host
         val sni = sanitizeSni(rawSni, host)
         val fp = uri.getQueryParameter("fp")?.ifBlank { null } ?: uri.getQueryParameter("fingerprint")?.ifBlank { null } ?: "chrome"
         val alpnParam = uri.getQueryParameter("alpn")

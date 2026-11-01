@@ -522,10 +522,9 @@ class ProxyVpnService : VpnService(), TunProvider {
             }
         }
 
-        // Add DNS Servers - public reliable DNS servers with DoH detour through proxy
+        // Add DNS Servers - public reliable DNS servers with DoH detour through proxy (INCY parity: never add Russian DNS to avoid poisoning)
         builder.addDnsServer("1.1.1.1")
         builder.addDnsServer("8.8.8.8")
-        builder.addDnsServer("77.88.8.8")
         try {
             val dnsServers = options.dnsServerAddress
             if (dnsServers != null) {
