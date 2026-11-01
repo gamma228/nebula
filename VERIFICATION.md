@@ -244,6 +244,54 @@ BUILD SUCCESSFUL
 
 ---
 
+## Phase 20 & D16 Verification: Single-Outbound Architecture, RFC 6066 IP Guard & Resilient Doctor Diagnostics
+
+### 1. Root Cause Summary
+- **Sing-Box Selector Desynchronization:** Passing 100 outbounds in a selector group caused sing-box to restore dead selections from `cache.db`, ignoring the active server selected on UI.
+- **RFC 6066 TLS SNI Reset:** Emitting IP addresses like `87.242.127.115` into `server_name` caused modern TLS servers to drop handshakes.
+- **Doctor False Negatives:** Hardcoded 3.5s timeout strictly against Cloudflare `1.1.1.1` (frequently blocked in Russia) triggered "Сбой DNS в туннеле" despite working VPN connectivity.
+
+### 2. Automated Commands & Output Evidence
+```powershell
+[System.Environment]::SetEnvironmentVariable('JAVA_HOME', 'C:\Users\User\tools\jdk-17', 'Process')
+.\gradlew.bat testDebugUnitTest --tests 'app.nebula.vpn.SingBoxConfigBuilderTest'
+```
+**Output:** `BUILD SUCCESSFUL in 19s (30 actionable tasks: 1 executed, 29 up-to-date)`
+
+```powershell
+.\gradlew.bat testDebugUnitTest --tests 'app.nebula.vpn.SnapshotParityTest'
+```
+**Output:** `BUILD SUCCESSFUL in 24s (30 actionable tasks: 1 executed, 29 up-to-date)` - All 63 configs passed `sing-box check -c`
+
+```powershell
+.\gradlew.bat testDebugUnitTest
+```
+**Output:** `BUILD SUCCESSFUL in 29s (30 actionable tasks: 1 executed, 29 up-to-date)` - 100% green across all 58+ unit tests
+
+```powershell
+.\gradlew.bat assembleRelease
+```
+**Output:** `BUILD SUCCESSFUL in 2m 29s (55 actionable tasks: 14 executed, 41 up-to-date)`
+
+```powershell
+C:\Users\User\Android\Sdk\build-tools\35.0.0\apksigner.bat verify --verbose app\build\outputs\apk\release\app-arm64-v8a-release.apk
+```
+**Output:**
+```
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+```
+
+- **Output APK:** `app/build/outputs/apk/release/app-arm64-v8a-release.apk` (81,929,921 bytes, signed with v2 scheme, 01.11.2026).
+
+---
+
 ## Real-Device Physical Verification Checklist (Russian Cellular/ISP Network)
 
 Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully replicate Russian TSPU (ТСПУ) DPI hardware filtering and cellular carrier IPv6 network behaviors, the following checklist must be validated on a physical Android handset:
