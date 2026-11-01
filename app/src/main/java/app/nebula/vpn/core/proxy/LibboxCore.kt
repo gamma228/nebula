@@ -489,7 +489,37 @@ class LibboxCore(
 
             override fun includeAllNetworks(): Boolean = false
 
-            override fun localDNSTransport(): LocalDNSTransport? = null
+            override fun localDNSTransport(): LocalDNSTransport {
+                return object : LocalDNSTransport {
+                    override fun raw(): Boolean = false
+
+                    override fun exchange(ctx: io.nekohasekai.libbox.ExchangeContext?, message: ByteArray?) {
+                        ctx?.errorCode(1)
+                    }
+
+                    override fun lookup(ctx: io.nekohasekai.libbox.ExchangeContext?, network: String?, domain: String?) {
+                        if (ctx == null || domain.isNullOrBlank()) {
+                            ctx?.errorCode(1)
+                            return
+                        }
+                        try {
+                            val addrs = java.net.InetAddress.getAllByName(domain)
+                            if (addrs.isNullOrEmpty()) {
+                                ctx.errorCode(1)
+                            } else {
+                                val cleanIp = addrs.first().hostAddress?.substringBefore('%') ?: ""
+                                if (cleanIp.isNotEmpty()) {
+                                    ctx.success(cleanIp)
+                                } else {
+                                    ctx.errorCode(1)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            ctx.errorCode(1)
+                        }
+                    }
+                }
+            }
 
             override fun lookupSFTPServer(): String = ""
 

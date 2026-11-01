@@ -159,12 +159,43 @@ class AppearanceViewModel @Inject constructor(
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val destFile = java.io.File(context.filesDir, "custom_wallpaper.jpg")
+
+                // 1. Read bounds to compute downsampling
+                val boundsOptions = android.graphics.BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
                 context.contentResolver.openInputStream(uri)?.use { input ->
-                    destFile.outputStream().use { output ->
-                        input.copyTo(output)
+                    android.graphics.BitmapFactory.decodeStream(input, null, boundsOptions)
+                }
+
+                // 2. Compute sample size to constrain maximum texture size (max 1080x2400)
+                val targetW = 1080
+                val targetH = 2400
+                var sampleSize = 1
+                if (boundsOptions.outHeight > targetH || boundsOptions.outWidth > targetW) {
+                    val halfH = boundsOptions.outHeight / 2
+                    val halfW = boundsOptions.outWidth / 2
+                    while ((halfH / sampleSize) >= targetH && (halfW / sampleSize) >= targetW) {
+                        sampleSize *= 2
                     }
                 }
-                setInAppBackgroundImage(destFile.absolutePath)
+
+                // 3. Decode downsampled image
+                val decodeOptions = android.graphics.BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                    inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+                }
+                val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+                    android.graphics.BitmapFactory.decodeStream(input, null, decodeOptions)
+                }
+
+                if (bitmap != null) {
+                    destFile.outputStream().use { output ->
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, output)
+                    }
+                    bitmap.recycle()
+                    setInAppBackgroundImage(destFile.absolutePath)
+                }
             } catch (e: Exception) {
                 android.util.Log.e("AppearanceViewModel", "Failed to save wallpaper from URI: ${e.message}", e)
             }

@@ -536,12 +536,13 @@ class ProxyVpnService : VpnService(), TunProvider {
         // Add DNS Servers - public reliable DNS servers with DoH detour through proxy
         builder.addDnsServer("1.1.1.1")
         builder.addDnsServer("8.8.8.8")
+        builder.addDnsServer("77.88.8.8")
         try {
             val dnsServers = options.dnsServerAddress
             if (dnsServers != null) {
                 while (dnsServers.hasNext()) {
                     val dns = dnsServers.next()
-                    if (dns.isNotBlank() && dns != "1.1.1.1" && dns != "8.8.8.8") {
+                    if (dns.isNotBlank() && dns != "1.1.1.1" && dns != "8.8.8.8" && dns != "77.88.8.8") {
                         builder.addDnsServer(dns)
                     }
                 }

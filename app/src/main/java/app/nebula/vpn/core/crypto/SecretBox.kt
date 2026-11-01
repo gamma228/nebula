@@ -45,6 +45,9 @@ object SecretBox {
         return "$ivB64:$ctB64"
     }
 
+    @Volatile
+    private var cachedMasterKey: SecretKey? = null
+
     /**
      * Decrypts an iv:ciphertext string using the Android KeyStore master key.
      */
@@ -53,15 +56,20 @@ object SecretBox {
         val parts = encryptedPayload.split(":")
         if (parts.size != 2) return encryptedPayload // fallback for unencrypted legacy input
 
-        val iv = Base64.decode(parts[0], Base64.NO_WRAP)
-        val ciphertext = Base64.decode(parts[1], Base64.NO_WRAP)
+        return try {
+            val iv = Base64.decode(parts[0], Base64.NO_WRAP)
+            val ciphertext = Base64.decode(parts[1], Base64.NO_WRAP)
 
-        val secretKey = getOrCreateMasterKey()
-        val cipher = Cipher.getInstance(AES_GCM_NOPADDING)
-        val spec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
-        val decryptedBytes = cipher.doFinal(ciphertext)
-        return String(decryptedBytes, Charsets.UTF_8)
+            val secretKey = getOrCreateMasterKey()
+            val cipher = Cipher.getInstance(AES_GCM_NOPADDING)
+            val spec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
+            val decryptedBytes = cipher.doFinal(ciphertext)
+            String(decryptedBytes, Charsets.UTF_8)
+        } catch (e: Exception) {
+            android.util.Log.w("SecretBox", "Failed to decrypt secret: ${e.message}")
+            encryptedPayload
+        }
     }
 
     /**
@@ -112,21 +120,30 @@ object SecretBox {
     }
 
     private fun getOrCreateMasterKey(): SecretKey {
-        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        val existing = keyStore.getKey(MASTER_KEY_ALIAS, null) as? SecretKey
-        if (existing != null) return existing
+        cachedMasterKey?.let { return it }
+        return synchronized(this) {
+            cachedMasterKey?.let { return it }
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            val existing = keyStore.getKey(MASTER_KEY_ALIAS, null) as? SecretKey
+            if (existing != null) {
+                cachedMasterKey = existing
+                return existing
+            }
 
-        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        val spec = KeyGenParameterSpec.Builder(
-            MASTER_KEY_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(KEY_LENGTH_BITS)
-            .build()
+            val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+            val spec = KeyGenParameterSpec.Builder(
+                MASTER_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(KEY_LENGTH_BITS)
+                .build()
 
-        keyGenerator.init(spec)
-        return keyGenerator.generateKey()
+            keyGenerator.init(spec)
+            val newKey = keyGenerator.generateKey()
+            cachedMasterKey = newKey
+            newKey
+        }
     }
 }

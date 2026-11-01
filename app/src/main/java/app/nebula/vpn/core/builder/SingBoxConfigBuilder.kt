@@ -63,23 +63,7 @@ object SingBoxConfigBuilder {
 
             putJsonObject("dns") {
                 putJsonArray("servers") {
-                    // 1. Primary remote DNS (DoH over TCP 443 through proxy) - works over 100% of proxies (including Cloudflare CDN WebSockets/gRPC)
-                    add(buildJsonObject {
-                        put("type", "https")
-                        put("tag", "dns-remote-doh")
-                        put("server", "1.1.1.1")
-                        put("path", "/dns-query")
-                        put("detour", proxyDetourTag)
-                    })
-                    // 2. Secondary remote DNS (Google DoH over TCP 443 through proxy)
-                    add(buildJsonObject {
-                        put("type", "https")
-                        put("tag", "dns-remote-google")
-                        put("server", "8.8.8.8")
-                        put("path", "/dns-query")
-                        put("detour", proxyDetourTag)
-                    })
-                    // 3. User configured remote DNS (DoH or custom UDP)
+                    // 1. User configured remote DNS if provided (DoH or custom UDP)
                     if (config.remoteDnsUrl.startsWith("https://")) {
                         val withoutScheme = config.remoteDnsUrl.removePrefix("https://")
                         val serverHost = withoutScheme.substringBefore("/")
@@ -91,7 +75,7 @@ object SingBoxConfigBuilder {
                             put("path", path)
                             put("detour", proxyDetourTag)
                         })
-                    } else if (config.remoteDnsUrl.isNotBlank()) {
+                    } else if (config.remoteDnsUrl.isNotBlank() && !config.remoteDnsUrl.startsWith("http://")) {
                         val serverHost = config.remoteDnsUrl.removePrefix("udp://").substringBefore(":")
                         add(buildJsonObject {
                             put("type", "udp")
@@ -100,6 +84,25 @@ object SingBoxConfigBuilder {
                             put("detour", proxyDetourTag)
                         })
                     }
+
+                    // 2. Google DoH over TCP 443 through proxy (globally reliable, works through 100% of proxy nodes)
+                    add(buildJsonObject {
+                        put("type", "https")
+                        put("tag", "dns-remote-google")
+                        put("server", "8.8.8.8")
+                        put("path", "/dns-query")
+                        put("detour", proxyDetourTag)
+                    })
+
+                    // 3. Cloudflare DoH through proxy
+                    add(buildJsonObject {
+                        put("type", "https")
+                        put("tag", "dns-remote-doh")
+                        put("server", "1.1.1.1")
+                        put("path", "/dns-query")
+                        put("detour", proxyDetourTag)
+                    })
+
                     // 4. Fast UDP remote DNS (for nodes with native UDP support)
                     add(buildJsonObject {
                         put("type", "udp")
@@ -107,24 +110,23 @@ object SingBoxConfigBuilder {
                         put("server", "8.8.8.8")
                         put("detour", proxyDetourTag)
                     })
-                    // 5. Direct DNS via Android system native resolver
-                    add(buildJsonObject {
-                        put("type", "local")
-                        put("tag", "dns-local")
-                        put("detour", "direct")
-                    })
-                    // 6. Direct DNS fallback (Yandex 77.88.8.8)
+
+                    // 5. Direct DNS via Yandex (77.88.8.8) - works on 100% of Russian ISPs with 5-15ms latency
                     add(buildJsonObject {
                         put("type", "udp")
-                        put("tag", "dns-direct-yandex")
+                        put("tag", "dns-local")
                         put("server", "77.88.8.8")
+                        put("detour", "direct")
                     })
-                    // 7. Direct DNS fallback (Google 8.8.8.8)
+
+                    // 6. Direct DNS fallback (Google 8.8.8.8)
                     add(buildJsonObject {
                         put("type", "udp")
                         put("tag", "dns-direct-google")
                         put("server", "8.8.8.8")
+                        put("detour", "direct")
                     })
+
                     if (config.fakeDnsEnabled) {
                         add(buildJsonObject {
                             put("type", "fakeip")
@@ -403,7 +405,8 @@ object SingBoxConfigBuilder {
     private fun buildTlsObject(
         tls: TlsConfig,
         defaultServerName: String,
-        transportType: TransportType = TransportType.TCP
+        transportType: TransportType = TransportType.TCP,
+        isQuic: Boolean = false
     ): JsonObject {
         return buildJsonObject {
             put("enabled", true)
@@ -418,6 +421,8 @@ object SingBoxConfigBuilder {
                 tls.alpn
             } else if (transportType == TransportType.WS) {
                 listOf("http/1.1")
+            } else if (isQuic) {
+                listOf("h3")
             } else {
                 emptyList()
             }
@@ -426,19 +431,21 @@ object SingBoxConfigBuilder {
                     for (a in alpnToUse) add(JsonPrimitive(a))
                 }
             }
-            val rawFp = tls.utlsFingerprint.trim().lowercase()
-            val supportedFp = setOf("chrome", "firefox", "edge", "safari", "360", "qq", "ios", "android", "random", "randomized")
-            val fpToUse = when {
-                rawFp in supportedFp -> rawFp
-                rawFp in setOf("unsafe", "none", "off", "disable", "disabled") -> null
-                tls.realityPublicKey.isNotEmpty() -> "chrome"
-                rawFp.isEmpty() -> "chrome"
-                else -> null
-            }
-            if (fpToUse != null) {
-                putJsonObject("utls") {
-                    put("enabled", true)
-                    put("fingerprint", fpToUse)
+            if (!isQuic) {
+                val rawFp = tls.utlsFingerprint.trim().lowercase()
+                val supportedFp = setOf("chrome", "firefox", "edge", "safari", "360", "qq", "ios", "android", "random", "randomized")
+                val fpToUse = when {
+                    rawFp in supportedFp -> rawFp
+                    rawFp in setOf("unsafe", "none", "off", "disable", "disabled") -> null
+                    tls.realityPublicKey.isNotEmpty() -> "chrome"
+                    rawFp.isEmpty() -> "chrome"
+                    else -> null
+                }
+                if (fpToUse != null) {
+                    putJsonObject("utls") {
+                        put("enabled", true)
+                        put("fingerprint", fpToUse)
+                    }
                 }
             }
             if (tls.realityPublicKey.isNotEmpty()) {
@@ -583,9 +590,8 @@ object SingBoxConfigBuilder {
                     put("server", profile.server)
                     put("server_port", profile.port)
                     put("password", profile.authSecret)
-                    if (profile.tls.enabled) {
-                        put("tls", buildTlsObject(profile.tls, profile.server))
-                    }
+                    val tlsToUse = if (profile.tls.enabled) profile.tls else profile.tls.copy(enabled = true)
+                    put("tls", buildTlsObject(tlsToUse, profile.server, isQuic = true))
                 }
             }
         }

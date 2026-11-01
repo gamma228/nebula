@@ -11,11 +11,18 @@ class NebulaApp : Application() {
 
     companion object {
         const val VPN_NOTIFICATION_CHANNEL_ID = "nebula_vpn_status"
+
+        init {
+            // Cap Go runtime concurrency to 1 core and eagerly release memory to eliminate multi-core spinning
+            try {
+                android.system.Os.setenv("GOMAXPROCS", "1", true)
+                android.system.Os.setenv("GODEBUG", "madvdontneed=1", true)
+            } catch (_: Exception) {}
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        // Cap Go runtime concurrency to 1 core and eagerly release memory to eliminate multi-core spinning
         try {
             android.system.Os.setenv("GOMAXPROCS", "1", true)
             android.system.Os.setenv("GODEBUG", "madvdontneed=1", true)

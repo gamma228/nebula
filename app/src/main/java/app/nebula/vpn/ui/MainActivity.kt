@@ -173,17 +173,6 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Request notification permission on Android 13+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-
         // Apply FLAG_SECURE dynamically
         lifecycleScope.launch {
             settingsRepository.flagSecureEnabled.collect { secure ->
@@ -212,8 +201,21 @@ class MainActivity : AppCompatActivity() {
                 initial = "en"
             )
 
+            // Safely request notification permission after UI composition to prevent Xiaomi HyperOS modal window deadlocks
+            LaunchedEffect(Unit) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+            }
+
             val baseContext = LocalContext.current
-            val (localizedContext, localizedConfig) = remember(currentLanguageCode, baseContext) {
+            val (localizedContext, localizedConfig) = remember(currentLanguageCode) {
                 val targetLocale = when (currentLanguageCode) {
                     "ru" -> Locale("ru")
                     "uk" -> Locale("uk")
@@ -224,13 +226,12 @@ class MainActivity : AppCompatActivity() {
                 Locale.setDefault(targetLocale)
                 val config = Configuration(baseContext.resources.configuration)
                 config.setLocale(targetLocale)
-                val wrapped = object : ContextWrapper(baseContext) {
-                    private val localizedResources: Resources by lazy {
-                        baseContext.createConfigurationContext(config).resources
-                    }
-                    override fun getResources(): Resources = localizedResources
+                val localized = try {
+                    baseContext.createConfigurationContext(config)
+                } catch (e: Exception) {
+                    baseContext
                 }
-                Pair(wrapped, config)
+                Pair(localized, config)
             }
 
             CompositionLocalProvider(
@@ -432,12 +433,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         val homeViewModel: HomeViewModel = hiltViewModel()
-        val serversViewModel: ServersViewModel = hiltViewModel()
-        val routingViewModel: RoutingViewModel = hiltViewModel()
-        val doctorViewModel: DoctorViewModel = hiltViewModel()
-        val toolsViewModel: ToolsViewModel = hiltViewModel()
-        val appearanceViewModel: AppearanceViewModel = hiltViewModel()
-        val settingsViewModel: SettingsViewModel = hiltViewModel()
 
         // Primary bottom bar tabs (Home, Servers, Routing, Tools, Settings)
         val bottomBarScreens = listOf(
@@ -461,7 +456,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         val themeConfig = LocalThemeConfig.current
-        val hasCustomImage = themeConfig.backgroundType == BackgroundType.USER_IMAGE && !themeConfig.backgroundImageUri.isNullOrEmpty()
+        val hasCustomImage = themeConfig.backgroundType == BackgroundType.USER_IMAGE &&
+                !themeConfig.backgroundImageUri.isNullOrEmpty() &&
+                java.io.File(themeConfig.backgroundImageUri).exists()
         val navColors = NebulaTheme.colors
 
         Box(
@@ -473,6 +470,7 @@ class MainActivity : AppCompatActivity() {
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(themeConfig.backgroundImageUri)
+                        .size(coil.size.Size(1080, 2400))
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
@@ -481,7 +479,7 @@ class MainActivity : AppCompatActivity() {
                         .fillMaxSize()
                         .then(
                             if (themeConfig.backgroundBlurRadius > 0) {
-                                Modifier.blur(themeConfig.backgroundBlurRadius.dp)
+                                Modifier.blur(themeConfig.backgroundBlurRadius.coerceIn(1, 20).dp)
                             } else Modifier
                         )
                 )
@@ -564,21 +562,39 @@ class MainActivity : AppCompatActivity() {
                                         }
                                     }
                                 )
-                                is Screen.Servers -> ServersScreen(
-                                    viewModel = serversViewModel,
-                                    onOpenQrScanner = { showQrScanner = true }
-                                )
-                                is Screen.Routing -> RoutingScreen(viewModel = routingViewModel)
-                                is Screen.Doctor -> DoctorScreen(viewModel = doctorViewModel)
-                                is Screen.Tools -> ToolsScreen(viewModel = toolsViewModel)
-                                is Screen.Appearance -> AppearanceScreen(viewModel = appearanceViewModel)
-                                is Screen.Settings -> SettingsScreen(
-                                    viewModel = settingsViewModel,
-                                    onNavigateToRouting = { currentScreen = Screen.Routing },
-                                    onNavigateToAppearance = { currentScreen = Screen.Appearance },
-                                    onNavigateToDoctor = { currentScreen = Screen.Doctor },
-                                    onNavigateToTools = { currentScreen = Screen.Tools }
-                                )
+                                is Screen.Servers -> {
+                                    val serversViewModel: ServersViewModel = hiltViewModel()
+                                    ServersScreen(
+                                        viewModel = serversViewModel,
+                                        onOpenQrScanner = { showQrScanner = true }
+                                    )
+                                }
+                                is Screen.Routing -> {
+                                    val routingViewModel: RoutingViewModel = hiltViewModel()
+                                    RoutingScreen(viewModel = routingViewModel)
+                                }
+                                is Screen.Doctor -> {
+                                    val doctorViewModel: DoctorViewModel = hiltViewModel()
+                                    DoctorScreen(viewModel = doctorViewModel)
+                                }
+                                is Screen.Tools -> {
+                                    val toolsViewModel: ToolsViewModel = hiltViewModel()
+                                    ToolsScreen(viewModel = toolsViewModel)
+                                }
+                                is Screen.Appearance -> {
+                                    val appearanceViewModel: AppearanceViewModel = hiltViewModel()
+                                    AppearanceScreen(viewModel = appearanceViewModel)
+                                }
+                                is Screen.Settings -> {
+                                    val settingsViewModel: SettingsViewModel = hiltViewModel()
+                                    SettingsScreen(
+                                        viewModel = settingsViewModel,
+                                        onNavigateToRouting = { currentScreen = Screen.Routing },
+                                        onNavigateToAppearance = { currentScreen = Screen.Appearance },
+                                        onNavigateToDoctor = { currentScreen = Screen.Doctor },
+                                        onNavigateToTools = { currentScreen = Screen.Tools }
+                                    )
+                                }
                             }
                         }
                     }

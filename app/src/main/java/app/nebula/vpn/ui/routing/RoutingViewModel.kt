@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -407,28 +408,50 @@ class RoutingViewModel @Inject constructor(
 
     private fun loadInstalledApps() {
         viewModelScope.launch(Dispatchers.IO) {
-            val pm = context.packageManager
-            val intent = Intent(Intent.ACTION_MAIN, null).apply {
-                addCategory(Intent.CATEGORY_LAUNCHER)
-            }
-            val resolveInfos = pm.queryIntentActivities(intent, 0)
-            val selectedPackages = settingsRepository.targetPackages.stateIn(viewModelScope).value
-
-            val apps = resolveInfos.mapNotNull { ri ->
-                val pkgName = ri.activityInfo.packageName
-                if (pkgName == context.packageName) null
-                else {
-                    AppInfoItem(
-                        packageName = pkgName,
-                        appName = ri.loadLabel(pm).toString(),
-                        icon = ri.loadIcon(pm),
-                        isSelected = selectedPackages.contains(pkgName)
-                    )
+            try {
+                val pm = context.packageManager
+                val intent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
                 }
-            }.distinctBy { it.packageName }.sortedBy { it.appName }
+                val resolveInfos = try {
+                    pm.queryIntentActivities(intent, 0)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                val selectedPackages = try {
+                    settingsRepository.targetPackages.first()
+                } catch (e: Exception) {
+                    emptySet()
+                }
 
-            withContext(Dispatchers.Main) {
-                _installedApps.value = apps
+                val apps = resolveInfos.mapNotNull { ri ->
+                    val pkgName = ri.activityInfo?.packageName ?: return@mapNotNull null
+                    if (pkgName == context.packageName) null
+                    else {
+                        val label = try {
+                            ri.loadLabel(pm).toString()
+                        } catch (_: Exception) {
+                            pkgName
+                        }
+                        val icon = try {
+                            ri.loadIcon(pm)
+                        } catch (_: Exception) {
+                            null
+                        }
+                        AppInfoItem(
+                            packageName = pkgName,
+                            appName = label,
+                            icon = icon,
+                            isSelected = selectedPackages.contains(pkgName)
+                        )
+                    }
+                }.distinctBy { it.packageName }.sortedBy { it.appName }
+
+                withContext(Dispatchers.Main) {
+                    _installedApps.value = apps
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("RoutingViewModel", "Failed to load installed apps: ${e.message}", e)
             }
         }
     }
