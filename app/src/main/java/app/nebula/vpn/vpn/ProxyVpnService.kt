@@ -134,7 +134,7 @@ class ProxyVpnService : VpnService(), TunProvider {
                 this,
                 receiver,
                 filter,
-                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+                androidx.core.content.ContextCompat.RECEIVER_EXPORTED
             )
         } catch (e: Exception) {
             android.util.Log.w("ProxyVpnService", "Failed to register screen receiver: ${e.message}")
@@ -794,8 +794,8 @@ class ProxyVpnService : VpnService(), TunProvider {
                 val finalTotalTx = maxOf(accumulatedTxBytes, coreStats.totalUploadBytes)
 
                 val stats = TrafficStats(
-                    uploadSpeedBps = if (interactive) finalTxSpeed else 0L,
-                    downloadSpeedBps = if (interactive) finalRxSpeed else 0L,
+                    uploadSpeedBps = if (isCurrentInteractive) finalTxSpeed else 0L,
+                    downloadSpeedBps = if (isCurrentInteractive) finalRxSpeed else 0L,
                     totalUploadBytes = finalTotalTx,
                     totalDownloadBytes = finalTotalRx,
                     memoryUsageBytes = coreStats.memoryUsageBytes,
@@ -806,7 +806,7 @@ class ProxyVpnService : VpnService(), TunProvider {
 
                 // Update notification ONLY when screen is interactive AND user enabled speed in notification.
                 // When screen is off, zero notification IPC occurs.
-                if (interactive && showSpeed && currentProfileName != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
+                if (isCurrentInteractive && showSpeed && currentProfileName != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
                     if (now - lastNotifUpdateTime >= profileEnum.interactiveIntervalMs) {
                         lastNotifUpdateTime = now
                         val notifTitle = "Connected: $currentProfileName"
