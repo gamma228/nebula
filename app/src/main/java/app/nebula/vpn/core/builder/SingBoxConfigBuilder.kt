@@ -73,8 +73,6 @@ object SingBoxConfigBuilder {
                         putJsonObject("tls") {
                             put("enabled", true)
                             put("server_name", "cloudflare-dns.com")
-                            put("fragment", true)
-                            put("fragment_fallback_delay", "500ms")
                         }
                     })
 
@@ -88,8 +86,6 @@ object SingBoxConfigBuilder {
                         putJsonObject("tls") {
                             put("enabled", true)
                             put("server_name", "dns.google")
-                            put("fragment", true)
-                            put("fragment_fallback_delay", "500ms")
                         }
                     })
 
@@ -110,8 +106,6 @@ object SingBoxConfigBuilder {
                                     if (!isIpAddress(serverHost)) {
                                         put("server_name", serverHost)
                                     }
-                                    put("fragment", true)
-                                    put("fragment_fallback_delay", "500ms")
                                 }
                             })
                         } else if (!config.remoteDnsUrl.startsWith("http://")) {
@@ -172,14 +166,14 @@ object SingBoxConfigBuilder {
                         }
                         put("server", "dns-local")
                     })
-                    // Russian domestic domains resolve directly via local/direct DNS
+                    // Russian domestic domains resolve directly via direct Yandex DNS
                     add(buildJsonObject {
                         putJsonArray("domain_suffix") {
                             add(JsonPrimitive("ru"))
                             add(JsonPrimitive("su"))
                             add(JsonPrimitive("xn--p1ai"))
                         }
-                        put("server", "dns-local")
+                        put("server", "dns-direct-yandex")
                     })
                     // User configured direct domains
                     val directDomains = config.customRules
@@ -190,7 +184,7 @@ object SingBoxConfigBuilder {
                             putJsonArray("domain_suffix") {
                                 for (d in directDomains) add(JsonPrimitive(d))
                             }
-                            put("server", "dns-local")
+                            put("server", "dns-direct-yandex")
                         })
                     }
                     // Android Private DNS popular domains resolve through remote proxy DoH
@@ -285,7 +279,7 @@ object SingBoxConfigBuilder {
             val finalTarget = if (activeP != null) "proxy" else "direct"
 
             putJsonObject("route") {
-                put("default_domain_resolver", "dns-local")
+                put("default_domain_resolver", "dns-direct-yandex")
                 put("final", finalTarget)
 
                 val referencedRuleSets = config.customRules
@@ -576,7 +570,7 @@ object SingBoxConfigBuilder {
     private fun buildOutboundForProfile(profile: ProxyProfile, tag: String): JsonObject {
         return buildJsonObject {
             if (!isIpAddress(profile.server)) {
-                put("domain_resolver", "dns-local")
+                put("domain_resolver", "dns-direct-yandex")
             }
             when (profile.protocol) {
                 ProtocolType.SHADOWSOCKS -> {

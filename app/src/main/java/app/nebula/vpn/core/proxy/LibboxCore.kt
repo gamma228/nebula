@@ -509,7 +509,17 @@ class LibboxCore(
                             return
                         }
                         try {
-                            val addrs = java.net.InetAddress.getAllByName(domain)
+                            // Bound to physical non-VPN network to strictly prevent routing back into tun0
+                            val physicalNet = connectivityManager.allNetworks.firstOrNull { net ->
+                                val caps = connectivityManager.getNetworkCapabilities(net) ?: return@firstOrNull false
+                                !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) &&
+                                        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                            }
+                            val addrs = if (physicalNet != null) {
+                                physicalNet.getAllByName(domain)
+                            } else {
+                                java.net.InetAddress.getAllByName(domain)
+                            }
                             if (addrs.isNullOrEmpty()) {
                                 ctx.errorCode(1)
                             } else {

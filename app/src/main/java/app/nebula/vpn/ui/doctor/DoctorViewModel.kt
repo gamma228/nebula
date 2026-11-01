@@ -151,17 +151,11 @@ class DoctorViewModel @Inject constructor(
                 // Try Cloudflare DoH first (with Accept: application/dns-json RFC 8484 header), fallback to Google DoH /resolve
                 val dohHeaders = mapOf("Accept" to "application/dns-json")
                 var cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 6000, proxy = tunnelProxy, headers = dohHeaders)
-                if (cfDoh == null) {
-                    cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 6000, proxy = null, headers = dohHeaders)
-                }
                 if (cfDoh != null) {
                     dohPassed = true
                     dohLatency = System.currentTimeMillis() - dohStart
                 } else {
                     var googleDoh = testHttp("https://8.8.8.8/resolve?name=google.com&type=A", timeoutMs = 6000, proxy = tunnelProxy, headers = dohHeaders)
-                    if (googleDoh == null) {
-                        googleDoh = testHttp("https://8.8.8.8/resolve?name=google.com&type=A", timeoutMs = 6000, proxy = null, headers = dohHeaders)
-                    }
                     if (googleDoh != null) {
                         dohPassed = true
                         dohLatency = System.currentTimeMillis() - dohStart
@@ -196,10 +190,7 @@ class DoctorViewModel @Inject constructor(
                     "https://checkip.amazonaws.com"
                 )
                 for (endpoint in ipEndpoints) {
-                    var res = testHttp(endpoint, timeoutMs = 7000, proxy = tunnelProxy)
-                    if (res.isNullOrBlank()) {
-                        res = testHttp(endpoint, timeoutMs = 7000, proxy = null)
-                    }
+                    val res = testHttp(endpoint, timeoutMs = 7000, proxy = tunnelProxy)
                     if (!res.isNullOrBlank() && res.length in 7..45 && !res.contains("<html", ignoreCase = true)) {
                         exitIp = res.trim()
                         break
@@ -432,11 +423,7 @@ class DoctorViewModel @Inject constructor(
             }
         }
 
-        val res = doRequest(proxy)
-        if (res == null && proxy != null) {
-            return doRequest(null)
-        }
-        return res
+        return doRequest(proxy)
     }
 
     private fun getResponseCode(
@@ -467,12 +454,7 @@ class DoctorViewModel @Inject constructor(
             }
         }
 
-        val code = doRequest(proxy)
-        if (code !in 200..399 && proxy != null) {
-            val fallbackCode = doRequest(null)
-            if (fallbackCode in 200..399) return fallbackCode
-        }
-        return code
+        return doRequest(proxy)
     }
 
     fun applyFix(fixActionId: String) {
