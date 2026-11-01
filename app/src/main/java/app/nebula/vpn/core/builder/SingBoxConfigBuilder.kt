@@ -63,22 +63,7 @@ object SingBoxConfigBuilder {
 
             putJsonObject("dns") {
                 putJsonArray("servers") {
-                    // 1. Google DoH over TCP 443 through proxy (globally reliable, circumvents TSPU with TLS fragment)
-                    add(buildJsonObject {
-                        put("type", "https")
-                        put("tag", "dns-remote-google")
-                        put("server", "8.8.8.8")
-                        put("path", "/dns-query")
-                        proxyDetourTag?.let { put("detour", it) }
-                        putJsonObject("tls") {
-                            put("enabled", true)
-                            put("server_name", "dns.google")
-                            put("fragment", true)
-                            put("fragment_fallback_delay", "500ms")
-                        }
-                    })
-
-                    // 2. Cloudflare DoH through proxy
+                    // 1. Cloudflare DoH through proxy (primary fast remote DoH)
                     add(buildJsonObject {
                         put("type", "https")
                         put("tag", "dns-remote-doh")
@@ -88,6 +73,21 @@ object SingBoxConfigBuilder {
                         putJsonObject("tls") {
                             put("enabled", true)
                             put("server_name", "cloudflare-dns.com")
+                            put("fragment", true)
+                            put("fragment_fallback_delay", "500ms")
+                        }
+                    })
+
+                    // 2. Google DoH over TCP 443 through proxy (reliable fallback)
+                    add(buildJsonObject {
+                        put("type", "https")
+                        put("tag", "dns-remote-google")
+                        put("server", "8.8.8.8")
+                        put("path", "/dns-query")
+                        proxyDetourTag?.let { put("detour", it) }
+                        putJsonObject("tls") {
+                            put("enabled", true)
+                            put("server_name", "dns.google")
                             put("fragment", true)
                             put("fragment_fallback_delay", "500ms")
                         }

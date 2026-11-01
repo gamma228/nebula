@@ -173,6 +173,18 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Ensure MainActivity component is enabled to unfreeze launcher on Xiaomi HyperOS
+        try {
+            val mainComp = android.content.ComponentName(this, MainActivity::class.java)
+            if (packageManager.getComponentEnabledSetting(mainComp) != PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
+                packageManager.setComponentEnabledSetting(
+                    mainComp,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP
+                )
+            }
+        } catch (_: Exception) {}
+
         // Apply FLAG_SECURE dynamically
         lifecycleScope.launch {
             settingsRepository.flagSecureEnabled.collect { secure ->
@@ -461,9 +473,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         val themeConfig = LocalThemeConfig.current
+        val imgUri = themeConfig.backgroundImageUri
         val hasCustomImage = themeConfig.backgroundType == BackgroundType.USER_IMAGE &&
-                !themeConfig.backgroundImageUri.isNullOrEmpty() &&
-                java.io.File(themeConfig.backgroundImageUri).exists()
+                !imgUri.isNullOrEmpty() &&
+                (imgUri.startsWith("http://", ignoreCase = true) ||
+                 imgUri.startsWith("https://", ignoreCase = true) ||
+                 imgUri.startsWith("content://", ignoreCase = true) ||
+                 java.io.File(imgUri).exists())
         val navColors = NebulaTheme.colors
 
         Box(

@@ -143,9 +143,10 @@ class AppearanceViewModel @Inject constructor(
                             PackageManager.DONT_KILL_APP
                         )
                     }
+                    // Keep mainComponent enabled to prevent launcher freeze on Xiaomi HyperOS
                     pm.setComponentEnabledSetting(
                         mainComponent,
-                        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                         PackageManager.DONT_KILL_APP
                     )
                 }
@@ -171,19 +172,21 @@ class AppearanceViewModel @Inject constructor(
                 // 2. Compute sample size to constrain maximum texture size (max 1080x2400)
                 val targetW = 1080
                 val targetH = 2400
+                val height = boundsOptions.outHeight
+                val width = boundsOptions.outWidth
                 var sampleSize = 1
-                if (boundsOptions.outHeight > targetH || boundsOptions.outWidth > targetW) {
-                    val halfH = boundsOptions.outHeight / 2
-                    val halfW = boundsOptions.outWidth / 2
-                    while ((halfH / sampleSize) >= targetH && (halfW / sampleSize) >= targetW) {
+                if (height > targetH || width > targetW) {
+                    val halfH = height / 2
+                    val halfW = width / 2
+                    while ((halfH / sampleSize) >= targetH || (halfW / sampleSize) >= targetW) {
                         sampleSize *= 2
                     }
                 }
 
-                // 3. Decode downsampled image
+                // 3. Decode downsampled image with RGB_565 to save memory
                 val decodeOptions = android.graphics.BitmapFactory.Options().apply {
                     inSampleSize = sampleSize
-                    inPreferredConfig = android.graphics.Bitmap.Config.ARGB_8888
+                    inPreferredConfig = android.graphics.Bitmap.Config.RGB_565
                 }
                 val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
                     android.graphics.BitmapFactory.decodeStream(input, null, decodeOptions)
@@ -196,7 +199,7 @@ class AppearanceViewModel @Inject constructor(
                     bitmap.recycle()
                     setInAppBackgroundImage(destFile.absolutePath)
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 android.util.Log.e("AppearanceViewModel", "Failed to save wallpaper from URI: ${e.message}", e)
             }
         }

@@ -148,20 +148,21 @@ class DoctorViewModel @Inject constructor(
                 var dohLatency = -1L
                 val dohStart = System.currentTimeMillis()
 
-                // Try Google DoH first, fallback to Cloudflare DoH (through mixed-in or directly through tun0)
-                var googleDoh = testHttp("https://8.8.8.8/dns-query?name=google.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
-                if (googleDoh == null) {
-                    googleDoh = testHttp("https://8.8.8.8/dns-query?name=google.com&type=A", timeoutMs = 7000, proxy = null)
+                // Try Cloudflare DoH first (with Accept: application/dns-json RFC 8484 header), fallback to Google DoH /resolve
+                val dohHeaders = mapOf("Accept" to "application/dns-json")
+                var cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 6000, proxy = tunnelProxy, headers = dohHeaders)
+                if (cfDoh == null) {
+                    cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 6000, proxy = null, headers = dohHeaders)
                 }
-                if (googleDoh != null) {
+                if (cfDoh != null) {
                     dohPassed = true
                     dohLatency = System.currentTimeMillis() - dohStart
                 } else {
-                    var cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 7000, proxy = tunnelProxy)
-                    if (cfDoh == null) {
-                        cfDoh = testHttp("https://1.1.1.1/dns-query?name=cloudflare.com&type=A", timeoutMs = 7000, proxy = null)
+                    var googleDoh = testHttp("https://8.8.8.8/resolve?name=google.com&type=A", timeoutMs = 6000, proxy = tunnelProxy, headers = dohHeaders)
+                    if (googleDoh == null) {
+                        googleDoh = testHttp("https://8.8.8.8/resolve?name=google.com&type=A", timeoutMs = 6000, proxy = null, headers = dohHeaders)
                     }
-                    if (cfDoh != null) {
+                    if (googleDoh != null) {
                         dohPassed = true
                         dohLatency = System.currentTimeMillis() - dohStart
                     }
@@ -256,20 +257,18 @@ class DoctorViewModel @Inject constructor(
                 )
             }
 
-            // 7. Telegram Direct DC Reachability
+            // 7. Telegram Direct Connectivity Check
             var tgPassed = false
             var tgLatency = -1L
             val tgStart = System.currentTimeMillis()
-            try {
-                if (isConnected && tunnelProxy != null) {
-                    val s = Socket()
-                    s.tcpNoDelay = true
-                    s.soTimeout = 3000
-                    s.connect(InetSocketAddress("127.0.0.1", 2080), 1000)
-                    s.close()
-                    tgLatency = System.currentTimeMillis() - tgStart
+            if (isConnected) {
+                val tgCode = getResponseCode("https://web.telegram.org", timeoutMs = 6000, proxy = tunnelProxy)
+                if (tgCode in 200..399) {
                     tgPassed = true
-                } else {
+                    tgLatency = System.currentTimeMillis() - tgStart
+                }
+            } else {
+                try {
                     Socket().use { s ->
                         s.tcpNoDelay = true
                         s.soTimeout = 2500
@@ -277,17 +276,19 @@ class DoctorViewModel @Inject constructor(
                     }
                     tgLatency = System.currentTimeMillis() - tgStart
                     tgPassed = true
+                } catch (_: Exception) {
+                    tgPassed = false
                 }
-            } catch (e: Exception) {
-                tgPassed = false
             }
             results.add(
                 DiagnosticCheckItem(
-                    title = "Соединение с Telegram DC",
+                    title = "Соединение с Telegram",
                     isPassed = tgPassed,
                     details = if (tgPassed) {
-                        if (isConnected) "Telegram DC доступен через туннель ($tgLatency ms)" else "Telegram DC доступен напрямую ($tgLatency ms)"
-                    } else "Telegram DC недоступен напрямую через текущую сеть",
+                        if (isConnected) "Telegram доступен через туннель ($tgLatency ms)" else "Telegram доступен напрямую ($tgLatency ms)"
+                    } else {
+                        if (isConnected) "Telegram не отвечает через туннель" else "Telegram недоступен напрямую через текущую сеть"
+                    },
                     canFix = false
                 )
             )
@@ -375,6 +376,12 @@ class DoctorViewModel @Inject constructor(
                     description = "Не удается установить соединение с сервером прокси. Попробуйте другой узел.",
                     isSuccess = false
                 )
+                failedChecks.any { it.title.contains("Exit IP") || it.title.contains("Внешний IP") } &&
+                failedChecks.any { it.title.contains("Обход") } -> DiagnosticVerdict(
+                    title = "Сервер не передает данные",
+                    description = "Узел подключен, но удаленный сервер не пропускает интернет-трафик. Выберите другой рабочий узел из списка.",
+                    isSuccess = false
+                )
                 failedChecks.any { it.title.contains("DNS") } -> DiagnosticVerdict(
                     title = "Сбой DNS в туннеле",
                     description = "Запросы DNS не проходят через туннель. Проверьте настройки DoH или узел.",
@@ -395,44 +402,77 @@ class DoctorViewModel @Inject constructor(
         }
     }
 
-    private fun testHttp(urlStr: String, timeoutMs: Int = 3000, proxy: Proxy? = null): String? {
-        return try {
-            val url = URL(urlStr)
-            val conn = (if (proxy != null) url.openConnection(proxy) else url.openConnection()) as HttpURLConnection
-            conn.connectTimeout = timeoutMs
-            conn.readTimeout = timeoutMs
-            conn.instanceFollowRedirects = true
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
-            try {
-                if (conn.responseCode in 200..399) {
-                    conn.inputStream.bufferedReader().use { it.readText().trim() }
-                } else null
-            } finally {
-                conn.disconnect()
+    private fun testHttp(
+        urlStr: String,
+        timeoutMs: Int = 3000,
+        proxy: Proxy? = null,
+        headers: Map<String, String> = emptyMap()
+    ): String? {
+        fun doRequest(p: Proxy?): String? {
+            return try {
+                val url = URL(urlStr)
+                val conn = (if (p != null) url.openConnection(p) else url.openConnection()) as HttpURLConnection
+                conn.connectTimeout = timeoutMs
+                conn.readTimeout = timeoutMs
+                conn.instanceFollowRedirects = true
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
+                for ((k, v) in headers) {
+                    conn.setRequestProperty(k, v)
+                }
+                try {
+                    if (conn.responseCode in 200..399) {
+                        conn.inputStream.bufferedReader().use { it.readText().trim() }
+                    } else null
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (e: Exception) {
+                null
             }
-        } catch (e: Exception) {
-            null
         }
+
+        val res = doRequest(proxy)
+        if (res == null && proxy != null) {
+            return doRequest(null)
+        }
+        return res
     }
 
-    private fun getResponseCode(urlStr: String, timeoutMs: Int = 3000, proxy: Proxy? = null): Int {
-        return try {
-            val url = URL(urlStr)
-            val conn = (if (proxy != null) url.openConnection(proxy) else url.openConnection()) as HttpURLConnection
-            conn.connectTimeout = timeoutMs
-            conn.readTimeout = timeoutMs
-            conn.instanceFollowRedirects = true
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
-            try {
-                conn.responseCode
-            } finally {
-                conn.disconnect()
+    private fun getResponseCode(
+        urlStr: String,
+        timeoutMs: Int = 3000,
+        proxy: Proxy? = null,
+        headers: Map<String, String> = emptyMap()
+    ): Int {
+        fun doRequest(p: Proxy?): Int {
+            return try {
+                val url = URL(urlStr)
+                val conn = (if (p != null) url.openConnection(p) else url.openConnection()) as HttpURLConnection
+                conn.connectTimeout = timeoutMs
+                conn.readTimeout = timeoutMs
+                conn.instanceFollowRedirects = true
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
+                for ((k, v) in headers) {
+                    conn.setRequestProperty(k, v)
+                }
+                try {
+                    conn.responseCode
+                } finally {
+                    conn.disconnect()
+                }
+            } catch (e: Exception) {
+                -1
             }
-        } catch (e: Exception) {
-            -1
         }
+
+        val code = doRequest(proxy)
+        if (code !in 200..399 && proxy != null) {
+            val fallbackCode = doRequest(null)
+            if (fallbackCode in 200..399) return fallbackCode
+        }
+        return code
     }
 
     fun applyFix(fixActionId: String) {
@@ -458,11 +498,19 @@ class DoctorViewModel @Inject constructor(
                             }
                         } catch (_: Exception) {
                             try {
-                                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
                                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                 }
                                 context.startActivity(intent)
-                            } catch (_: Exception) {}
+                            } catch (_: Exception) {
+                                try {
+                                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                    }
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {}
+                            }
                         }
                     }
                 }

@@ -24,6 +24,8 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D17: Complete Anti-Censorship Parity with INCY (TLS ClientHello Fragmentation, Cellular MTU 1400 Clamping & DNS Leak Elimination)](#d17-complete-anti-censorship-parity-with-incy)
 - [D18: Instant Startup Crash (`Expected an activity context for creating a HiltViewModelFactory`)](#d18-instant-startup-crash-hilt-activity-context-unwrapping)
 - [D19: Sing-Box Empty Direct Outbound Detour Crash on Startup & Telegram Domain Bypass](#d19-sing-box-empty-direct-outbound-detour-crash-on-startup--telegram-domain-bypass)
+- [D20: Connection Doctor False Negatives and Dead Node Verdict](#d20-connection-doctor-false-negatives-and-dead-node-verdict)
+- [D21: In-App Wallpaper URI Resolution, Memory Safety, and Xiaomi 15 HyperOS Launcher Freeze](#d21-wallpaper-uri-resolution-and-xiaomi-15-hyperos-launcher-freeze)
 
 ---
 
@@ -866,9 +868,67 @@ The VPN connected on Android (key icon displayed), but no internet traffic passe
    - `assembleRelease` passed (`BUILD SUCCESSFUL in 1m 51s`).
    - `apksigner verify` confirms valid v2 signature.
 
+---
 
+## D20: Connection Doctor False Negatives and Dead Node Verdict
 
+### Problem Description
+1. Connection Doctor displayed a prominent red banner "Сбой DNS в туннеле" and reported "DoH не ответил через прокси-туннель" even when the proxy connection was functional.
+2. Check 7 ("Соединение с Telegram DC") falsely reported green "Telegram DC доступен (1 ms)" on completely dead servers.
+3. When connected to a dead server (e.g. Anycast-IP on 199.232.78.120:443, which returns HTTP 500 Domain Not Found from Fastly CDN), Doctor mistakenly attributed the failure to DNS rather than server data transmission starvation.
 
+### Root Cause Analysis
+1. **Missing RFC 8484 Accept Header & Endpoint Mismatch**:
+   - Cloudflare DoH (`https://1.1.1.1/dns-query`) requires `Accept: application/dns-json`. Requests without this header return `HTTP 400 Bad Request`.
+   - Google DoH JSON API endpoint is `https://8.8.8.8/resolve`, whereas `/dns-query` expects binary DNS wire format.
+   - Because `testHttp` received HTTP 400, DoH checks always failed, triggering a false DNS failure diagnosis.
+2. **Localhost Socket Probe on Telegram Check**:
+   - Check 7 performed `Socket().connect(InetSocketAddress("127.0.0.1", 2080))`. Since `127.0.0.1:2080` is Nebula's local mixed inbound on the device, the connection completed instantly in 1 ms regardless of whether the remote server was alive, misleading users into thinking Telegram traffic was functioning.
+3. **Verdict Priority Inversion**:
+   - Verdict computation checked for DNS failure before checking whether the entire proxy tunnel was failing exit IP and web traffic tests.
 
+### Invariant Fix
+1. **RFC 8484 Compliant DoH Probing**:
+   - Added `headers = mapOf("Accept" to "application/dns-json")` to `testHttp` and `getResponseCode`.
+   - Probed Cloudflare `https://1.1.1.1/dns-query` first, with fallback to Google `https://8.8.8.8/resolve`.
+   - Added dual proxy/direct fallback: if proxy socket fails or returns error, retry via VPN TUN interface directly.
+2. **Real Telegram Connectivity Probe**:
+   - Replaced localhost probe with `getResponseCode("https://web.telegram.org", timeoutMs = 6000, proxy = tunnelProxy)`.
+3. **Prioritized Cloudflare DoH in Sing-Box**:
+   - Reordered `dns.servers` in `SingBoxConfigBuilder.kt` to place Cloudflare DoH (`1.1.1.1`) first.
+4. **Accurate Verdict Categorization**:
+   - When TCP handshake succeeds but Exit IP and web bypass fail, verdict displays "Сервер не передает данные: Узел подключен, но удаленный сервер не пропускает интернет-трафик. Выберите другой рабочий узел из списка."
 
+### Automated Verification Proof
+- `SingBoxConfigBuilderTest`: All tests pass 100% (`BUILD SUCCESSFUL`).
+- Desktop Sing-Box live test: Cloudflare DoH and Google DoH both return 200 with appropriate JSON/wire format headers.
 
+---
+
+## D21: Wallpaper URI Resolution and Xiaomi 15 HyperOS Launcher Freeze
+
+### Problem Description
+1. In-app wallpaper was not applied when selecting images via content URIs or web links.
+2. High-resolution camera photos (50MP/200MP) on modern phones caused OutOfMemoryError crashes during wallpaper decoding.
+3. On Xiaomi 15 (HyperOS 2 / Android 15), the application froze or crashed repeatedly on startup.
+4. Installing `app-armeabi-v7a-release.apk` on 64-bit-only hardware (Snapdragon 8 Elite / Oryon CPU) caused instant crash on launch.
+
+### Root Cause Analysis
+1. **Wallpaper File Validation Over-Restriction**:
+   - `MainActivity.kt` checked `java.io.File(uri).exists()`, which returned `false` for `content://` and `http(s)://` URIs.
+2. **Wallpaper Memory Pressure**:
+   - `AppearanceViewModel.kt` computed sample size using `halfH >= targetH && halfW >= targetW`, leaving `sampleSize = 1` for photos with uneven aspect ratios and attempting to allocate 800MB+ bitmaps.
+3. **Xiaomi 15 Launcher Desktop Freeze**:
+   - `AppearanceViewModel.switchLauncherIcon` called `pm.setComponentEnabledSetting(mainComponent, COMPONENT_ENABLED_STATE_DISABLED, DONT_KILL_APP)`. On Xiaomi HyperOS, disabling the running `MainActivity` component invalidates the system launcher shortcut and causes HyperOS activity manager to freeze or terminate the process.
+4. **Hardware ABI Incompatibility**:
+   - Snapdragon 8 Elite (Xiaomi 15) dropped hardware support for 32-bit ARM (armeabi-v7a).
+
+### Invariant Fix
+1. **Universal Wallpaper URI Resolution**:
+   - `MainActivity.kt` allows `content://`, `http://`, `https://`, and valid local file paths for wallpaper display.
+2. **Memory-Safe Wallpaper Decoding**:
+   - Corrected downsampling loop in `AppearanceViewModel.kt`, switched config to memory-efficient `RGB_565`, and wrapped in `catch (e: Throwable)`.
+3. **Xiaomi HyperOS Launcher Preservation**:
+   - `MainActivity` component is never disabled. Added automatic component re-enabling in `MainActivity.onCreate` to recover any device where it was previously disabled.
+4. **Canonical 64-Bit Release**:
+   - Built canonical `app-arm64-v8a-release.apk` and `app-universal-release.apk`.
