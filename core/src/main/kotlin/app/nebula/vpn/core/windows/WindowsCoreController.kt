@@ -55,17 +55,59 @@ class WindowsCoreController(
         }
 
         fun resolveDefaultSingBoxBinary(): File {
-            // Check local tools folder, then workingDir, then current directory
+            val workingDir = resolveDefaultWorkingDir()
+            val target = File(workingDir, "sing-box.exe")
+            if (target.exists() && target.isFile && target.length() > 1000) return target
+
             val candidates = listOf(
+                File(System.getProperty("compose.application.resources.dir", ""), "sing-box.exe"),
+                File("resources\\sing-box.exe"),
+                File("app\\resources\\sing-box.exe"),
+                File("C:\\Program Files\\Nebula\\resources\\sing-box.exe"),
+                File("C:\\Program Files\\Nebula\\sing-box.exe"),
                 File("C:\\Users\\User\\tools\\sing-box.exe"),
-                File(resolveDefaultWorkingDir(), "sing-box.exe"),
                 File("tools\\sing-box.exe"),
                 File("sing-box.exe")
             )
             for (c in candidates) {
-                if (c.exists() && c.isFile) return c
+                if (c.exists() && c.isFile) {
+                    try {
+                        c.copyTo(target, overwrite = true)
+                        return target
+                    } catch (_: Exception) {
+                        return c
+                    }
+                }
             }
-            return File(resolveDefaultWorkingDir(), "sing-box.exe")
+            return target
+        }
+
+        fun resolveDefaultWintunDll(): File {
+            val workingDir = resolveDefaultWorkingDir()
+            val target = File(workingDir, "wintun.dll")
+            if (target.exists() && target.isFile && target.length() > 1000) return target
+
+            val candidates = listOf(
+                File(System.getProperty("compose.application.resources.dir", ""), "wintun.dll"),
+                File("resources\\wintun.dll"),
+                File("app\\resources\\wintun.dll"),
+                File("C:\\Program Files\\Nebula\\resources\\wintun.dll"),
+                File("C:\\Program Files\\Nebula\\wintun.dll"),
+                File("C:\\Users\\User\\tools\\wintun.dll"),
+                File("tools\\wintun.dll"),
+                File("wintun.dll")
+            )
+            for (c in candidates) {
+                if (c.exists() && c.isFile) {
+                    try {
+                        c.copyTo(target, overwrite = true)
+                        return target
+                    } catch (_: Exception) {
+                        return c
+                    }
+                }
+            }
+            return target
         }
     }
 
@@ -122,6 +164,7 @@ class WindowsCoreController(
             if (!singBoxBinary.exists()) {
                 throw IllegalStateException("sing-box binary not found at ${singBoxBinary.absolutePath}")
             }
+            resolveDefaultWintunDll()
 
             // 1. Run Pre-flight syntax and routing check
             val tempCheckFile = File.createTempFile("singbox_chk_", ".json", workingDir)

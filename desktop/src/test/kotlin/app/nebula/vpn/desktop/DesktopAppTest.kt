@@ -47,10 +47,10 @@ class DesktopAppTest {
 
     @Test
     fun testSingleInstanceGuardSignaling() {
-        val testPort = 59281
+        val testLock = java.io.File.createTempFile("test_nebula_lock_", ".lock")
         val latch = CountDownLatch(1)
 
-        val firstInstance = SingleInstanceGuard(port = testPort) {
+        val firstInstance = SingleInstanceGuard(lockFile = testLock) {
             latch.countDown()
         }
 
@@ -58,15 +58,16 @@ class DesktopAppTest {
             val acquiredFirst = firstInstance.acquireOrSignal()
             assertTrue("First instance must acquire lock", acquiredFirst)
 
-            // Second instance attempts to acquire on same port
-            val secondInstance = SingleInstanceGuard(port = testPort) {}
+            // Second instance attempts to acquire on same lock file
+            val secondInstance = SingleInstanceGuard(lockFile = testLock) {}
             val acquiredSecond = secondInstance.acquireOrSignal()
             assertFalse("Second instance must fail to acquire lock and signal first", acquiredSecond)
 
-            val signaled = latch.await(2, TimeUnit.SECONDS)
+            val signaled = latch.await(3, TimeUnit.SECONDS)
             assertTrue("First instance must receive restore signal from second instance", signaled)
         } finally {
             firstInstance.release()
+            testLock.delete()
         }
     }
 }

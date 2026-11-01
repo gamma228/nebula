@@ -23,7 +23,9 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "app.nebula.vpn.desktop.MainKt"
+        jvmArgs("-Dskiko.library.path=\$APPDIR\\\\app;\$APPDIR")
         nativeDistributions {
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("resources"))
             targetFormats(org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi, org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe)
             packageName = "Nebula"
             packageVersion = "1.2.0"
