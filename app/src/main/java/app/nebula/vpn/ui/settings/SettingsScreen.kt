@@ -1,5 +1,7 @@
 package app.nebula.vpn.ui.settings
 
+import app.nebula.vpn.BuildConfig
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -339,7 +341,7 @@ fun SettingsScreen(
             title = { Text(stringResource(R.string.about_title)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Nebula VPN Client v1.0.0", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Nebula VPN v${BuildConfig.VERSION_NAME} (Сборка ${BuildConfig.VERSION_CODE})", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     Text("Ядро прокси: SagerNet sing-box v1.14.4 (GPL-3.0)", fontSize = 13.sp)
                     Text(stringResource(R.string.settings_about_protocols), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                     Spacer(modifier = Modifier.height(4.dp))
@@ -521,7 +523,7 @@ fun SettingsScreen(
             iconTint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
             iconBg = MaterialTheme.colorScheme.surfaceVariant,
             title = stringResource(R.string.about_title),
-            value = "v1.0.0",
+            value = "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
             onClick = { showAboutDialog = true }
         )
 

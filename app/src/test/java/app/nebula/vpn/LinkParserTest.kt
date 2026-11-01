@@ -58,6 +58,24 @@ class LinkParserTest {
     }
 
     @Test
+    fun testParseVlessGrpcWithPinnedCertSha256() {
+        val link = "vless://dab7f290-02ba-0009-b514-2f743deae7eb@87.242.127.115:443?encryption=none&type=grpc&serviceName=x5.lk.v1.AccountService&mode=gun&security=tls&sni=lk.x5.ru&fp=qq&pcs=7B%3ADA%3AF7%3A6E#LTE-89"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("LTE-89", profile.name)
+        assertEquals(ProtocolType.VLESS, profile.protocol)
+        assertEquals("87.242.127.115", profile.server)
+        assertEquals(443, profile.port)
+        assertEquals(TransportType.GRPC, profile.transport.type)
+        assertEquals("x5.lk.v1.AccountService", profile.transport.serviceName)
+        assertTrue(profile.tls.enabled)
+        assertEquals("lk.x5.ru", profile.tls.serverName)
+        assertEquals("qq", profile.tls.utlsFingerprint)
+        assertTrue("pcs parameter must enable insecure", profile.tls.insecure)
+    }
+
+    @Test
     fun testParseTrojan() {
         val link = "trojan://secretpass@trojan.example.com:443?sni=trojan.example.com#Trojan-Main"
         val result = LinkParser.parse(link)

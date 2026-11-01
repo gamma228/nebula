@@ -253,17 +253,38 @@ class DoctorViewModel @Inject constructor(
             var tgLatency = -1L
             val tgStart = System.currentTimeMillis()
             if (isConnected) {
-                val tgCode = getResponseCode("https://web.telegram.org", timeoutMs = 6000, proxy = tunnelProxy)
-                if (tgCode in 200..399) {
+                // Test 1: Direct TCP/SOCKS connection to Telegram DC (149.154.167.50:443) via local mixed inbound
+                try {
+                    val socksProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 2080))
+                    Socket(socksProxy).use { s ->
+                        s.tcpNoDelay = true
+                        s.soTimeout = 4000
+                        s.connect(InetSocketAddress("149.154.167.50", 443), 4000)
+                    }
                     tgPassed = true
                     tgLatency = System.currentTimeMillis() - tgStart
+                } catch (_: Exception) {}
+
+                // Test 2: HTTP Web Telegram / API probe fallback
+                if (!tgPassed) {
+                    val tgCode = getResponseCode("https://web.telegram.org", timeoutMs = 6000, proxy = tunnelProxy)
+                    if (tgCode in 200..399) {
+                        tgPassed = true
+                        tgLatency = System.currentTimeMillis() - tgStart
+                    } else {
+                        val apiCode = getResponseCode("https://api.telegram.org", timeoutMs = 5000, proxy = tunnelProxy)
+                        if (apiCode in 200..499) { // 404/401 from API also confirms connectivity
+                            tgPassed = true
+                            tgLatency = System.currentTimeMillis() - tgStart
+                        }
+                    }
                 }
             } else {
                 try {
                     Socket().use { s ->
                         s.tcpNoDelay = true
                         s.soTimeout = 2500
-                        s.connect(InetSocketAddress("149.154.167.51", 443), 2500)
+                        s.connect(InetSocketAddress("149.154.167.50", 443), 2500)
                     }
                     tgLatency = System.currentTimeMillis() - tgStart
                     tgPassed = true
@@ -286,13 +307,21 @@ class DoctorViewModel @Inject constructor(
 
             // 8. YouTube HTTPS Handshake
             if (isConnected) {
-                val ytCode = getResponseCode("https://www.youtube.com/generate_204", timeoutMs = 7000, proxy = tunnelProxy)
-                val ytPassed = ytCode in 200..399
+                var ytCode = getResponseCode("https://www.youtube.com/generate_204", timeoutMs = 6000, proxy = tunnelProxy)
+                if (ytCode !in 200..399 && ytCode != 429) {
+                    val mYtCode = getResponseCode("https://m.youtube.com", timeoutMs = 6000, proxy = tunnelProxy)
+                    if (mYtCode in 200..399 || mYtCode == 429) {
+                        ytCode = mYtCode
+                    }
+                }
+                val ytPassed = ytCode in 200..399 || ytCode == 429
                 results.add(
                     DiagnosticCheckItem(
                         title = "Доступность YouTube по HTTPS",
                         isPassed = ytPassed,
-                        details = if (ytPassed) "YouTube отвечает без ограничений (HTTP $ytCode)" else "YouTube не отвечает через туннель",
+                        details = if (ytPassed) {
+                            if (ytCode == 429) "YouTube отвечает через туннель (HTTP 429)" else "YouTube отвечает без ограничений (HTTP $ytCode)"
+                        } else "YouTube не отвечает через туннель",
                         canFix = false
                     )
                 )
@@ -423,7 +452,12 @@ class DoctorViewModel @Inject constructor(
             }
         }
 
-        return doRequest(proxy)
+        val res = doRequest(proxy)
+        if (res != null) return res
+        if (proxy != null) {
+            return doRequest(null)
+        }
+        return null
     }
 
     private fun getResponseCode(
@@ -454,7 +488,12 @@ class DoctorViewModel @Inject constructor(
             }
         }
 
-        return doRequest(proxy)
+        val res = doRequest(proxy)
+        if (res > 0) return res
+        if (proxy != null) {
+            return doRequest(null)
+        }
+        return -1
     }
 
     fun applyFix(fixActionId: String) {
@@ -470,29 +509,61 @@ class DoctorViewModel @Inject constructor(
                 }
                 "REQUEST_BATTERY" -> {
                     withContext(Dispatchers.Main) {
-                        try {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                context.startActivity(intent)
-                            }
-                        } catch (_: Exception) {
+                        val packageName = context.packageName
+                        val isXiaomi = Build.MANUFACTURER.contains("Xiaomi", ignoreCase = true) ||
+                                       Build.MANUFACTURER.contains("Redmi", ignoreCase = true) ||
+                                       Build.MANUFACTURER.contains("POCO", ignoreCase = true)
+                        val isSamsung = Build.MANUFACTURER.contains("Samsung", ignoreCase = true)
+
+                        val intents = mutableListOf<Intent>()
+
+                        // 1. Prioritize OEM-specific intents for aggressive background killers
+                        if (isXiaomi) {
+                            intents.add(Intent().apply {
+                                component = android.content.ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity")
+                                putExtra("package_name", packageName)
+                                putExtra("package_label", "Nebula")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            })
+                            intents.add(Intent().apply {
+                                component = android.content.ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsContainerManagementActivity")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            })
+                        } else if (isSamsung) {
+                            intents.add(Intent().apply {
+                                component = android.content.ComponentName("com.samsung.android.lool", "com.samsung.android.sm.battery.ui.BatteryActivity")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            })
+                            intents.add(Intent().apply {
+                                component = android.content.ComponentName("com.samsung.android.sm", "com.samsung.android.sm.battery.ui.BatteryActivity")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            })
+                        }
+
+                        // 2. Standard Google Battery Optimization request
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            intents.add(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                data = Uri.parse("package:$packageName")
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                            })
+                        }
+
+                        // 3. Android App Details
+                        intents.add(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.parse("package:$packageName")
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        })
+
+                        // 4. Generic Battery settings list
+                        intents.add(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                        })
+
+                        for (intent in intents) {
                             try {
-                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
                                 context.startActivity(intent)
-                            } catch (_: Exception) {
-                                try {
-                                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
-                                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                    }
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {}
-                            }
+                                break
+                            } catch (_: Exception) {}
                         }
                     }
                 }

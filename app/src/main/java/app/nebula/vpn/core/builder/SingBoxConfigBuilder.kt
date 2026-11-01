@@ -310,7 +310,7 @@ object SingBoxConfigBuilder {
                             add(JsonPrimitive("tls"))
                             add(JsonPrimitive("quic"))
                         }
-                        put("timeout", "300ms")
+                        put("timeout", "100ms")
                     })
 
                     // Block/Reject QUIC (UDP 443) to force fast TCP HTTP/2 fallback on filtered networks
@@ -452,14 +452,19 @@ object SingBoxConfigBuilder {
             if (sni.isNotEmpty() && !sniIsIp) {
                 put("server_name", sni)
             }
-            // Allow insecure if requested OR if connecting directly to an IP without Reality/domain SNI
-            if (tls.realityPublicKey.isEmpty() && (tls.insecure || sniIsIp)) {
+            // Allow insecure if requested OR if connecting directly to an IP with a domain SNI (anti-censorship SNI spoofing)
+            // In Russia, proxy providers put spoofed SNIs (rutube.ru, lk.x5.ru, etc.) on their VPS IPs.
+            // These certificates do NOT match public CAs or domain roots, so without insecure: true, sing-box drops the connection.
+            val isSniSpoofedOnIp = isIpAddress(defaultServerName) && sni.isNotEmpty() && !sniIsIp
+            if (tls.realityPublicKey.isEmpty() && (tls.insecure || sniIsIp || isSniSpoofedOnIp)) {
                 put("insecure", true)
             }
             val alpnToUse = if (tls.alpn.isNotEmpty()) {
                 tls.alpn
             } else if (transportType == TransportType.WS) {
                 listOf("http/1.1")
+            } else if (transportType == TransportType.GRPC) {
+                listOf("h2")
             } else if (isQuic) {
                 listOf("h3")
             } else {
@@ -497,7 +502,8 @@ object SingBoxConfigBuilder {
                 }
             }
             // TLS ClientHello Fragmentation for TSPU/DPI anti-censorship bypass (identical to INCY / Xray fragment)
-            if (!isQuic) {
+            // NOTE: Do NOT fragment gRPC or QUIC connections, as gRPC HTTP/2 multiplexing resets on fragmented frames.
+            if (!isQuic && transportType != TransportType.GRPC) {
                 put("fragment", true)
                 put("fragment_fallback_delay", "500ms")
             }
@@ -542,6 +548,9 @@ object SingBoxConfigBuilder {
                     if (transport.serviceName.isNotEmpty()) {
                         put("service_name", transport.serviceName)
                     }
+                    put("idle_timeout", "15s")
+                    put("ping_timeout", "15s")
+                    put("permit_without_stream", true)
                 }
                 TransportType.HTTP_UPGRADE -> {
                     put("type", "httpupgrade")

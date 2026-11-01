@@ -109,6 +109,7 @@ object LinkParser {
         val rawSni = uri.getQueryParameter("sni")?.ifBlank { null }
             ?: uri.getQueryParameter("serverName")?.ifBlank { null }
             ?: uri.getQueryParameter("peer")?.ifBlank { null }
+            ?: uri.getQueryParameter("host")?.takeIf { !isIpAddress(it) }?.ifBlank { null }
             ?: host
         val sni = sanitizeSni(rawSni, host)
         val pbk = uri.getQueryParameter("pbk") ?: uri.getQueryParameter("publicKey") ?: ""
@@ -245,6 +246,7 @@ object LinkParser {
         val rawSni = uri.getQueryParameter("sni")?.ifBlank { null }
             ?: uri.getQueryParameter("serverName")?.ifBlank { null }
             ?: uri.getQueryParameter("peer")?.ifBlank { null }
+            ?: uri.getQueryParameter("host")?.takeIf { !isIpAddress(it) }?.ifBlank { null }
             ?: host
         val sni = sanitizeSni(rawSni, host)
         val fp = uri.getQueryParameter("fp")?.ifBlank { null } ?: uri.getQueryParameter("fingerprint")?.ifBlank { null } ?: "chrome"
@@ -370,11 +372,22 @@ object LinkParser {
         return trimmed
     }
 
+    private fun isIpAddress(host: String): Boolean {
+        if (host.isEmpty()) return false
+        val parts = host.split('.')
+        if (parts.size == 4 && parts.all { it.toIntOrNull() in 0..255 }) return true
+        if (host.contains(':')) return true
+        return false
+    }
+
     private fun isAllowInsecure(uri: SimpleUri): Boolean {
-        val keys = listOf("insecure", "allowInsecure", "allow_insecure", "skip-cert-verify")
+        val keys = listOf(
+            "insecure", "allowInsecure", "allow_insecure", "skip-cert-verify",
+            "pcs", "pinnedCertificateChainSha256", "peerCertificateSha256"
+        )
         return keys.any { key ->
             val v = uri.getQueryParameter(key)
-            v == "1" || v.equals("true", true)
+            !v.isNullOrEmpty() && (v == "1" || v.equals("true", true) || key in listOf("pcs", "pinnedCertificateChainSha256", "peerCertificateSha256"))
         }
     }
 

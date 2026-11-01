@@ -932,3 +932,63 @@ The VPN connected on Android (key icon displayed), but no internet traffic passe
    - `MainActivity` component is never disabled. Added automatic component re-enabling in `MainActivity.onCreate` to recover any device where it was previously disabled.
 4. **Canonical 64-Bit Release**:
    - Built canonical `app-arm64-v8a-release.apk` and `app-universal-release.apk`.
+
+
+---
+
+## D22: gRPC ALPN, Russian Anti-Censorship SNI Bypass, Xiaomi HyperOS Battery, and Build Transparency
+
+### Problem Description
+1. **Russian Mobile Bypass Node Failure (`🇸🇪 🎮 ⚡ ★ 0.1X - LTE №89 - Швеция`)**:
+   - The user reported that node `87.242.127.115:443` connects and bypasses blocks in INCY (`incy.apk`), but fails in Nebula with `Сервер не передает данные. Узел подключен, но удаленный сервер не пропускает интернет-трафик`.
+2. **Crash on Launch ("В работе приложения 'Nebula' произошла ошибка")**:
+   - Occurred when the user attempted to install `app-armeabi-v7a-release.apk` on a Xiaomi 15 (Snapdragon 8 Elite / Oryon CPU), which lacks hardware 32-bit execution mode (AArch32).
+3. **Xiaomi HyperOS Battery Optimization Fix Failed**:
+   - The user reported: "ты app-arm64-v8a-release.apk если что же не зафиксил батарею вроде тогда вчера". The "Исправить" button in Connection Doctor previously triggered a generic Android dialog which Xiaomi HyperOS PowerKeeper ignored.
+4. **Static UI Version and Unchanging File Size Perception**:
+   - The user noticed the APK file size stayed ~81.9 MB and the UI showed static "v1.0.0", causing confusion whether changes were being built.
+5. **False Negative Doctor Results on Telegram and YouTube**:
+   - When the proxy was connected, Telegram reported "Сбой" because `https://web.telegram.org` was geo-blocked by Cloudflare, and YouTube reported "Сбой" because Google returned HTTP 429 (rate limiting / captcha), which was erroneously treated as failure instead of proof that the tunnel reached Google.
+
+### Root Cause Analysis
+1. **gRPC Protocol Configuration Mismatch**:
+   - The server `87.242.127.115:443` uses VLESS + gRPC transport (`serviceName: x5.lk.v1.AccountService`) with spoofed SNI `lk.x5.ru` and pinned certificate (`pcs`).
+   - Previously, Sing-Box was configured with ClientHello fragmentation enabled unconditionally (`fragment: true`). For gRPC, fragmented TLS records corrupt HTTP/2 multiplexing frames, causing `connection upload handshake: io: read/write on closed pipe`.
+   - Sing-box gRPC transport also required explicit `alpn: ["h2"]`, which was missing when not specified in the link.
+   - The self-signed certificate on `lk.x5.ru` was rejected by Sing-Box's CA store when `insecure: true` was not automatically enabled for IP servers with domain SNI spoofing.
+2. **Xiaomi 15 32-bit Hardware Incompatibility**:
+   - Snapdragon 8 Elite hardware physically does not support 32-bit ARM binaries (`armeabi-v7a`). Only 64-bit binaries (`arm64-v8a`) or universal APKs can run.
+3. **Xiaomi / Samsung Battery Intent Priority**:
+   - Xiaomi HyperOS uses `com.miui.powerkeeper.ui.HiddenAppsConfigActivity` to configure "No restrictions" (Без ограничений). Launching the generic Android intent first prevented reaching the Xiaomi-specific screen.
+4. **Static Version String & Diagnostic Endpoints**:
+   - `SettingsScreen.kt` hardcoded "v1.0.0".
+   - `DoctorViewModel.kt` only accepted 200..399 for YouTube (rejecting 429) and only tested `web.telegram.org` instead of direct SOCKS5 connection to Telegram DC (`149.154.167.50:443`) and `api.telegram.org`.
+   - `testHttp` and `getResponseCode` did not fall back from `127.0.0.1:2080` to direct `tun0` socket calls.
+
+### Invariant Fix
+1. **SingBox Config Builder Hardening (`SingBoxConfigBuilder.kt`)**:
+   - Added automatic `insecure: true` when connecting to an IP with a spoofed Russian domain SNI (`isSniSpoofedOnIp`) or when pinned certificate parameters (`pcs`, `pinnedCertificateChainSha256`) are present.
+   - Enforced default `alpn: ["h2"]` on gRPC transport.
+   - Disabled TLS ClientHello fragmentation on gRPC transport (`transportType != TransportType.GRPC`).
+   - Added gRPC keepalive parameters: `idle_timeout: "15s"`, `ping_timeout: "15s"`, `permit_without_stream: true`.
+   - Reduced sniffing timeout from 300ms to 100ms.
+2. **Link Parser Hardening (`LinkParser.kt`)**:
+   - Extended `isAllowInsecure` to detect `pcs`, `pinnedCertificateChainSha256`, and `peerCertificateSha256`.
+   - Added fallback to `host` query parameter when `sni` is missing.
+3. **Connection Doctor Precision (`DoctorViewModel.kt`)**:
+   - Added dual-channel Telegram DC check: tests direct SOCKS5 handshake to `149.154.167.50:443` via local mixed inbound (`127.0.0.1:2080`), falling back to `web.telegram.org` and `api.telegram.org` (treating 200..499 as successful tunnel proof).
+   - Accepted HTTP 429 from YouTube as successful tunnel transit with fallback to `m.youtube.com`.
+   - Added direct `tun0` fallback in `testHttp` and `getResponseCode` if local mixed proxy fails.
+   - Prioritized OEM battery intents: Xiaomi HyperOS (`com.miui.powerkeeper.ui.HiddenAppsConfigActivity`) and Samsung One UI (`com.samsung.android.sm.battery.ui.BatteryActivity`) are launched first based on `Build.MANUFACTURER`.
+4. **Version Bumping & UI Binding (`app/build.gradle.kts`, `SettingsScreen.kt`)**:
+   - Bumped `versionCode = 4`, `versionName = "1.2.1"`.
+   - Enabled `buildConfig = true`.
+   - Replaced static strings with dynamic `v${BuildConfig.VERSION_NAME} (Сборка ${BuildConfig.VERSION_CODE})`.
+
+### Automated Verification Proof
+1. **Unit Test Suite (`./gradlew.bat testDebugUnitTest`)**:
+   - 31 actionable tasks executed, 0 failures (`BUILD SUCCESSFUL in 39s`).
+   - Verified `LinkParserTest.testParseVlessGrpcWithPinnedCertSha256`.
+2. **Release Build (`./gradlew.bat assembleRelease`)**:
+   - Built canonical release APKs (`BUILD SUCCESSFUL in 1m 44s`).
+   - Synchronized to `release/app-arm64-v8a-release.apk` (81.93 MB) and `release/app-universal-release.apk` (237.30 MB).
