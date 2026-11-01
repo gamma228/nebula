@@ -29,15 +29,24 @@ data class VersionedRulesFile(
 data class DesktopSettings(
     val schemaVersion: Int = 1,
     val languageCode: String = "ru",
-    val activeThemeId: String = "oled_crimson",
-    val mode: String = "TUN", // "TUN" or "SYSTEM_PROXY"
+    val activeThemeId: String = "emerald_cyber",
+    val customAccentHex: String = "#00D084",
+    val backgroundImagePath: String? = null,
+    val backgroundDimAlpha: Float = 0.35f,
+    val mode: String = "SYSTEM_PROXY", // "TUN" or "SYSTEM_PROXY"
     val autoConnectOnLaunch: Boolean = false,
     val startMinimized: Boolean = false,
+    val closeToTray: Boolean = true,
     val autoUpdateSubscriptionHours: Int = 24,
     val bypassRu: Boolean = true,
     val blockQuic: Boolean = true,
+    val fragmentEnabled: Boolean = true,
+    val sniSpoofPreset: String = "rutube.ru",
+    val remoteDnsUrl: String = "https://1.1.1.1/dns-query",
+    val fakeDnsEnabled: Boolean = true,
     val disableIpv6: Boolean = true,
-    val tunMtu: Int = 1500,
+    val killSwitchEnabled: Boolean = false,
+    val tunMtu: Int = 1400,
     val mixedInboundPort: Int = 2080
 )
 

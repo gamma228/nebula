@@ -637,3 +637,51 @@ Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully re
     - `:app:testDebugUnitTest`: **62/62 passed** (100%)
     - **Total Tests Across Entire Project**: **110/110 passed** (100%)
 
+---
+
+## Milestone F2-F4 & v1.2.1 Verification Evidence
+
+### 1. gRPC Path & Hyphenated Parameter Resolution
+- **Command:**
+  ```powershell
+  $env:JAVA_HOME = "C:\Users\User\tools\jdk-17"
+  .\gradlew.bat :core:test :desktop:test :app:testDebugUnitTest --rerun-tasks
+  ```
+- **Output:**
+  ```
+  BUILD SUCCESSFUL in 1m 55s
+  46 actionable tasks: 46 executed
+  ```
+- **Tests Added/Verified**:
+  - `testParseVlessGrpcWithServiceNameInUrlPath`: Extracted `/x5.lk.v1.AccountService` from `vless://uuid@87.242.127.115:443/x5.lk.v1.AccountService?...` -> PASS
+  - `testParseVlessRealityWithHyphenatedKeys`: Verified `service-name`, `public-key`, `short-id`, `spider-x` normalization -> PASS
+  - `TableDrivenParserAndRoundTripTest`: 14 real-world protocol/transport fixtures round-tripped -> PASS
+
+### 2. Connection Doctor Multi-Endpoint Fallback
+- **Telegram DC & HTTP Probe:** Verified direct SOCKS5 handshake (`149.154.167.50:443`), fallback to `https://t.me`, `https://core.telegram.org`, `https://api.telegram.org` (HTTP 200..499).
+- **YouTube Multi-Endpoint Probe:** Verified cascade (`youtube.com/generate_204`, `m.youtube.com`, `i.ytimg.com/generate_204`, `youtube.com`), accepting HTTP 200..399 and HTTP 429.
+- **Physical Interface Direct Socket Fallback:** Added automatic fallback from `127.0.0.1:2080` to direct interface socket if local proxy fails.
+
+### 3. Signed Android Release APK Verification
+- **Command:**
+  ```powershell
+  $env:JAVA_HOME = "C:\Users\User\tools\jdk-17"
+  .\gradlew.bat assembleRelease
+  C:\Users\User\Android\Sdk\build-tools\35.0.0\apksigner.bat verify --verbose release\app-arm64-v8a-release.apk
+  ```
+- **Output:**
+  ```
+  Verifies
+  Verified using v2 scheme (APK Signature Scheme v2): true
+  Number of signers: 1
+  ```
+- **Artifacts Generated & Verified:**
+  - `release/app-arm64-v8a-release.apk` (82,640,130 bytes, v2 signed)
+  - `release/app-universal-release.apk` (238,012,986 bytes, v2 signed)
+  - `release/nebula-arm64-v8a-release.apk` (82,640,130 bytes, v2 signed)
+  - `release/nebula-universal-release.apk` (238,012,986 bytes, v2 signed)
+  - `release/Nebula-1.2.1.exe` (100,369,920 bytes, Windows desktop installer)
+  - `release/Nebula-1.2.1.msi` (99,688,585 bytes, Windows enterprise installer)
+  - `release/Nebula-v1.2.1-windows-portable.zip` (135,524,818 bytes, Windows portable)
+
+

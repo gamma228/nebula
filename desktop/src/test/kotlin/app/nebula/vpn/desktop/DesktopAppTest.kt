@@ -3,9 +3,8 @@ package app.nebula.vpn.desktop
 import app.nebula.vpn.core.model.ThemeMode
 import app.nebula.vpn.desktop.i18n.AppLanguage
 import app.nebula.vpn.desktop.i18n.DesktopStrings
-import app.nebula.vpn.desktop.theme.DarkColorScheme
-import app.nebula.vpn.desktop.theme.LightColorScheme
-import app.nebula.vpn.desktop.theme.OledColorScheme
+import app.nebula.vpn.desktop.theme.DesktopThemePreset
+import app.nebula.vpn.desktop.theme.buildColorScheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -37,12 +36,16 @@ class DesktopAppTest {
 
     @Test
     fun testDesktopThemeTokens() {
+        val darkScheme = buildColorScheme(ThemeMode.DARK, DesktopThemePreset.EMERALD_CYBER, "#00D084")
+        val oledScheme = buildColorScheme(ThemeMode.AMOLED, DesktopThemePreset.OLED_CRIMSON, "#FF3366")
+        val lightScheme = buildColorScheme(ThemeMode.LIGHT, DesktopThemePreset.EMERALD_CYBER, "#00D084")
+
         // Dark theme background
-        assertEquals(androidx.compose.ui.graphics.Color(0xFF0F172A), DarkColorScheme.background)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF0F172A), darkScheme.background)
         // OLED theme background should be pitch black
-        assertEquals(androidx.compose.ui.graphics.Color(0xFF000000), OledColorScheme.background)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFF000000), oledScheme.background)
         // Light theme background
-        assertEquals(androidx.compose.ui.graphics.Color(0xFFF8FAFC), LightColorScheme.background)
+        assertEquals(androidx.compose.ui.graphics.Color(0xFFF8FAFC), lightScheme.background)
     }
 
     @Test

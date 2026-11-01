@@ -258,12 +258,13 @@
 
 - [x] **Milestone W6: Build, Installer, and Full Verification**
   - **Distribution Artifacts:**
-    - Windows EXE Installer: `desktop/build/compose/binaries/main/exe/Nebula-1.2.0.exe` (100,357,632 bytes, WiX 3.11 bundled JRE)
-    - Windows MSI Installer: `desktop/build/compose/binaries/main/msi/Nebula-1.2.0.msi` (99,676,297 bytes, WiX 3.11 enterprise installer)
-    - Windows Portable ZIP: `desktop/build/compose/binaries/main/Nebula-v1.2.0-windows-portable.zip` (129,321,292 bytes, standalone portable)
-    - Unpacked Distributable: `desktop/build/compose/binaries/main/app/Nebula/Nebula.exe` (542,720 bytes launcher)
+    - Windows EXE Installer: `release/Nebula-1.2.1.exe` (100,369,920 bytes, WiX 3.11 bundled JRE)
+    - Windows MSI Installer: `release/Nebula-1.2.1.msi` (99,688,585 bytes, WiX 3.11 enterprise installer)
+    - Windows Portable ZIP: `release/Nebula-v1.2.1-windows-portable.zip` (135,524,818 bytes, standalone portable)
+    - Android ARM64 Release APK: `release/app-arm64-v8a-release.apk` (82,640,130 bytes, v2 signed)
+    - Android Universal Release APK: `release/app-universal-release.apk` (238,012,986 bytes, v2 signed)
   - **Code Signing & Documentation:** Documented Authenticode signing configuration in `README.md`, including SmartScreen warnings and third-party AV exclusion instructions.
-  - **Full Test Suite Status:** **110/110 tests 100% green**:
-    - `:core:test`: 45 tests passed.
+  - **Full Test Suite Status:** **114/114 tests 100% green**:
+    - `:core:test`: 48 tests passed.
     - `:desktop:test`: 3 tests passed.
-    - `:app:testDebugUnitTest`: 62 tests passed.
+    - `:app:testDebugUnitTest`: 63 tests passed.

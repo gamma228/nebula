@@ -49,7 +49,10 @@ fun Sidebar(state: DesktopAppState) {
         modifier = Modifier
             .width(220.dp)
             .fillMaxHeight()
-            .background(MaterialTheme.colorScheme.surface)
+            .background(
+                if (state.wallpaperBitmap != null) MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
+                else MaterialTheme.colorScheme.surface
+            )
             .padding(vertical = 20.dp, horizontal = 12.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -82,7 +85,7 @@ fun Sidebar(state: DesktopAppState) {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "v1.2.0 Desktop",
+                        text = "v1.2.1 Desktop",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

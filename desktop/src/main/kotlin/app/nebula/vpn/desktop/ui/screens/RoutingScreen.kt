@@ -14,18 +14,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +51,7 @@ import app.nebula.vpn.core.model.RuleType
 import app.nebula.vpn.core.windows.ProcessHelper
 import app.nebula.vpn.core.windows.WindowsProcessInfo
 import app.nebula.vpn.desktop.i18n.DesktopStrings
+import app.nebula.vpn.desktop.state.AppPreset
 import app.nebula.vpn.desktop.state.DesktopAppState
 import java.util.UUID
 
@@ -62,27 +63,39 @@ fun RoutingScreen(state: DesktopAppState) {
     var showAddDialog by remember { mutableStateOf(false) }
     var showAppPicker by remember { mutableStateOf(false) }
     var runningProcesses by remember { mutableStateOf<List<WindowsProcessInfo>>(emptyList()) }
+    var processFilter by remember { mutableStateOf("") }
 
     var selectedRuleType by remember { mutableStateOf(RuleType.DOMAIN_SUFFIX) }
     var selectedAction by remember { mutableStateOf(RuleAction.PROXY) }
     var ruleValue by remember { mutableStateOf("") }
+    var presetNotification by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(28.dp)
+            .padding(24.dp)
     ) {
+        // Title Bar & Add Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "${DesktopStrings.get("rules_title", lang)} (${rules.size})",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Column {
+                Text(
+                    text = "${DesktopStrings.get("rules_title", lang)} (${rules.size})",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                if (presetNotification != null) {
+                    Text(
+                        text = presetNotification!!,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
 
             Button(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -91,12 +104,32 @@ fun RoutingScreen(state: DesktopAppState) {
             }
         }
 
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.height(14.dp))
 
+        // Quick App Presets Section
+        Text(
+            text = DesktopStrings.get("presets_title", lang),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(state.appPresets) { preset ->
+                AppPresetChip(preset = preset, lang = lang) {
+                    state.addAppPreset(preset)
+                    presetNotification = "${DesktopStrings.get(preset.titleKey, lang)}: ${DesktopStrings.get("preset_added", lang)}"
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // Rules List
         if (rules.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "No custom rules configured",
+                    text = "No custom rules configured. Click '+ Add Rule' or pick a Quick App Preset above.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -119,8 +152,7 @@ fun RoutingScreen(state: DesktopAppState) {
             title = { Text(DesktopStrings.get("add_rule", lang)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Type selector
-                    Text("Rule Type", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Rule Target Type", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         TypeChip("Domain", selectedRuleType == RuleType.DOMAIN_SUFFIX) {
                             selectedRuleType = RuleType.DOMAIN_SUFFIX
@@ -133,7 +165,6 @@ fun RoutingScreen(state: DesktopAppState) {
                         }
                     }
 
-                    // Value Field
                     OutlinedTextField(
                         value = ruleValue,
                         onValueChange = { ruleValue = it },
@@ -149,7 +180,6 @@ fun RoutingScreen(state: DesktopAppState) {
                         modifier = Modifier.fillMaxWidth()
                     )
 
-                    // Helper button to pick running process
                     if (selectedRuleType == RuleType.PROCESS_NAME || selectedRuleType == RuleType.PROCESS_PATH) {
                         Button(
                             onClick = {
@@ -163,8 +193,7 @@ fun RoutingScreen(state: DesktopAppState) {
                         }
                     }
 
-                    // Action Selector (Proxy, Direct, Block)
-                    Text("Action", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Routing Action", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         TypeChip("Proxy", selectedAction == RuleAction.PROXY) { selectedAction = RuleAction.PROXY }
                         TypeChip("Direct", selectedAction == RuleAction.DIRECT) { selectedAction = RuleAction.DIRECT }
@@ -201,34 +230,45 @@ fun RoutingScreen(state: DesktopAppState) {
         )
     }
 
-    // Process Picker Dialog
+    // Running Process Picker Dialog
     if (showAppPicker) {
+        val filtered = runningProcesses.filter {
+            it.name.contains(processFilter, ignoreCase = true) ||
+            it.path.contains(processFilter, ignoreCase = true)
+        }
+
         AlertDialog(
             onDismissRequest = { showAppPicker = false },
             title = { Text(DesktopStrings.get("pick_running_process", lang)) },
             text = {
-                Box(modifier = Modifier.size(width = 400.dp, height = 300.dp)) {
-                    LazyColumn {
-                        items(runningProcesses) { proc ->
-                            Row(
+                Column(modifier = Modifier.width(420.dp).height(340.dp)) {
+                    OutlinedTextField(
+                        value = processFilter,
+                        onValueChange = { processFilter = it },
+                        placeholder = { Text("Filter processes...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(filtered, key = { it.pid }) { proc ->
+                            Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
                                     .clickable {
                                         ruleValue = proc.name
                                         selectedRuleType = RuleType.PROCESS_NAME
                                         showAppPicker = false
-                                    }
-                                    .padding(vertical = 8.dp, horizontal = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                    },
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                             ) {
-                                Column {
-                                    Text(proc.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(proc.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Text(
-                                        proc.path,
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
+                                        proc.path.ifEmpty { "PID: ${proc.pid}" },
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -247,79 +287,115 @@ fun RoutingScreen(state: DesktopAppState) {
 }
 
 @Composable
-private fun TypeChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
-    val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-    val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-
+private fun AppPresetChip(
+    preset: AppPreset,
+    lang: app.nebula.vpn.desktop.i18n.AppLanguage,
+    onClick: () -> Unit
+) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
-            .background(bg)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
     ) {
-        Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = textColor)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(13.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = DesktopStrings.get(preset.titleKey, lang),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
 
 @Composable
-private fun RuleListItem(rule: RoutingRule, onDelete: () -> Unit) {
+private fun RuleListItem(
+    rule: RoutingRule,
+    onDelete: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Action badge
-                val (actionBg, actionText) = when (rule.action) {
-                    RuleAction.PROXY -> Color(0xFF00D084) to "PROXY"
-                    RuleAction.DIRECT -> Color(0xFF8A2BE2) to "DIRECT"
-                    RuleAction.BLOCK -> Color(0xFFFF5252) to "BLOCK"
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = rule.type.name,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = rule.value,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
+            }
 
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val actionColor = when (rule.action) {
+                    RuleAction.PROXY -> Color(0xFF00D084)
+                    RuleAction.DIRECT -> Color(0xFF3B82F6)
+                    RuleAction.BLOCK -> Color(0xFFFF5252)
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(actionBg.copy(alpha = 0.2f))
+                        .background(actionColor.copy(alpha = 0.15f))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = actionText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = actionBg
-                    )
-                }
-
-                Spacer(Modifier.width(12.dp))
-
-                Column {
-                    Text(
-                        text = rule.value,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = rule.type.name,
+                        text = rule.action.name,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        fontWeight = FontWeight.Bold,
+                        color = actionColor
                     )
                 }
-            }
-
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.size(18.dp)
-                )
+                Spacer(Modifier.width(6.dp))
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun TypeChip(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    val bg = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(text = label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = textColor)
     }
 }

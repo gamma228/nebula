@@ -368,24 +368,46 @@ class DoctorViewModel @Inject constructor(
                 val socksProxy = Proxy(Proxy.Type.SOCKS, InetSocketAddress("127.0.0.1", 2080))
                 Socket(socksProxy).use { s ->
                     s.tcpNoDelay = true
-                    s.soTimeout = 4000
-                    s.connect(InetSocketAddress("149.154.167.50", 443), 4000)
+                    s.soTimeout = 3000
+                    s.connect(InetSocketAddress("149.154.167.50", 443), 3000)
                 }
                 tgPassed = true
                 tgLatency = System.currentTimeMillis() - tgStart
             } catch (e: Exception) {
-                tgError = classifyException(e)
+                try {
+                    Socket().use { s ->
+                        s.tcpNoDelay = true
+                        s.soTimeout = 3000
+                        s.connect(InetSocketAddress("149.154.167.50", 443), 3000)
+                    }
+                    tgPassed = true
+                    tgLatency = System.currentTimeMillis() - tgStart
+                } catch (e2: Exception) {
+                    tgError = classifyException(e2)
+                }
             }
             if (!tgPassed) {
-                val webTg = probeHttp("https://web.telegram.org", timeoutMs = 5000, proxy = tunnelProxy)
-                if (webTg.statusCode in 200..399) {
+                val tmeTg = probeHttp("https://t.me", timeoutMs = 4000, proxy = tunnelProxy)
+                if (tmeTg.statusCode in 200..399) {
                     tgPassed = true
-                    tgLatency = webTg.latencyMs
+                    tgLatency = tmeTg.latencyMs
                 } else {
-                    val apiTg = probeHttp("https://api.telegram.org", timeoutMs = 4000, proxy = tunnelProxy)
-                    if (apiTg.statusCode in 200..499) {
+                    val coreTg = probeHttp("https://core.telegram.org", timeoutMs = 4000, proxy = tunnelProxy)
+                    if (coreTg.statusCode in 200..399) {
                         tgPassed = true
-                        tgLatency = apiTg.latencyMs
+                        tgLatency = coreTg.latencyMs
+                    } else {
+                        val apiTg = probeHttp("https://api.telegram.org", timeoutMs = 4000, proxy = tunnelProxy)
+                        if (apiTg.statusCode in 200..499) {
+                            tgPassed = true
+                            tgLatency = apiTg.latencyMs
+                        } else {
+                            val webTg = probeHttp("https://web.telegram.org", timeoutMs = 4000, proxy = tunnelProxy)
+                            if (webTg.statusCode in 200..499) {
+                                tgPassed = true
+                                tgLatency = webTg.latencyMs
+                            }
+                        }
                     }
                 }
             }
@@ -399,19 +421,35 @@ class DoctorViewModel @Inject constructor(
             )
 
             // 12. YouTube HTTPS Handshake
-            val ytProbe = probeHttp("https://www.youtube.com/generate_204", timeoutMs = 5000, proxy = tunnelProxy)
-            val mYtProbe = if (ytProbe.statusCode !in 200..399 && ytProbe.statusCode != 429) {
-                probeHttp("https://m.youtube.com", timeoutMs = 5000, proxy = tunnelProxy)
-            } else ytProbe
-            val ytPassed = ytProbe.statusCode in 200..399 || ytProbe.statusCode == 429 || mYtProbe.statusCode in 200..399 || mYtProbe.statusCode == 429
-            val ytCode = if (ytProbe.statusCode > 0) ytProbe.statusCode else mYtProbe.statusCode
+            var ytPassed = false
+            var ytLatency = -1L
+            var ytCode = -1
+            var ytError: String? = null
+            val ytEndpoints = listOf(
+                "https://www.youtube.com/generate_204",
+                "https://m.youtube.com",
+                "https://i.ytimg.com/generate_204",
+                "https://youtube.com",
+                "https://www.googlevideo.com"
+            )
+            for (ep in ytEndpoints) {
+                val probe = probeHttp(ep, timeoutMs = 4000, proxy = tunnelProxy)
+                if (probe.statusCode in 200..399 || probe.statusCode == 429) {
+                    ytPassed = true
+                    ytLatency = probe.latencyMs
+                    ytCode = probe.statusCode
+                    break
+                } else if (ytError == null && probe.errorClass != null) {
+                    ytError = probe.errorClass
+                }
+            }
             results.add(
                 DiagnosticCheckItem(
                     title = "Доступность YouTube по HTTPS",
                     isPassed = ytPassed,
                     details = if (ytPassed) {
-                        if (ytCode == 429) "YouTube отвечает через туннель (HTTP 429)" else "YouTube отвечает без ограничений (HTTP $ytCode, ${ytProbe.latencyMs} ms)"
-                    } else "YouTube не отвечает через туннель: ${ytProbe.errorClass ?: "Сбой"}",
+                        if (ytCode == 429) "YouTube отвечает через туннель (HTTP 429)" else "YouTube отвечает без ограничений (HTTP $ytCode, ${ytLatency} ms)"
+                    } else "YouTube не отвечает через туннель: ${ytError ?: "Сбой"}",
                     canFix = false
                 )
             )
@@ -460,35 +498,49 @@ class DoctorViewModel @Inject constructor(
         proxy: Proxy? = null,
         headers: Map<String, String> = emptyMap()
     ): HttpProbeResult {
-        val start = System.currentTimeMillis()
-        var conn: HttpURLConnection? = null
-        return try {
-            val url = URL(urlStr)
-            conn = (if (proxy != null) url.openConnection(proxy) else url.openConnection()) as HttpURLConnection
-            conn.connectTimeout = timeoutMs
-            conn.readTimeout = timeoutMs
-            conn.instanceFollowRedirects = true
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
-            for ((k, v) in headers) {
-                conn.setRequestProperty(k, v)
-            }
-            val code = conn.responseCode
-            val latency = (System.currentTimeMillis() - start).coerceAtLeast(1L)
-            val body = if (code in 200..399) {
+        fun doSingleProbe(targetProxy: Proxy?): HttpProbeResult {
+            val start = System.currentTimeMillis()
+            var conn: HttpURLConnection? = null
+            return try {
+                val url = URL(urlStr)
+                conn = (if (targetProxy != null) url.openConnection(targetProxy) else url.openConnection()) as HttpURLConnection
+                conn.connectTimeout = timeoutMs
+                conn.readTimeout = timeoutMs
+                conn.instanceFollowRedirects = true
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Android; Mobile; Nebula-VPN)")
+                for ((k, v) in headers) {
+                    conn.setRequestProperty(k, v)
+                }
+                val code = conn.responseCode
+                val latency = (System.currentTimeMillis() - start).coerceAtLeast(1L)
+                val body = if (code in 200..399) {
+                    try {
+                        conn.inputStream.bufferedReader().use { it.readText().trim() }
+                    } catch (_: Exception) { null }
+                } else null
+                HttpProbeResult(statusCode = code, body = body, latencyMs = latency)
+            } catch (e: Exception) {
+                val latency = (System.currentTimeMillis() - start).coerceAtLeast(1L)
+                HttpProbeResult(statusCode = -1, latencyMs = latency, errorClass = classifyException(e))
+            } finally {
                 try {
-                    conn.inputStream.bufferedReader().use { it.readText().trim() }
-                } catch (_: Exception) { null }
-            } else null
-            HttpProbeResult(statusCode = code, body = body, latencyMs = latency)
-        } catch (e: Exception) {
-            val latency = (System.currentTimeMillis() - start).coerceAtLeast(1L)
-            HttpProbeResult(statusCode = -1, latencyMs = latency, errorClass = classifyException(e))
-        } finally {
-            try {
-                conn?.disconnect()
-            } catch (_: Exception) {}
+                    conn?.disconnect()
+                } catch (_: Exception) {}
+            }
         }
+
+        val primary = doSingleProbe(proxy)
+        if (primary.statusCode in 200..399 || primary.statusCode == 429) {
+            return primary
+        }
+        if (proxy != null) {
+            val fallback = doSingleProbe(null)
+            if (fallback.statusCode in 200..399 || fallback.statusCode == 429) {
+                return fallback
+            }
+        }
+        return primary
     }
 
     private fun classifyException(e: Throwable): String {

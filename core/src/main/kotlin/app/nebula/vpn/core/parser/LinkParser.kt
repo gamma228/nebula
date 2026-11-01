@@ -27,6 +27,7 @@ object LinkParser {
         val userInfo: String,
         val host: String,
         val port: Int,
+        val urlPath: String,
         val queryParams: Map<String, String>,
         val fragment: String?
     ) {
@@ -35,11 +36,23 @@ object LinkParser {
                 val value = queryParams[key]
                 if (!value.isNullOrBlank()) return value
             }
+            // Case-insensitive and normalized (hyphen/underscore stripped) lookup fallback
+            val normalizedSearchKeys = keys.map { it.replace("-", "").replace("_", "").lowercase() }
+            for ((k, v) in queryParams) {
+                val normK = k.replace("-", "").replace("_", "").lowercase()
+                if (normK in normalizedSearchKeys && v.isNotBlank()) {
+                    return v
+                }
+            }
             return null
         }
 
         fun hasQueryKey(vararg keys: String): Boolean {
-            return keys.any { queryParams.containsKey(it) }
+            if (keys.any { queryParams.containsKey(it) }) return true
+            val normalizedSearchKeys = keys.map { it.replace("-", "").replace("_", "").lowercase() }
+            return queryParams.keys.any { k ->
+                k.replace("-", "").replace("_", "").lowercase() in normalizedSearchKeys
+            }
         }
 
         companion object {
@@ -49,7 +62,18 @@ object LinkParser {
                 val schemeIndex = withoutFrag.indexOf("://")
                 val afterScheme = if (schemeIndex >= 0) withoutFrag.substring(schemeIndex + 3) else withoutFrag
                 val queryStr = if (afterScheme.contains("?")) afterScheme.substringAfter("?") else ""
-                var authority = afterScheme.substringBefore("?")
+                val beforeQuery = afterScheme.substringBefore("?")
+
+                // Extract [userInfo@]host[:port][/urlPath]
+                val slashIndex = beforeQuery.indexOf('/')
+                var authority = if (slashIndex >= 0) beforeQuery.substring(0, slashIndex) else beforeQuery
+                val rawUrlPath = if (slashIndex >= 0) beforeQuery.substring(slashIndex + 1) else ""
+                val urlPath = try {
+                    URLDecoder.decode(rawUrlPath.trimEnd('/'), "UTF-8")
+                } catch (_: Exception) {
+                    rawUrlPath.trimEnd('/')
+                }
+
                 while (authority.endsWith("/")) {
                     authority = authority.substring(0, authority.length - 1)
                 }
@@ -91,7 +115,7 @@ object LinkParser {
                     }
                 }
 
-                return SimpleUri(userInfo, host, port, queryMap, fragment)
+                return SimpleUri(userInfo, host, port, urlPath, queryMap, fragment)
             }
         }
     }
@@ -130,26 +154,28 @@ object LinkParser {
         val name = decodeFragment(uri.fragment, "VLESS-$host:$port")
 
         val knownKeys = setOf(
-            "security", "tls", "sni", "serverName", "peer", "host", "headerType", "headertype",
-            "pbk", "publicKey", "public_key", "pk",
-            "sid", "shortId", "short_id",
-            "spx", "spiderX", "spider_x",
-            "fp", "fingerprint", "client-fingerprint", "client_fingerprint",
-            "alpn", "insecure", "allowInsecure", "allow_insecure", "skip-cert-verify",
+            "security", "tls", "sni", "serverName", "server_name", "server-name", "peer", "host",
+            "headerType", "headertype", "header-type", "header_type",
+            "pbk", "publicKey", "public_key", "public-key", "pk",
+            "sid", "shortId", "short_id", "short-id",
+            "spx", "spiderX", "spider_x", "spider-x",
+            "fp", "fingerprint", "client-fingerprint", "client_fingerprint", "clientFingerprint",
+            "alpn", "insecure", "allowInsecure", "allow_insecure", "allow-insecure", "skip-cert-verify", "skip_cert_verify",
             "pcs", "pinnedCertificateChainSha256", "peerCertificateSha256",
-            "type", "net", "transport", "path", "serviceName", "service_name", "servicename", "service",
-            "mode", "authority", "flow", "packetEncoding", "packet_encoding", "encryption"
+            "type", "net", "transport", "path", "serviceName", "service_name", "service-name", "servicename", "service",
+            "grpc-service-name", "grpc_service_name", "grpcServiceName",
+            "mode", "grpc-mode", "grpc_mode", "authority", "flow", "packetEncoding", "packet_encoding", "packet-encoding", "encryption"
         )
         checkUnknownParams(uri, knownKeys, "VLESS")
 
         val securityParam = uri.getQueryParameter("security", "tls") ?: "none"
-        val pbk = uri.getQueryParameter("pbk", "publicKey", "public_key", "pk") ?: ""
-        val sid = uri.getQueryParameter("sid", "shortId", "short_id") ?: ""
-        val spx = uri.getQueryParameter("spx", "spiderX", "spider_x") ?: ""
+        val pbk = uri.getQueryParameter("pbk", "publicKey", "public_key", "public-key", "pk") ?: ""
+        val sid = uri.getQueryParameter("sid", "shortId", "short_id", "short-id") ?: ""
+        val spx = uri.getQueryParameter("spx", "spiderX", "spider_x", "spider-x") ?: ""
         val isReality = securityParam.equals("reality", true) || pbk.isNotEmpty()
         val isTls = isReality || securityParam.equals("tls", true)
 
-        val rawSni = uri.getQueryParameter("sni", "serverName", "peer")?.ifBlank { null }
+        val rawSni = uri.getQueryParameter("sni", "serverName", "server_name", "server-name", "peer")?.ifBlank { null }
             ?: uri.getQueryParameter("host")?.takeIf { !isIpAddress(it) }?.ifBlank { null }
             ?: host
         val sni = sanitizeSni(rawSni, host)
@@ -169,20 +195,21 @@ object LinkParser {
         val alpnList = when {
             !alpnParam.isNullOrEmpty() -> alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             transportType == TransportType.GRPC -> listOf("h2")
-            transportType == TransportType.WS -> listOf("http/1.1")
-            transportType == TransportType.HTTP_UPGRADE -> listOf("http/1.1")
+            transportType == TransportType.WS || transportType == TransportType.HTTP_UPGRADE -> listOf("http/1.1")
             else -> emptyList()
         }
 
-        val path = uri.getQueryParameter("path") ?: ""
+        val path = uri.getQueryParameter("path") ?: uri.urlPath
         val hostHeader = uri.getQueryParameter("host", "authority") ?: ""
-        val headerType = uri.getQueryParameter("headerType", "headertype") ?: ""
+        val headerType = uri.getQueryParameter("headerType", "headertype", "header-type", "header_type") ?: ""
 
-        val rawServiceName = uri.getQueryParameter("serviceName", "service_name", "servicename", "service")
-            ?: if (transportType == TransportType.GRPC) path else ""
+        val rawServiceName = uri.getQueryParameter(
+            "serviceName", "service_name", "service-name", "servicename", "service",
+            "grpc-service-name", "grpc_service_name", "grpcServiceName"
+        ) ?: if (transportType == TransportType.GRPC) (path.ifEmpty { uri.urlPath }) else ""
         val serviceName = rawServiceName.removePrefix("/")
 
-        val mode = uri.getQueryParameter("mode") ?: "gun"
+        val mode = uri.getQueryParameter("mode", "grpc-mode", "grpc_mode") ?: "gun"
         val authority = uri.getQueryParameter("authority") ?: hostHeader
 
         val rawFlow = uri.getQueryParameter("flow") ?: ""
@@ -192,7 +219,7 @@ object LinkParser {
             else -> ""
         }
 
-        val packetEncoding = uri.getQueryParameter("packetEncoding", "packet_encoding") ?: "xudp"
+        val packetEncoding = uri.getQueryParameter("packetEncoding", "packet_encoding", "packet-encoding") ?: "xudp"
 
         val profile = ProxyProfile(
             id = UUID.randomUUID().toString(),
@@ -321,18 +348,20 @@ object LinkParser {
         val name = decodeFragment(uri.fragment, "Trojan-$host:$port")
 
         val knownKeys = setOf(
-            "security", "tls", "sni", "serverName", "peer", "host", "fp", "fingerprint", "alpn",
-            "insecure", "allowInsecure", "allow_insecure", "skip-cert-verify",
-            "type", "net", "transport", "path", "serviceName", "service_name", "servicename", "service",
-            "mode", "authority", "headerType"
+            "security", "tls", "sni", "serverName", "server_name", "server-name", "peer", "host",
+            "fp", "fingerprint", "client-fingerprint", "client_fingerprint", "clientFingerprint", "alpn",
+            "insecure", "allowInsecure", "allow_insecure", "allow-insecure", "skip-cert-verify", "skip_cert_verify",
+            "type", "net", "transport", "path", "serviceName", "service_name", "service-name", "servicename", "service",
+            "grpc-service-name", "grpc_service_name", "grpcServiceName",
+            "mode", "grpc-mode", "grpc_mode", "authority", "headerType", "header-type", "headertype"
         )
         checkUnknownParams(uri, knownKeys, "Trojan")
 
-        val rawSni = uri.getQueryParameter("sni", "serverName", "peer")?.ifBlank { null }
+        val rawSni = uri.getQueryParameter("sni", "serverName", "server_name", "server-name", "peer")?.ifBlank { null }
             ?: uri.getQueryParameter("host")?.takeIf { !isIpAddress(it) }?.ifBlank { null }
             ?: host
         val sni = sanitizeSni(rawSni, host)
-        val fp = uri.getQueryParameter("fp", "fingerprint") ?: "chrome"
+        val fp = uri.getQueryParameter("fp", "fingerprint", "client-fingerprint", "client_fingerprint") ?: "chrome"
         val insecure = isAllowInsecure(uri)
 
         val typeParam = uri.getQueryParameter("type", "net", "transport") ?: "tcp"
@@ -347,16 +376,18 @@ object LinkParser {
         val alpnList = when {
             !alpnParam.isNullOrEmpty() -> alpnParam.split(",").map { it.trim() }.filter { it.isNotEmpty() }
             transportType == TransportType.GRPC -> listOf("h2")
-            transportType == TransportType.WS -> listOf("http/1.1")
+            transportType == TransportType.WS || transportType == TransportType.HTTP_UPGRADE -> listOf("http/1.1")
             else -> emptyList()
         }
 
-        val path = uri.getQueryParameter("path") ?: ""
-        val hostHeader = uri.getQueryParameter("host") ?: sni
-        val rawServiceName = uri.getQueryParameter("serviceName", "service_name", "servicename", "service")
-            ?: if (transportType == TransportType.GRPC) path else ""
+        val path = uri.getQueryParameter("path") ?: uri.urlPath
+        val hostHeader = uri.getQueryParameter("host", "authority") ?: sni
+        val rawServiceName = uri.getQueryParameter(
+            "serviceName", "service_name", "service-name", "servicename", "service",
+            "grpc-service-name", "grpc_service_name", "grpcServiceName"
+        ) ?: if (transportType == TransportType.GRPC) (path.ifEmpty { uri.urlPath }) else ""
         val serviceName = rawServiceName.removePrefix("/")
-        val mode = uri.getQueryParameter("mode") ?: "gun"
+        val mode = uri.getQueryParameter("mode", "grpc-mode", "grpc_mode") ?: "gun"
         val authority = uri.getQueryParameter("authority") ?: hostHeader
 
         val profile = ProxyProfile(

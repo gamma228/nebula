@@ -216,4 +216,32 @@ class LinkParserTest {
         val profile = (result as Result.Success).data
         assertEquals("evil.com", profile.tls.serverName)
     }
+
+    @Test
+    fun testParseVlessGrpcWithServiceNameInUrlPath() {
+        val link = "vless://dab7f290-02ba-0009-b514-2f743deae7eb@87.242.127.115:443/x5.lk.v1.AccountService?encryption=none&type=grpc&mode=gun&security=tls&sni=river-3-312.rtbcdn.ru#LTE-89-Path"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("87.242.127.115", profile.server)
+        assertEquals(443, profile.port)
+        assertEquals("x5.lk.v1.AccountService", profile.transport.serviceName)
+        assertEquals("river-3-312.rtbcdn.ru", profile.tls.serverName)
+        assertEquals(listOf("h2"), profile.tls.alpn)
+    }
+
+    @Test
+    fun testParseVlessRealityWithHyphenatedKeys() {
+        val link = "vless://dab7f290-02ba-0009-b514-2f743deae7eb@87.242.127.115:443?encryption=none&type=grpc&service-name=x5.lk.v1.AccountService&security=reality&public-key=testPublicKey123&short-id=abcd1234&spider-x=%2F&sni=river-3-312.rtbcdn.ru#LTE-Hyphen"
+        val result = LinkParser.parse(link)
+        assertTrue(result is Result.Success)
+        val profile = (result as Result.Success).data
+        assertEquals("87.242.127.115", profile.server)
+        assertEquals("x5.lk.v1.AccountService", profile.transport.serviceName)
+        assertEquals("testPublicKey123", profile.tls.realityPublicKey)
+        assertEquals("abcd1234", profile.tls.realityShortId)
+        assertEquals("/", profile.tls.spiderX)
+        assertEquals("river-3-312.rtbcdn.ru", profile.tls.serverName)
+        assertEquals(listOf("h2"), profile.tls.alpn)
+    }
 }

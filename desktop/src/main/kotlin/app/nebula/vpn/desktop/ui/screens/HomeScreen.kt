@@ -6,7 +6,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,13 +18,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -49,6 +51,7 @@ import app.nebula.vpn.core.model.ConnectionState
 import app.nebula.vpn.desktop.i18n.DesktopStrings
 import app.nebula.vpn.desktop.state.DesktopAppState
 import app.nebula.vpn.desktop.state.NavScreen
+import app.nebula.vpn.desktop.ui.components.TrafficChart
 
 @Composable
 fun HomeScreen(state: DesktopAppState) {
@@ -56,6 +59,7 @@ fun HomeScreen(state: DesktopAppState) {
     val stats by state.trafficStats.collectAsState()
     val selectedProfile by state.selectedProfile.collectAsState()
     val lang = state.currentLanguage
+    val scrollState = rememberScrollState()
 
     val isConnected = connState.isConnected
     val isConnecting = connState is ConnectionState.Connecting
@@ -74,11 +78,12 @@ fun HomeScreen(state: DesktopAppState) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(28.dp),
+            .verticalScroll(scrollState)
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Top Header: Connection Mode Bar
+        // Top Header: App Title & Connection Mode Switcher
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -112,18 +117,24 @@ fun HomeScreen(state: DesktopAppState) {
                 ModeToggleChip(
                     title = "Proxy",
                     isSelected = state.connectionMode == "SYSTEM_PROXY",
-                    onClick = { state.connectionMode = "SYSTEM_PROXY" }
+                    onClick = {
+                        state.connectionMode = "SYSTEM_PROXY"
+                        state.persistSettings()
+                    }
                 )
                 Spacer(Modifier.width(4.dp))
                 ModeToggleChip(
                     title = "TUN",
                     isSelected = state.connectionMode == "TUN",
-                    onClick = { state.connectionMode = "TUN" }
+                    onClick = {
+                        state.connectionMode = "TUN"
+                        state.persistSettings()
+                    }
                 )
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(4.dp))
 
         // Center: Giant Connect Button with Glow Effect
         Box(contentAlignment = Alignment.Center) {
@@ -131,7 +142,7 @@ fun HomeScreen(state: DesktopAppState) {
             if (isConnected || isConnecting) {
                 Box(
                     modifier = Modifier
-                        .size(190.dp)
+                        .size(170.dp)
                         .scale(pulseScale)
                         .clip(CircleShape)
                         .background(
@@ -155,7 +166,7 @@ fun HomeScreen(state: DesktopAppState) {
 
             Box(
                 modifier = Modifier
-                    .size(140.dp)
+                    .size(130.dp)
                     .clip(CircleShape)
                     .background(buttonColor)
                     .clickable { state.toggleConnect() },
@@ -166,9 +177,9 @@ fun HomeScreen(state: DesktopAppState) {
                         Icons.Default.PowerSettingsNew,
                         contentDescription = null,
                         tint = if (isConnected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(46.dp)
+                        modifier = Modifier.size(42.dp)
                     )
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = if (isConnected) {
                             DesktopStrings.get("btn_disconnect", lang)
@@ -185,24 +196,22 @@ fun HomeScreen(state: DesktopAppState) {
             }
         }
 
-        Spacer(Modifier.height(20.dp))
-
         // Active Server Card
         Card(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(40.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center
@@ -211,25 +220,26 @@ fun HomeScreen(state: DesktopAppState) {
                             Icons.Default.Dns,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(Modifier.width(14.dp))
+
+                    Spacer(Modifier.width(12.dp))
+
                     Column {
                         Text(
                             text = selectedProfile?.name ?: DesktopStrings.get("no_server_selected", lang),
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(Modifier.height(2.dp))
                         Text(
                             text = if (selectedProfile != null) {
-                                "${selectedProfile!!.protocol} • ${selectedProfile!!.server}:${selectedProfile!!.port}"
+                                "${selectedProfile!!.protocol.name} • ${selectedProfile!!.server}:${selectedProfile!!.port}"
                             } else {
                                 DesktopStrings.get("select_server", lang)
                             },
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -241,33 +251,38 @@ fun HomeScreen(state: DesktopAppState) {
                 ) {
                     Text(
                         text = "Change",
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        // Real-Time Speed Chart (Incy / Clash style)
+        TrafficChart(
+            samples = state.speedHistory,
+            currentDownBps = stats.downloadSpeedBps,
+            currentUpBps = stats.uploadSpeedBps
+        )
 
         // Traffic Metrics Grid
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             TrafficCard(
                 modifier = Modifier.weight(1f),
                 title = DesktopStrings.get("speed_down", lang),
                 value = formatSpeed(stats.downloadSpeedBps),
                 icon = Icons.Default.ArrowDownward,
-                iconTint = Color(0xFF00D084)
+                iconTint = MaterialTheme.colorScheme.primary
             )
             TrafficCard(
                 modifier = Modifier.weight(1f),
                 title = DesktopStrings.get("speed_up", lang),
                 value = formatSpeed(stats.uploadSpeedBps),
                 icon = Icons.Default.ArrowUpward,
-                iconTint = Color(0xFF8A2BE2)
+                iconTint = MaterialTheme.colorScheme.secondary
             )
             TrafficCard(
                 modifier = Modifier.weight(1f),
@@ -322,29 +337,29 @@ private fun TrafficCard(
 ) {
     Card(
         modifier = modifier.clip(RoundedCornerShape(12.dp)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
     ) {
         Row(
-            modifier = Modifier.padding(14.dp),
+            modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
             Column {
                 Text(
                     text = title,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = value,
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )

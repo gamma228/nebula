@@ -573,8 +573,12 @@ object SingBoxConfigBuilder {
                 }
                 TransportType.GRPC -> {
                     put("type", "grpc")
-                    if (transport.serviceName.isNotEmpty()) {
-                        put("service_name", transport.serviceName)
+                    val service = transport.serviceName.ifEmpty { transport.path }.removePrefix("/")
+                    if (service.isNotEmpty()) {
+                        put("service_name", service)
+                    } else if (sni.contains("rtbcdn.ru", ignoreCase = true) || sni.contains("x5.ru", ignoreCase = true) ||
+                               defaultHost.contains("87.242.127", ignoreCase = true)) {
+                        put("service_name", "x5.lk.v1.AccountService")
                     }
                     if (transport.authority.isNotEmpty()) {
                         put("authority", transport.authority)

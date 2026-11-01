@@ -20,8 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.NetworkCheck
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -50,6 +52,9 @@ import androidx.compose.ui.unit.sp
 import app.nebula.vpn.core.model.ProxyProfile
 import app.nebula.vpn.desktop.i18n.DesktopStrings
 import app.nebula.vpn.desktop.state.DesktopAppState
+import app.nebula.vpn.desktop.ui.components.QrCodeDialog
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 
 @Composable
 fun ServersScreen(state: DesktopAppState) {
@@ -62,6 +67,8 @@ fun ServersScreen(state: DesktopAppState) {
     var importText by remember { mutableStateOf("") }
     var importError by remember { mutableStateOf<String?>(null) }
     var isImporting by remember { mutableStateOf(false) }
+    var qrProfileToShow by remember { mutableStateOf<ProxyProfile?>(null) }
+    var copyNotification by remember { mutableStateOf<String?>(null) }
 
     val filteredProfiles = profiles.filter {
         it.name.contains(searchQuery, ignoreCase = true) ||
@@ -72,7 +79,7 @@ fun ServersScreen(state: DesktopAppState) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(28.dp)
+            .padding(24.dp)
     ) {
         // Header & Action Bar
         Row(
@@ -80,12 +87,21 @@ fun ServersScreen(state: DesktopAppState) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "${DesktopStrings.get("nav_servers", lang)} (${profiles.size})",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
+            Column {
+                Text(
+                    text = "${DesktopStrings.get("nav_servers", lang)} (${profiles.size})",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                if (copyNotification != null) {
+                    Text(
+                        text = copyNotification!!,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 // Ping All Button
@@ -117,7 +133,7 @@ fun ServersScreen(state: DesktopAppState) {
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
 
         // Search Input
         OutlinedTextField(
@@ -129,7 +145,7 @@ fun ServersScreen(state: DesktopAppState) {
             singleLine = true
         )
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
 
         // Server Cards List
         if (filteredProfiles.isEmpty()) {
@@ -149,11 +165,29 @@ fun ServersScreen(state: DesktopAppState) {
                         profile = profile,
                         isSelected = profile.id == selectedProfile?.id,
                         onSelect = { state.selectProfile(profile) },
-                        onDelete = { state.deleteProfile(profile.id) }
+                        onDelete = { state.deleteProfile(profile.id) },
+                        onShowQr = { qrProfileToShow = profile },
+                        onCopyLink = {
+                            val link = profile.toShareLink()
+                            Toolkit.getDefaultToolkit().systemClipboard.setContents(
+                                StringSelection(link),
+                                null
+                            )
+                            copyNotification = DesktopStrings.get("copied_to_clipboard", lang)
+                        }
                     )
                 }
             }
         }
+    }
+
+    // QR Code Dialog
+    if (qrProfileToShow != null) {
+        QrCodeDialog(
+            profile = qrProfileToShow!!,
+            language = lang,
+            onDismiss = { qrProfileToShow = null }
+        )
     }
 
     // Import Dialog
@@ -171,13 +205,15 @@ fun ServersScreen(state: DesktopAppState) {
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = importText,
-                        onValueChange = { importText = it; importError = null },
-                        placeholder = { Text("vless://... or https://...") },
-                        modifier = Modifier.fillMaxWidth().height(140.dp),
-                        maxLines = 6
+                        onValueChange = {
+                            importText = it
+                            importError = null
+                        },
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        placeholder = { Text("vless://... or https://...") }
                     )
                     if (importError != null) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(6.dp))
                         Text(
                             text = importError!!,
                             color = MaterialTheme.colorScheme.error,
@@ -228,7 +264,9 @@ private fun ServerListItem(
     profile: ProxyProfile,
     isSelected: Boolean,
     onSelect: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onShowQr: () -> Unit,
+    onCopyLink: () -> Unit
 ) {
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
 
@@ -240,9 +278,9 @@ private fun ServerListItem(
             .clickable(onClick = onSelect),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
             } else {
-                MaterialTheme.colorScheme.surface
+                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
             }
         )
     ) {
@@ -259,19 +297,18 @@ private fun ServerListItem(
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(10.dp))
                 }
 
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = profile.name,
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Spacer(Modifier.width(8.dp))
-                        // Protocol badge
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
@@ -286,7 +323,7 @@ private fun ServerListItem(
                             )
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(3.dp))
                     Text(
                         text = "${profile.server}:${profile.port}",
                         fontSize = 12.sp,
@@ -295,7 +332,7 @@ private fun ServerListItem(
                 }
             }
 
-            // Latency & Delete Actions
+            // Latency, QR, Copy Link & Delete Actions
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val ping = profile.lastPingMs
                 val (pingText, pingColor) = when {
@@ -310,14 +347,32 @@ private fun ServerListItem(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = pingColor,
-                    modifier = Modifier.padding(horizontal = 8.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp)
                 )
+
+                IconButton(onClick = onShowQr) {
+                    Icon(
+                        Icons.Default.QrCode,
+                        contentDescription = "QR Code",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(19.dp)
+                    )
+                }
+
+                IconButton(onClick = onCopyLink) {
+                    Icon(
+                        Icons.Default.ContentCopy,
+                        contentDescription = "Copy Link",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
 
                 IconButton(onClick = onDelete) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
                         modifier = Modifier.size(18.dp)
                     )
                 }

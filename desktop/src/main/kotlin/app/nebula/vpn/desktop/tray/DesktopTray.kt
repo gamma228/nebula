@@ -25,6 +25,8 @@ fun ApplicationScope.DesktopTray(
 ) {
     val trayState = rememberTrayState()
     val connState by state.connectionState.collectAsState()
+    val selectedProfile by state.selectedProfile.collectAsState()
+    val profiles by state.profiles.collectAsState()
     val lang = state.currentLanguage
 
     // Generate dynamic 16x16 icon based on connection state
@@ -43,15 +45,42 @@ fun ApplicationScope.DesktopTray(
         img
     }
 
+    val tooltipText = buildString {
+        append("Nebula VPN: ")
+        append(if (connState.isConnected) "Connected" else "Disconnected")
+        if (selectedProfile != null) {
+            append(" (${selectedProfile!!.name})")
+        }
+    }
+
     Tray(
         icon = BitmapPainter(iconImage.toComposeImageBitmap()),
         state = trayState,
-        tooltip = "Nebula VPN (${if (connState.isConnected) "Connected" else "Disconnected"})",
+        tooltip = tooltipText,
         onAction = onToggleWindow,
         menu = {
             Item(
                 text = if (connState.isConnected) DesktopStrings.get("btn_disconnect", lang) else DesktopStrings.get("btn_connect", lang),
                 onClick = { state.toggleConnect() }
+            )
+            Separator()
+            // Quick server switch items (up to 5)
+            if (profiles.isNotEmpty()) {
+                profiles.take(5).forEach { profile ->
+                    val isCurrent = profile.id == selectedProfile?.id
+                    Item(
+                        text = "${if (isCurrent) "✓ " else "  "}${profile.name}",
+                        onClick = { state.selectProfile(profile) }
+                    )
+                }
+                Separator()
+            }
+            Item(
+                text = "Mode: ${if (state.connectionMode == "TUN") "TUN" else "System Proxy"}",
+                onClick = {
+                    state.connectionMode = if (state.connectionMode == "TUN") "SYSTEM_PROXY" else "TUN"
+                    state.persistSettings()
+                }
             )
             Separator()
             Item(

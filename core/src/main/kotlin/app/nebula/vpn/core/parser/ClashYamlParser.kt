@@ -155,19 +155,52 @@ object ClashYamlParser {
         val wsHeaders = wsOpts?.get("headers") as? Map<*, *>
         val hostHeader = wsHeaders?.get("Host")?.toString() ?: wsHeaders?.get("host")?.toString() ?: ""
 
-        val grpcOpts = map["grpc-opts"] as? Map<*, *>
-        val grpcServiceName = grpcOpts?.get("grpc-service-name")?.toString() ?: ""
+        val grpcOpts = (map["grpc-opts"] ?: map["grpc_opts"] ?: map["grpcOpts"]) as? Map<*, *>
+        val grpcServiceName = grpcOpts?.get("grpc-service-name")?.toString()
+            ?: grpcOpts?.get("service-name")?.toString()
+            ?: grpcOpts?.get("serviceName")?.toString()
+            ?: grpcOpts?.get("service")?.toString()
+            ?: map["grpc-service-name"]?.toString()
+            ?: map["service-name"]?.toString()
+            ?: map["serviceName"]?.toString()
+            ?: map["service"]?.toString()
+            ?: ""
 
-        val realityOpts = map["reality-opts"] as? Map<*, *>
-        val pbk = realityOpts?.get("public-key")?.toString() ?: ""
-        val sid = realityOpts?.get("short-id")?.toString() ?: ""
-        val spx = realityOpts?.get("spider-x")?.toString() ?: ""
+        val realityOpts = (map["reality-opts"] ?: map["reality_opts"] ?: map["realityOpts"]) as? Map<*, *>
+        val pbk = realityOpts?.get("public-key")?.toString()
+            ?: realityOpts?.get("public_key")?.toString()
+            ?: realityOpts?.get("publicKey")?.toString()
+            ?: realityOpts?.get("pbk")?.toString()
+            ?: map["public-key"]?.toString()
+            ?: map["public_key"]?.toString()
+            ?: map["publicKey"]?.toString()
+            ?: map["pbk"]?.toString()
+            ?: ""
+        val sid = realityOpts?.get("short-id")?.toString()
+            ?: realityOpts?.get("short_id")?.toString()
+            ?: realityOpts?.get("shortId")?.toString()
+            ?: realityOpts?.get("sid")?.toString()
+            ?: map["short-id"]?.toString()
+            ?: map["short_id"]?.toString()
+            ?: map["shortId"]?.toString()
+            ?: map["sid"]?.toString()
+            ?: ""
+        val spx = realityOpts?.get("spider-x")?.toString()
+            ?: realityOpts?.get("spider_x")?.toString()
+            ?: realityOpts?.get("spiderX")?.toString()
+            ?: realityOpts?.get("spx")?.toString()
+            ?: map["spider-x"]?.toString()
+            ?: map["spider_x"]?.toString()
+            ?: map["spiderX"]?.toString()
+            ?: map["spx"]?.toString()
+            ?: ""
         val flow = map["flow"]?.toString() ?: if (pbk.isNotEmpty() && transportType == TransportType.TCP) "xtls-rprx-vision" else ""
 
         val finalAlpn = when {
             alpnList.isNotEmpty() -> alpnList
             transportType == TransportType.GRPC -> listOf("h2")
-            transportType == TransportType.WS -> listOf("http/1.1")
+            transportType == TransportType.WS || transportType == TransportType.HTTP_UPGRADE -> listOf("http/1.1")
+            pbk.isNotEmpty() -> listOf("h2", "http/1.1")
             else -> emptyList()
         }
 
