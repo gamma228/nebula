@@ -22,6 +22,7 @@ This log records every reported problem, its reproduction, root cause analysis, 
 - [D15: Direct DNS Resolution ("Connected But No Internet" Root Cause) & Static Go Concurrency Cap](#d15-direct-dns-resolution-connected-but-no-internet-root-cause--static-go-concurrency-cap)
 - [D16: Connection Doctor False Negatives, Selector Desync via `cache.db` & RFC 6066 IP SNI Guard](#d16-connection-doctor-false-negatives-selector-desync-via-cachedb--rfc-6066-ip-sni-guard)
 - [D17: Complete Anti-Censorship Parity with INCY (TLS ClientHello Fragmentation, Cellular MTU 1400 Clamping & DNS Leak Elimination)](#d17-complete-anti-censorship-parity-with-incy)
+- [D18: Instant Startup Crash (`Expected an activity context for creating a HiltViewModelFactory`)](#d18-instant-startup-crash-hilt-activity-context-unwrapping)
 
 ---
 
@@ -760,6 +761,64 @@ The user reported that the exact same server (`🇸🇪 🎮 ⚡ ⭐ 0.1X - LTE 
 4. **Release Packaging & Signing (`./gradlew.bat assembleRelease`)**:
    - `app-arm64-v8a-release.apk` (81,929,921 bytes) assembled and signed (`BUILD SUCCESSFUL in 1m 53s`).
    - Signature verified via Android SDK `apksigner.bat` (APK Signature Scheme v2 verified).
+
+---
+
+## D18: Instant Startup Crash (Hilt Activity Context Unwrapping)
+
+### Problem Description
+Upon tapping the Nebula app icon to open the app, the application crashed immediately without rendering the UI, displaying the system dialog: "В работе приложения 'Nebula' произошла ошибка. Приложение 'Nebula' закрыто из-за ошибки."
+
+### Root Cause Analysis (Live Logcat Capture)
+Live execution on the Android runtime revealed the following fatal exception on the main thread:
+```
+FATAL EXCEPTION: main
+Process: app.nebula.vpn, PID: 4325
+java.lang.IllegalStateException: Expected an activity context for creating a HiltViewModelFactory but instead found: android.app.ContextImpl@59e126a
+    at dagger.hilt.android.internal.lifecycle.HiltViewModelFactory.create(HiltViewModelFactory.java:76)
+    at app.nebula.vpn.ui.MainActivity$onCreate$1$1.invoke(MainActivity.kt:433)
+```
+1. In `MainActivity.kt`, to prevent recursive deadlocks on Xiaomi HyperOS, `baseContext.createConfigurationContext(config)` was called directly to obtain a localized context.
+2. `CompositionLocalProvider(LocalContext provides localizedContext)` replaced Compose's `LocalContext` with the result of `createConfigurationContext()`.
+3. `createConfigurationContext()` returns an instance of `android.app.ContextImpl`, NOT `Activity`, and it does NOT wrap an `Activity`.
+4. When `hiltViewModel()` was evaluated in Compose, Hilt recursively inspected `LocalContext.current` looking for an enclosing `Activity`:
+   ```kotlin
+   tailrec fun Context.findActivity(): Activity? = when (this) {
+       is Activity -> this
+       is ContextWrapper -> baseContext.findActivity()
+       else -> null
+   }
+   ```
+5. Because `ContextImpl` is not an `Activity` and not a `ContextWrapper`, `findActivity()` returned `null`, triggering an instantaneous unhandled `IllegalStateException` on the main thread during initial composition.
+
+### Invariant Fix
+1. Explicitly wrapped `this@MainActivity` inside a lightweight non-lazy `ContextWrapper`:
+   ```kotlin
+   val configContext = try {
+       baseContext.createConfigurationContext(config)
+   } catch (_: Exception) {
+       baseContext
+   }
+   val wrapped = object : ContextWrapper(this@MainActivity) {
+       override fun getResources(): Resources = configContext.resources
+       override fun getAssets() = configContext.assets
+   }
+   ```
+2. Because `wrapped` directly delegates its base context to `this@MainActivity`, Hilt's `findActivity()` unwraps the `ContextWrapper` to the `MainActivity` instance immediately, satisfying Hilt's `HiltViewModelFactory` requirement.
+3. Because `configContext` is pre-created and does not use Kotlin `lazy` property monitors, Xiaomi HyperOS theme manager cannot cause recursive deadlocks.
+
+### Automated Verification Proof
+1. **Live Emulator Execution & Logcat Verification**:
+   - Deployed release APK to emulator (`adb install -r app-x86_64-release.apk`).
+   - Launched `MainActivity` via `am start -n app.nebula.vpn/.ui.MainActivity`.
+   - Verified zero fatal exceptions in `adb logcat -s AndroidRuntime DEBUG fatal`.
+   - Verified process is active: `u0_a201 5125 ... S app.nebula.vpn`.
+   - Verified UI rendering via emulator screencap `emulator_nebula_fixed_launch.png`.
+2. **Unit Tests (`./gradlew.bat testDebugUnitTest`)**:
+   - All 58 tests passed 100% green (`BUILD SUCCESSFUL in 49s`).
+3. **Signed Release Packaging (`./gradlew.bat assembleRelease`)**:
+   - `app-arm64-v8a-release.apk` (81,929,921 bytes) compiled and signed (`BUILD SUCCESSFUL in 2m 11s`).
+   - Signature verified with `apksigner.bat` (v2 verified).
 
 
 

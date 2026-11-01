@@ -226,12 +226,17 @@ class MainActivity : AppCompatActivity() {
                 Locale.setDefault(targetLocale)
                 val config = Configuration(baseContext.resources.configuration)
                 config.setLocale(targetLocale)
-                val localized = try {
+                val configContext = try {
                     baseContext.createConfigurationContext(config)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     baseContext
                 }
-                Pair(localized, config)
+                // Must wrap this@MainActivity so Hilt findActivity() unwraps to an Activity context
+                val wrapped = object : ContextWrapper(this@MainActivity) {
+                    override fun getResources(): Resources = configContext.resources
+                    override fun getAssets() = configContext.assets
+                }
+                Pair(wrapped, config)
             }
 
             CompositionLocalProvider(

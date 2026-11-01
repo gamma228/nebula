@@ -352,3 +352,13 @@ Because emulator environments use virtualized `10.0.2.x` NAT and cannot fully re
    - [x] Release Output Artifacts:
      - `C:\Users\User\.gemini\antigravity\scratch\nebula\release\nebula-arm64-v8a-release.apk` (81.9 MB)
      - `C:\Users\User\.gemini\antigravity\scratch\nebula\release\nebula-universal-release.apk` (237.3 MB)
+
+10. **Startup Crash Fix & Hilt Activity Context Unwrapping (D18):**
+    - [x] Emulator Runtime Logcat: Captured `FATAL EXCEPTION: Expected an activity context for creating a HiltViewModelFactory but instead found: android.app.ContextImpl`.
+    - [x] Fix Verification: Wrapped `this@MainActivity` inside `ContextWrapper` delegating `resources` to `configContext.resources`.
+    - [x] Live Launch Verification: Installed on emulator, launched `MainActivity`, 0 crashes, process running `u0_a201 5125 ... S app.nebula.vpn`, screencap captured `emulator_nebula_fixed_launch.png`.
+    - [x] Unit Tests: `./gradlew.bat testDebugUnitTest` (58 unit tests passed 100% green).
+    - [x] Release APKs Assembled & Signed:
+      - `C:\Users\User\.gemini\antigravity\scratch\nebula\release\app-arm64-v8a-release.apk`
+      - `C:\Users\User\.gemini\antigravity\scratch\nebula\release\nebula-arm64-v8a-release.apk`
+      - `C:\Users\User\.gemini\antigravity\scratch\nebula\release\app-universal-release.apk`
