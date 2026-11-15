@@ -1,0 +1,40 @@
+# Winget Manifest Draft for Nebula VPN Desktop Client
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
+
+PackageIdentifier: org.eu.nebula
+PackageVersion: 1.2.1
+PackageName: Nebula VPN
+Publisher: Nebula
+PublisherUrl: https://github.com/org-eu-nebula/nebula
+Author: Nebula Project
+Moniker: nebula
+ShortDescription: High-performance, highly customizable universal VPN and proxy desktop client.
+Description: |
+  Nebula is a modern desktop proxy and VPN client powered by sing-box.
+  Supports VLESS Reality, VMess, Trojan, Shadowsocks, Hysteria2, and TUIC.
+  Features custom themes, glassmorphism, wallpaper dimming, real-time latency sparklines,
+  system proxy and TUN modes, and anti-censorship TLS fragmentation.
+License: Apache-2.0
+LicenseUrl: https://raw.githubusercontent.com/org-eu-nebula/nebula/master/LICENSE
+Copyright: Copyright (c) 2026 Nebula Project
+Tags:
+  - vpn
+  - proxy
+  - sing-box
+  - vless
+  - reality
+  - shadowsocks
+  - privacy
+  - security
+ReleaseDate: 2026-11-02
+Installers:
+  - Architecture: x64
+    InstallerType: inno
+    InstallerUrl: https://github.com/org-eu-nebula/nebula/releases/download/v1.2.1/Nebula-Setup-1.2.1.exe
+    InstallerSha256: 7de312c9d3f773010b1671bdc34d53ca6a85062d9249cf1638699fc54b15f8b7
+    Scope: user
+    InstallerSwitches:
+      Silent: /CURRENTUSER /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TASKS="desktopicon,startmenuicon,protocolassoc"
+      SilentWithProgress: /CURRENTUSER /SILENT /NORESTART /TASKS="desktopicon,startmenuicon,protocolassoc"
+ManifestType: singleton
+ManifestVersion: 1.6.0

@@ -20,4 +20,24 @@ keystore/
 .kotlin/
 diagnostics/
 desktop/resources/
+tools/local/
+*.exe
+*.zip
+classes.jar
+onionmasq-*.aar
+onionmasq-sources.jar
+*.png
+ui_*.xml
+pkg_*.json
+onion_*.json
+onion_*.rs
+onionmasq_mobile_lib.rs
+META-INF/
+org/
+packaging/
+release/
+.agent/
+docs/*PROMPT.md
+dumped_live_config.json
+
 
