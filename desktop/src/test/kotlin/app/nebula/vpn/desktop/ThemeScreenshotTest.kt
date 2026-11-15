@@ -1,8 +1,6 @@
 package app.nebula.vpn.desktop
 
 import androidx.compose.ui.ImageComposeScene
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.WindowState
 import app.nebula.vpn.core.model.SurfaceStyle
 import app.nebula.vpn.core.model.ThemeMode
 import app.nebula.vpn.desktop.state.DesktopAppState
@@ -21,7 +19,7 @@ class ThemeScreenshotTest {
 
         val themes = listOf(
             Triple("theme_emerald_cyber_dark", ThemeMode.DARK, DesktopThemePreset.EMERALD_CYBER),
-            Triple("theme_sakura_blossom_light", ThemeMode.LIGHT, DesktopThemePreset.SAKURA_BLOSSOM),
+            Triple("theme_cyber_violet_light", ThemeMode.LIGHT, DesktopThemePreset.CYBER_VIOLET),
             Triple("theme_oled_crimson_amoled", ThemeMode.AMOLED, DesktopThemePreset.OLED_CRIMSON),
             Triple("theme_nordic_frost_glass", ThemeMode.DARK, DesktopThemePreset.NORDIC_FROST)
         )
@@ -35,19 +33,8 @@ class ThemeScreenshotTest {
                 state.surfaceStyle = SurfaceStyle.GLASS
             }
 
-            val windowState = WindowState(
-                width = 980.dp,
-                height = 640.dp
-            )
-
             scene.setContent {
-                DesktopApp(
-                    state = state,
-                    windowState = windowState,
-                    onMinimize = {},
-                    onMaximize = {},
-                    onClose = {}
-                )
+                DesktopApp(state = state)
             }
 
             val image = scene.render()

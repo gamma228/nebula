@@ -119,7 +119,8 @@ object DesktopStrings {
             "show_qr" to "QR Code",
             "tray_show" to "Open Window",
             "tray_hide" to "Hide to Tray",
-            "tray_quit" to "Quit Nebula"
+            "tray_quit" to "Quit Nebula",
+            "always_on_top" to "Always on Top"
         ),
         AppLanguage.RU to mapOf(
             "app_name" to "Nebula VPN",
@@ -230,7 +231,8 @@ object DesktopStrings {
             "show_qr" to "QR-код",
             "tray_show" to "Открыть окно",
             "tray_hide" to "Свернуть в трей",
-            "tray_quit" to "Выйти из Nebula"
+            "tray_quit" to "Выйти из Nebula",
+            "always_on_top" to "Поверх всех окон"
         ),
         AppLanguage.UK to mapOf(
             "app_name" to "Nebula VPN",
@@ -341,7 +343,8 @@ object DesktopStrings {
             "show_qr" to "QR-код",
             "tray_show" to "Відкрити вікно",
             "tray_hide" to "Згорнути в трей",
-            "tray_quit" to "Вийти з Nebula"
+            "tray_quit" to "Вийти з Nebula",
+            "always_on_top" to "Поверх усіх вікон"
         ),
         AppLanguage.ZH to mapOf(
             "app_name" to "Nebula VPN",
@@ -452,7 +455,8 @@ object DesktopStrings {
             "show_qr" to "二维码",
             "tray_show" to "显示主窗口",
             "tray_hide" to "最小化到托盘",
-            "tray_quit" to "退出 Nebula"
+            "tray_quit" to "退出 Nebula",
+            "always_on_top" to "置顶显示"
         ),
         AppLanguage.DE to mapOf(
             "app_name" to "Nebula VPN",
@@ -563,7 +567,8 @@ object DesktopStrings {
             "show_qr" to "QR-Code",
             "tray_show" to "Fenster öffnen",
             "tray_hide" to "In den Tray minimieren",
-            "tray_quit" to "Nebula beenden"
+            "tray_quit" to "Nebula beenden",
+            "always_on_top" to "Immer im Vordergrund"
         )
     )
 

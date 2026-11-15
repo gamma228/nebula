@@ -26,7 +26,8 @@ object SplitTunnelApplier {
         packageManager: PackageManager,
         ownPackageName: String,
         mode: AppRoutingMode,
-        targetPackages: Collection<String>
+        targetPackages: Collection<String>,
+        knownInstalledPackages: Set<String>? = null
     ): ApplyResult {
         val applied = mutableListOf<String>()
         val missing = mutableListOf<String>()
@@ -34,12 +35,16 @@ object SplitTunnelApplier {
         when (mode) {
             AppRoutingMode.GLOBAL -> {
                 // Disallow own package to eliminate kernel loopback for app's internal probes/traffic
-                try {
-                    packageManager.getPackageInfo(ownPackageName, 0)
-                    builder.addDisallowedApplication(ownPackageName)
-                    applied.add(ownPackageName)
-                } catch (e: PackageManager.NameNotFoundException) {
+                if (knownInstalledPackages != null && !knownInstalledPackages.contains(ownPackageName)) {
                     missing.add(ownPackageName)
+                } else {
+                    try {
+                        packageManager.getPackageInfo(ownPackageName, 0)
+                        builder.addDisallowedApplication(ownPackageName)
+                        applied.add(ownPackageName)
+                    } catch (e: PackageManager.NameNotFoundException) {
+                        missing.add(ownPackageName)
+                    }
                 }
             }
             AppRoutingMode.FORWARD_APPS -> {
@@ -52,12 +57,21 @@ object SplitTunnelApplier {
                 }
 
                 for (pkg in packagesToAllow) {
-                    try {
-                        packageManager.getPackageInfo(pkg, 0)
-                        builder.addAllowedApplication(pkg)
-                        applied.add(pkg)
-                    } catch (e: PackageManager.NameNotFoundException) {
-                        missing.add(pkg)
+                    if (knownInstalledPackages != null) {
+                        if (knownInstalledPackages.contains(pkg)) {
+                            builder.addAllowedApplication(pkg)
+                            applied.add(pkg)
+                        } else {
+                            missing.add(pkg)
+                        }
+                    } else {
+                        try {
+                            packageManager.getPackageInfo(pkg, 0)
+                            builder.addAllowedApplication(pkg)
+                            applied.add(pkg)
+                        } catch (e: PackageManager.NameNotFoundException) {
+                            missing.add(pkg)
+                        }
                     }
                 }
             }
@@ -65,12 +79,21 @@ object SplitTunnelApplier {
                 // Blacklist: ONLY addDisallowedApplication (including own package)
                 val packagesToDisallow = (targetPackages + ownPackageName).distinct()
                 for (pkg in packagesToDisallow) {
-                    try {
-                        packageManager.getPackageInfo(pkg, 0)
-                        builder.addDisallowedApplication(pkg)
-                        applied.add(pkg)
-                    } catch (e: PackageManager.NameNotFoundException) {
-                        missing.add(pkg)
+                    if (knownInstalledPackages != null) {
+                        if (knownInstalledPackages.contains(pkg)) {
+                            builder.addDisallowedApplication(pkg)
+                            applied.add(pkg)
+                        } else {
+                            missing.add(pkg)
+                        }
+                    } else {
+                        try {
+                            packageManager.getPackageInfo(pkg, 0)
+                            builder.addDisallowedApplication(pkg)
+                            applied.add(pkg)
+                        } catch (e: PackageManager.NameNotFoundException) {
+                            missing.add(pkg)
+                        }
                     }
                 }
             }

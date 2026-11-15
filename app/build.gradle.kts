@@ -111,6 +111,10 @@ android {
             )
         }
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -118,6 +122,7 @@ dependencies {
 
     // Official sing-box libbox core
     implementation(files("libs/libbox.aar"))
+    implementation(files("libs/onionmasq.aar"))
 
     // AndroidX & Lifecycle
     implementation(libs.androidx.core.ktx)

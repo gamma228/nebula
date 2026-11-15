@@ -6,10 +6,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStream
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URI
-import java.net.URL
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -32,12 +30,21 @@ object SubscriptionFetcher {
         val updateIntervalHours: Int = 24,
         val supportUrl: String? = null,
         val webPageUrl: String? = null,
-        val rawContent: String = ""
+        val rawContent: String = "",
+        val isHwidRequired: Boolean = false,
+        val hasStubNodesOnly: Boolean = false
+    )
+
+    data class SubscriptionLadderResult(
+        val winningPreset: UserAgentPreset,
+        val fetchResult: SubscriptionFetchResult,
+        val attemptsCount: Int
     )
 
     suspend fun fetch(
         urlStr: String,
-        customUserAgent: String? = null
+        customUserAgent: String? = null,
+        extraHeaders: Map<String, String>? = null
     ): Result<SubscriptionFetchResult> = withContext(Dispatchers.IO) {
         try {
             var currentUrl = urlStr.trim()
@@ -52,6 +59,9 @@ object SubscriptionFetcher {
 
             while (redirects < MAX_REDIRECTS) {
                 val targetUrl = URI(currentUrl).toURL()
+                val port = if (targetUrl.port > 0) targetUrl.port else targetUrl.defaultPort
+                app.nebula.vpn.core.tor.NetworkPolicy.checkAllowed(targetUrl.host, port)
+
                 val conn = targetUrl.openConnection() as HttpURLConnection
                 conn.instanceFollowRedirects = false
                 conn.connectTimeout = CONNECT_TIMEOUT_MS
@@ -59,6 +69,9 @@ object SubscriptionFetcher {
                 conn.setRequestProperty("User-Agent", userAgent)
                 conn.setRequestProperty("Accept", "*/*")
                 conn.setRequestProperty("Accept-Encoding", "gzip, deflate")
+                extraHeaders?.forEach { (k, v) ->
+                    conn.setRequestProperty(k, v)
+                }
                 conn.connect()
 
                 responseCode = conn.responseCode
@@ -78,8 +91,9 @@ object SubscriptionFetcher {
                     connection = conn
                     break
                 } else {
+                    val msg = conn.responseMessage ?: "HTTP $responseCode"
                     conn.disconnect()
-                    return@withContext Result.Error(Exception("HTTP error $responseCode: ${conn.responseMessage}"))
+                    return@withContext Result.Error(SubscriptionException.HttpError(responseCode, msg))
                 }
             }
 
@@ -170,8 +184,18 @@ object SubscriptionFetcher {
                         ?: decoded.data.title
                         ?: extractHostAsTitle(urlStr)
 
+                    val profiles = decoded.data.profiles
+                    val hwidActive = headers["x-hwid-active"]?.equals("true", ignoreCase = true) == true
+                    val hwidNotSupported = headers["x-hwid-not-supported"]?.equals("true", ignoreCase = true) == true
+
+                    val isStub = { p: ProxyProfile ->
+                        p.server == "0.0.0.0" || p.name.contains("HWID", ignoreCase = true) || p.name.contains("⚠️")
+                    }
+                    val hasStubNodesOnly = profiles.isNotEmpty() && profiles.all(isStub)
+                    val isHwidRequired = hwidNotSupported || (hwidActive && hasStubNodesOnly) || (profiles.isEmpty() && hwidActive)
+
                     val result = SubscriptionFetchResult(
-                        profiles = decoded.data.profiles,
+                        profiles = profiles,
                         title = finalTitle,
                         uploadBytes = uploadBytes ?: decoded.data.uploadBytes,
                         downloadBytes = downloadBytes ?: decoded.data.downloadBytes,
@@ -180,7 +204,9 @@ object SubscriptionFetcher {
                         updateIntervalHours = updateIntervalHours,
                         supportUrl = supportUrl,
                         webPageUrl = webPageUrl,
-                        rawContent = body
+                        rawContent = body,
+                        isHwidRequired = isHwidRequired,
+                        hasStubNodesOnly = hasStubNodesOnly
                     )
                     Result.Success(result)
                 }
@@ -189,6 +215,55 @@ object SubscriptionFetcher {
         } catch (e: Exception) {
             Result.Error(e)
         }
+    }
+
+    suspend fun fetchWithLadder(
+        urlStr: String,
+        initialPreset: UserAgentPreset = UserAgentPreset.NEBULA,
+        extraHeaders: Map<String, String>? = null
+    ): Result<SubscriptionLadderResult> = withContext(Dispatchers.IO) {
+        val ladderPresets = mutableListOf<UserAgentPreset>()
+        ladderPresets.add(initialPreset)
+        for (preset in listOf(UserAgentPreset.SING_BOX, UserAgentPreset.CLASH_META, UserAgentPreset.V2RAY_NG, UserAgentPreset.NEBULA)) {
+            if (!ladderPresets.contains(preset)) {
+                ladderPresets.add(preset)
+            }
+        }
+
+        var attempts = 0
+        var lastError: Throwable? = null
+
+        for (preset in ladderPresets) {
+            attempts++
+            when (val res = fetch(urlStr, customUserAgent = preset.headerValue, extraHeaders = extraHeaders)) {
+                is Result.Success -> {
+                    if (res.data.profiles.isNotEmpty() && !res.data.hasStubNodesOnly) {
+                        return@withContext Result.Success(
+                            SubscriptionLadderResult(
+                                winningPreset = preset,
+                                fetchResult = res.data,
+                                attemptsCount = attempts
+                            )
+                        )
+                    } else if (res.data.isHwidRequired) {
+                        return@withContext Result.Success(
+                            SubscriptionLadderResult(
+                                winningPreset = preset,
+                                fetchResult = res.data,
+                                attemptsCount = attempts
+                            )
+                        )
+                    } else {
+                        lastError = SubscriptionException.EmptySubscription()
+                    }
+                }
+                is Result.Error -> {
+                    lastError = res.exception
+                }
+            }
+        }
+
+        Result.Error(lastError ?: SubscriptionException.EmptySubscription())
     }
 
     private fun decodeProfileTitle(headerVal: String): String {

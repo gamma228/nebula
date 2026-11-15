@@ -67,6 +67,13 @@
                 <data android:scheme="clash" />
                 <data android:scheme="nebula" />
             </intent-filter>
+
+            <!-- Share text intent filter (Import via Share Sheet) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
         </activity>
 
         <!-- Launcher Icon Variants (Activity Aliases) -->

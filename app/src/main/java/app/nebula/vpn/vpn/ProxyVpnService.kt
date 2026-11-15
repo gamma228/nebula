@@ -54,6 +54,8 @@ class ProxyVpnService : VpnService(), TunProvider {
             internal set
         @Volatile var activeProfileName: String? = null
             internal set
+        @Volatile var activeInstance: ProxyVpnService? = null
+            internal set
     }
 
     @Inject lateinit var proxyCore: ProxyCore
@@ -92,6 +94,7 @@ class ProxyVpnService : VpnService(), TunProvider {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
         try {
             val procs = if (app.nebula.vpn.core.OptimizationFlags.limitGoConcurrency) {
                 app.nebula.vpn.core.OptimizationFlags.goMaxProcsValue.toString()
@@ -585,6 +588,9 @@ class ProxyVpnService : VpnService(), TunProvider {
     }
 
     override fun onDestroy() {
+        if (activeInstance === this) {
+            activeInstance = null
+        }
         super.onDestroy()
         screenReceiver?.let {
             try {

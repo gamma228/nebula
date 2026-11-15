@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import app.nebula.vpn.core.model.AppRoutingMode
+import app.nebula.vpn.core.engine.EngineType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -35,6 +36,11 @@ class SettingsDataStore(private val context: Context) {
         private val KEY_BLOCK_QUIC = booleanPreferencesKey("block_quic")
         private val KEY_POWER_PROFILE = stringPreferencesKey("power_profile")
         private val KEY_SHOW_SPEED_IN_NOTIF = booleanPreferencesKey("show_speed_in_notif")
+        private val KEY_ACTIVE_ENGINE = stringPreferencesKey("active_engine")
+        private val KEY_TOR_BRIDGE_TYPE = stringPreferencesKey("tor_bridge_type")
+        private val KEY_TOR_CUSTOM_BRIDGES = stringPreferencesKey("tor_custom_bridges")
+        private val KEY_TOR_CARRIER_ENABLED = booleanPreferencesKey("tor_carrier_enabled")
+        private val KEY_TOR_CARRIER_PROFILE_ID = stringPreferencesKey("tor_carrier_profile_id")
     }
 
     val selectedProfileId: Flow<String?> = context.dataStore.data.map { it[KEY_SELECTED_PROFILE_ID] }
@@ -140,6 +146,40 @@ class SettingsDataStore(private val context: Context) {
     val showSpeedInNotification: Flow<Boolean> = context.dataStore.data.map { it[KEY_SHOW_SPEED_IN_NOTIF] ?: true }
     suspend fun setShowSpeedInNotification(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SHOW_SPEED_IN_NOTIF] = enabled }
+    }
+
+    val activeEngine: Flow<EngineType> = context.dataStore.data.map {
+        val raw = it[KEY_ACTIVE_ENGINE] ?: EngineType.SING_BOX.name
+        try {
+            EngineType.valueOf(raw)
+        } catch (e: Exception) {
+            EngineType.SING_BOX
+        }
+    }
+    suspend fun setActiveEngine(engine: EngineType) {
+        context.dataStore.edit { it[KEY_ACTIVE_ENGINE] = engine.name }
+    }
+
+    val torBridgeType: Flow<String> = context.dataStore.data.map { it[KEY_TOR_BRIDGE_TYPE] ?: "vanilla" }
+    suspend fun setTorBridgeType(type: String) {
+        context.dataStore.edit { it[KEY_TOR_BRIDGE_TYPE] = type }
+    }
+
+    val torCustomBridges: Flow<String> = context.dataStore.data.map { it[KEY_TOR_CUSTOM_BRIDGES] ?: "" }
+    suspend fun setTorCustomBridges(bridges: String) {
+        context.dataStore.edit { it[KEY_TOR_CUSTOM_BRIDGES] = bridges }
+    }
+
+    val torCarrierEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_TOR_CARRIER_ENABLED] ?: false }
+    suspend fun setTorCarrierEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_TOR_CARRIER_ENABLED] = enabled }
+    }
+
+    val torCarrierProfileId: Flow<String?> = context.dataStore.data.map { it[KEY_TOR_CARRIER_PROFILE_ID] }
+    suspend fun setTorCarrierProfileId(id: String?) {
+        context.dataStore.edit {
+            if (id != null) it[KEY_TOR_CARRIER_PROFILE_ID] = id else it.remove(KEY_TOR_CARRIER_PROFILE_ID)
+        }
     }
 
     suspend fun clearAll() {

@@ -25,6 +25,11 @@ object SubscriptionDecoder {
     ): Result<SubscriptionResult> {
         val trimmed = rawBody.trim()
 
+        // 0. Detect HTML error/landing pages
+        if (isHtml(trimmed)) {
+            return Result.Error(SubscriptionException.HtmlWebPage(trimmed.take(200)))
+        }
+
         // 1. Check if it's Clash YAML
         if (trimmed.startsWith("proxies:") || trimmed.contains("\nproxies:") || trimmed.contains("proxy-groups:")) {
             return when (val clashResult = ClashYamlParser.parse(trimmed)) {
@@ -47,8 +52,89 @@ object SubscriptionDecoder {
             }
         }
 
-        // 2. Try decoding as base64 list of proxy links
+        // 2. Check sing-box JSON
+        if (trimmed.startsWith("{") && (trimmed.contains("\"outbounds\"") || trimmed.contains("\"inbounds\""))) {
+            when (val sbResult = SingBoxJsonParser.parse(trimmed)) {
+                is Result.Success -> {
+                    if (sbResult.data.profiles.isNotEmpty()) {
+                        val metadata = parseHeaders(headers)
+                        return Result.Success(
+                            SubscriptionResult(
+                                profiles = sbResult.data.profiles,
+                                title = metadata.title,
+                                uploadBytes = metadata.uploadBytes,
+                                downloadBytes = metadata.downloadBytes,
+                                totalBytes = metadata.totalBytes,
+                                expireEpochSeconds = metadata.expireEpochSeconds
+                            )
+                        )
+                    }
+                }
+                is Result.Error -> {}
+            }
+        }
+
+        // 3. Check Xray / V2Ray JSON
+        if (trimmed.startsWith("{") && (trimmed.contains("\"outbounds\"") || trimmed.contains("\"routing\""))) {
+            when (val xrayResult = XrayJsonParser.parse(trimmed)) {
+                is Result.Success -> {
+                    if (xrayResult.data.profiles.isNotEmpty()) {
+                        val metadata = parseHeaders(headers)
+                        return Result.Success(
+                            SubscriptionResult(
+                                profiles = xrayResult.data.profiles,
+                                title = metadata.title,
+                                uploadBytes = metadata.uploadBytes,
+                                downloadBytes = metadata.downloadBytes,
+                                totalBytes = metadata.totalBytes,
+                                expireEpochSeconds = metadata.expireEpochSeconds
+                            )
+                        )
+                    }
+                }
+                is Result.Error -> {}
+            }
+        }
+
+        // 4. Check SIP008 Shadowsocks JSON
+        if (trimmed.startsWith("{") && trimmed.contains("\"servers\"")) {
+            when (val sipResult = Sip008ShadowsocksParser.parse(trimmed)) {
+                is Result.Success -> {
+                    if (sipResult.data.profiles.isNotEmpty()) {
+                        val metadata = parseHeaders(headers)
+                        return Result.Success(
+                            SubscriptionResult(
+                                profiles = sipResult.data.profiles,
+                                title = metadata.title,
+                                uploadBytes = metadata.uploadBytes,
+                                downloadBytes = metadata.downloadBytes,
+                                totalBytes = metadata.totalBytes,
+                                expireEpochSeconds = metadata.expireEpochSeconds
+                            )
+                        )
+                    }
+                }
+                is Result.Error -> {}
+            }
+        }
+
+        // 5. Try decoding as base64 list of proxy links
         val decodedText = tryDecodeBase64(trimmed) ?: trimmed
+
+        // Check if decoded base64 was actually JSON or YAML
+        if (decodedText != trimmed) {
+            val decodedTrimmed = decodedText.trim()
+            if (isHtml(decodedTrimmed)) {
+                return Result.Error(SubscriptionException.HtmlWebPage(decodedTrimmed.take(200)))
+            }
+            if (decodedTrimmed.startsWith("proxies:") || decodedTrimmed.contains("\nproxies:")) {
+                return decode(decodedTrimmed, headers)
+            }
+            if (decodedTrimmed.startsWith("{")) {
+                val subResult = decode(decodedTrimmed, headers)
+                if (subResult is Result.Success) return subResult
+            }
+        }
 
         // Parse line-by-line
         val profiles = mutableListOf<ProxyProfile>()
@@ -66,7 +152,7 @@ object SubscriptionDecoder {
         }
 
         if (profiles.isEmpty()) {
-            return Result.Error(IllegalArgumentException("No valid proxy profiles found in subscription"))
+            return Result.Error(SubscriptionException.EmptySubscription())
         }
 
         val metadata = parseHeaders(headers)
@@ -80,6 +166,14 @@ object SubscriptionDecoder {
                 expireEpochSeconds = metadata.expireEpochSeconds
             )
         )
+    }
+
+    private fun isHtml(text: String): Boolean {
+        val lower = text.lowercase()
+        return lower.startsWith("<!doctype html") ||
+                lower.startsWith("<html") ||
+                (lower.contains("<head") && lower.contains("<body")) ||
+                lower.contains("<html>")
     }
 
     private data class ParsedMetadata(
@@ -101,7 +195,6 @@ object SubscriptionDecoder {
             when (key.lowercase()) {
                 "profile-title" -> title = value
                 "subscription-userinfo" -> {
-                    // format: upload=123; download=456; total=789; expire=123456789
                     val pairs = value.split(";")
                     for (pair in pairs) {
                         val kv = pair.split("=")

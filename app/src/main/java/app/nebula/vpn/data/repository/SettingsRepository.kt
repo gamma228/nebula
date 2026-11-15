@@ -1,5 +1,6 @@
 package app.nebula.vpn.data.repository
 
+import app.nebula.vpn.core.engine.EngineType
 import app.nebula.vpn.core.model.AppRoutingMode
 import app.nebula.vpn.data.datastore.SettingsDataStore
 import kotlinx.coroutines.flow.Flow
@@ -28,6 +29,11 @@ class SettingsRepository @Inject constructor(
     val blockQuic: Flow<Boolean> = dataStore.blockQuic
     val powerProfile: Flow<String> = dataStore.powerProfile
     val showSpeedInNotification: Flow<Boolean> = dataStore.showSpeedInNotification
+    val activeEngine: Flow<EngineType> = dataStore.activeEngine
+    val torBridgeType: Flow<String> = dataStore.torBridgeType
+    val torCustomBridges: Flow<String> = dataStore.torCustomBridges
+    val torCarrierEnabled: Flow<Boolean> = dataStore.torCarrierEnabled
+    val torCarrierProfileId: Flow<String?> = dataStore.torCarrierProfileId
 
     suspend fun setSelectedProfileId(id: String?) = dataStore.setSelectedProfileId(id)
     suspend fun setRoutingMode(mode: AppRoutingMode) = dataStore.setRoutingMode(mode)
@@ -47,5 +53,10 @@ class SettingsRepository @Inject constructor(
     suspend fun setBlockQuic(enabled: Boolean) = dataStore.setBlockQuic(enabled)
     suspend fun setPowerProfile(profile: String) = dataStore.setPowerProfile(profile)
     suspend fun setShowSpeedInNotification(enabled: Boolean) = dataStore.setShowSpeedInNotification(enabled)
+    suspend fun setActiveEngine(engine: EngineType) = dataStore.setActiveEngine(engine)
+    suspend fun setTorBridgeType(type: String) = dataStore.setTorBridgeType(type)
+    suspend fun setTorCustomBridges(bridges: String) = dataStore.setTorCustomBridges(bridges)
+    suspend fun setTorCarrierEnabled(enabled: Boolean) = dataStore.setTorCarrierEnabled(enabled)
+    suspend fun setTorCarrierProfileId(id: String?) = dataStore.setTorCarrierProfileId(id)
     suspend fun clearAll() = dataStore.clearAll()
 }

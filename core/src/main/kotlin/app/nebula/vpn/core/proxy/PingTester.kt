@@ -24,6 +24,7 @@ class PingTester @Inject constructor() {
     suspend fun pingTcp(host: String, port: Int, timeoutMs: Int = 1500): Long = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         try {
+            app.nebula.vpn.core.tor.NetworkPolicy.checkAllowed(host, port)
             Socket().use { socket ->
                 socket.tcpNoDelay = true
                 socket.connect(InetSocketAddress(host, port), timeoutMs)
@@ -42,6 +43,8 @@ class PingTester @Inject constructor() {
         val startTime = System.currentTimeMillis()
         try {
             val url = URL(urlStr)
+            val port = if (url.port > 0) url.port else url.defaultPort
+            app.nebula.vpn.core.tor.NetworkPolicy.checkAllowed(url.host, port)
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = timeoutMs
             conn.readTimeout = timeoutMs

@@ -25,6 +25,13 @@ enum class BackgroundType {
 }
 
 @Serializable
+enum class SurfaceStyle {
+    SOLID,
+    GLASS,
+    MICA
+}
+
+@Serializable
 data class ThemeConfig(
     val presetId: String = "emerald_cyber",
     val mode: ThemeMode = ThemeMode.AMOLED,

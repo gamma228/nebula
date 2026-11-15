@@ -62,6 +62,9 @@ data class ProxyProfile(
     val lastPingMs: Long? = null,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
+    val isStub: Boolean
+        get() = server == "0.0.0.0" || (server == "127.0.0.1" && port == 1) || name.contains("HWID", ignoreCase = true) || name.contains("⚠️") || name.contains("не поддерживается", ignoreCase = true)
+
     fun toShareLink(): String {
         val encodedName = java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
         return when (protocol) {

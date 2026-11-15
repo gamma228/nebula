@@ -14,6 +14,7 @@ import app.nebula.vpn.core.model.RuleAction
 import app.nebula.vpn.core.model.RuleType
 import app.nebula.vpn.core.model.RoutingRule
 import app.nebula.vpn.core.model.ThemeMode
+import app.nebula.vpn.core.model.SurfaceStyle
 import app.nebula.vpn.core.parser.LinkParser
 import app.nebula.vpn.core.parser.SubscriptionFetcher
 import app.nebula.vpn.core.proxy.DefaultLatencyProbe
@@ -64,6 +65,8 @@ class DesktopAppState(
     var currentLanguage by mutableStateOf(AppLanguage.RU)
     var currentThemeMode by mutableStateOf(ThemeMode.DARK)
     var currentThemePreset by mutableStateOf(DesktopThemePreset.EMERALD_CYBER)
+    var surfaceStyle by mutableStateOf(SurfaceStyle.SOLID)
+    var isAlwaysOnTop by mutableStateOf(false)
     var customAccentHex by mutableStateOf("#00D084")
     var backgroundImagePath by mutableStateOf<String?>(null)
     var backgroundDimAlpha by mutableStateOf(0.35f)
