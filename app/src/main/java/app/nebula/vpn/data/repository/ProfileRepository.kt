@@ -19,12 +19,54 @@ class ProfileRepository @Inject constructor(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
+    private data class CachedProfile(
+        val contentHash: Int,
+        val profile: ProxyProfile
+    )
+
+    private val profileCache = java.util.concurrent.ConcurrentHashMap<String, CachedProfile>()
+
+    private fun ProfileEntity.computeContentHash(): Int {
+        var res = id.hashCode()
+        res = 31 * res + name.hashCode()
+        res = 31 * res + protocol.hashCode()
+        res = 31 * res + server.hashCode()
+        res = 31 * res + port
+        res = 31 * res + encryptedSecret.hashCode()
+        res = 31 * res + encryption.hashCode()
+        res = 31 * res + tlsJson.hashCode()
+        res = 31 * res + transportJson.hashCode()
+        res = 31 * res + (detour?.hashCode() ?: 0)
+        res = 31 * res + (subscriptionId?.hashCode() ?: 0)
+        res = 31 * res + packetEncoding.hashCode()
+        res = 31 * res + headerType.hashCode()
+        return res
+    }
+
+    private fun ProfileEntity.toCachedModel(): ProxyProfile {
+        val hash = computeContentHash()
+        val cached = profileCache[id]
+        if (cached != null && cached.contentHash == hash) {
+            val p = cached.profile
+            return if (p.lastPingMs == lastPingMs && p.isFavorite == isFavorite && p.updatedAt == updatedAt) {
+                p
+            } else {
+                val updated = p.copy(lastPingMs = lastPingMs, isFavorite = isFavorite, updatedAt = updatedAt)
+                profileCache[id] = CachedProfile(hash, updated)
+                updated
+            }
+        }
+        val fresh = toModel()
+        profileCache[id] = CachedProfile(hash, fresh)
+        return fresh
+    }
+
     val allProfiles: Flow<List<ProxyProfile>> = profileDao.getAllProfiles().map { entities ->
-        entities.map { it.toModel() }
+        entities.map { it.toCachedModel() }
     }
 
     suspend fun getProfileById(id: String): ProxyProfile? {
-        return profileDao.getProfileById(id)?.toModel()
+        return profileDao.getProfileById(id)?.toCachedModel()
     }
 
     suspend fun saveProfile(profile: ProxyProfile) {
@@ -49,18 +91,21 @@ class ProfileRepository @Inject constructor(
     }
 
     suspend fun deleteProfile(id: String) {
+        profileCache.remove(id)
         profileDao.deleteProfileById(id)
     }
 
     suspend fun deleteProfilesBySubscription(subId: String) {
+        profileCache.clear()
         profileDao.deleteProfilesBySubscription(subId)
     }
 
     suspend fun getProfilesBySubscription(subId: String): List<ProxyProfile> {
-        return profileDao.getProfilesBySubscription(subId).map { it.toModel() }
+        return profileDao.getProfilesBySubscription(subId).map { it.toCachedModel() }
     }
 
     suspend fun deleteAll() {
+        profileCache.clear()
         profileDao.deleteAllProfiles()
     }
 

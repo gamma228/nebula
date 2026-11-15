@@ -454,6 +454,12 @@ class LibboxCore(
 
             override fun createBridge(options: BridgeOptions?): BridgeSession? = null
 
+            private val connectionOwnerCache = object : java.util.LinkedHashMap<String, Int>(256, 0.75f, true) {
+                override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>?): Boolean {
+                    return size > 512
+                }
+            }
+
             override fun findConnectionOwner(
                 ipProtocol: Int,
                 sourceAddress: String?,
@@ -463,11 +469,23 @@ class LibboxCore(
             ): ConnectionOwner {
                 val owner = ConnectionOwner()
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && sourceAddress != null && destinationAddress != null) {
+                    val cacheKey = "$ipProtocol:$sourceAddress:$sourcePort:$destinationAddress:$destinationPort"
+                    val cachedUid = synchronized(connectionOwnerCache) {
+                        connectionOwnerCache[cacheKey]
+                    }
+                    if (cachedUid != null) {
+                        owner.userId = cachedUid
+                        return owner
+                    }
+
                     try {
                         val local = InetSocketAddress(sourceAddress, sourcePort)
                         val remote = InetSocketAddress(destinationAddress, destinationPort)
                         val uid = connectivityManager.getConnectionOwnerUid(ipProtocol, local, remote)
                         owner.userId = uid
+                        synchronized(connectionOwnerCache) {
+                            connectionOwnerCache[cacheKey] = uid
+                        }
                     } catch (e: Exception) {
                         owner.userId = 0
                     }

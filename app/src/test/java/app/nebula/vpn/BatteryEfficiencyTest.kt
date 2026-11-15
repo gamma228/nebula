@@ -77,4 +77,38 @@ class BatteryEfficiencyTest {
         val elapsedSeconds = (now - connectedAt) / 1000L
         assertEquals(65L, elapsedSeconds)
     }
+
+    @Test
+    fun testGoRuntimeConcurrencyCappedToOneCore() {
+        assertTrue("Go concurrency limiter must be active", app.nebula.vpn.core.OptimizationFlags.limitGoConcurrency)
+        assertEquals(
+            "GOMAXPROCS must be capped to 1 core to prevent scheduler work-stealing on mobile CPUs",
+            1,
+            app.nebula.vpn.core.OptimizationFlags.goMaxProcsValue
+        )
+    }
+
+    @Test
+    fun testGrpcConfigDisablesKeepaliveWithoutStreams() {
+        val profile = app.nebula.vpn.core.model.ProxyProfile(
+            id = "test-grpc-battery",
+            name = "gRPC Battery Test",
+            protocol = app.nebula.vpn.core.model.ProtocolType.VLESS,
+            server = "1.2.3.4",
+            port = 443,
+            authSecret = "uuid-1234",
+            transport = app.nebula.vpn.core.model.TransportConfig(
+                type = app.nebula.vpn.core.model.TransportType.GRPC,
+                serviceName = "TestService"
+            )
+        )
+        val configJson = app.nebula.vpn.core.builder.SingBoxConfigBuilder.build(
+            app.nebula.vpn.core.builder.SingBoxConfigBuilder.BuildConfig(
+                activeProfile = profile
+            )
+        )
+        assertTrue(configJson.contains("\"permit_without_stream\": false"))
+        assertTrue(configJson.contains("\"idle_timeout\": \"60s\""))
+        assertTrue(configJson.contains("\"ping_timeout\": \"30s\""))
+    }
 }

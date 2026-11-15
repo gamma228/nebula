@@ -6,11 +6,11 @@ package app.nebula.vpn.core
  */
 object OptimizationFlags {
     /**
-     * If true, limits Go runtime to GOMAXPROCS=2 instead of 1 or unconstrained.
-     * Prevents single-thread goroutine starvation while capping multi-core battery drain.
+     * If true, limits Go runtime to GOMAXPROCS=1 instead of multi-core.
+     * Prevents multi-core spinning while capping battery drain on mobile ARM big.LITTLE architectures.
      */
     var limitGoConcurrency: Boolean = true
-    var goMaxProcsValue: Int = 2
+    var goMaxProcsValue: Int = 1
 
     /**
      * If true, syncs screen interactive state to CommandServer.

@@ -549,28 +549,81 @@ fun ServersScreen(
                     verticalArrangement = Arrangement.spacedBy(spacing.sm),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // 1. Subscription Groups
-                    items(subscriptions, key = { it.id }) { sub ->
+                    // 1. Subscription Groups (Virtualised for low CPU/battery usage)
+                    subscriptions.forEach { sub ->
                         val isExpanded = expandedSubs[sub.id] ?: true
                         val subProfiles = filteredProfiles.filter { it.subscriptionId == sub.id }
 
-                        SubscriptionAccordion(
-                            subscription = sub,
-                            profiles = subProfiles,
-                            selectedId = selectedId,
-                            isExpanded = isExpanded,
-                            isPinging = (pingingSubscriptionId == sub.id),
-                            pingingProfileId = pingingProfileId,
-                            serverStates = latencyProgress.currentServerStates,
-                            onToggleExpand = { expandedSubs[sub.id] = !isExpanded },
-                            onPingSubscription = { viewModel.pingSubscriptionProfiles(sub.id) },
-                            onPingProfile = { viewModel.pingSingleProfile(it) },
-                            onRefresh = { viewModel.refreshSubscription(sub.id) },
-                            onDelete = { viewModel.deleteSubscription(sub.id) },
-                            onSelectProfile = { viewModel.selectProfile(it) },
-                            onToggleFavorite = { viewModel.toggleFavorite(it) },
-                            onDeleteProfile = { viewModel.deleteProfile(it) }
-                        )
+                        item(key = "sub_header_${sub.id}") {
+                            SubscriptionHeaderCard(
+                                subscription = sub,
+                                profileCount = subProfiles.size,
+                                isExpanded = isExpanded,
+                                isPinging = (pingingSubscriptionId == sub.id),
+                                onToggleExpand = { expandedSubs[sub.id] = !isExpanded },
+                                onPingSubscription = { viewModel.pingSubscriptionProfiles(sub.id) },
+                                onRefresh = { viewModel.refreshSubscription(sub.id) },
+                                onDelete = { viewModel.deleteSubscription(sub.id) }
+                            )
+                        }
+
+                        if (isExpanded) {
+                            items(subProfiles, key = { "sub_${sub.id}_node_${it.id}" }) { profile ->
+                                val testState = latencyProgress.currentServerStates[profile.id]
+                                val isTesting = (pingingProfileId == profile.id || testState is ServerTestState.Testing)
+                                val effectivePing = when (testState) {
+                                    is ServerTestState.Ok -> testState.latencyMs.toLong()
+                                    is ServerTestState.Timeout, is ServerTestState.Error -> 9999L
+                                    else -> profile.lastPingMs
+                                }
+
+                                var showSubItemMenu by remember { mutableStateOf(false) }
+
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = spacing.sm, end = spacing.xs)
+                                ) {
+                                    NebulaServerCard(
+                                        name = profile.name,
+                                        protocol = profile.protocol.name,
+                                        pingMs = effectivePing,
+                                        isTesting = isTesting,
+                                        isSelected = profile.id == selectedId,
+                                        isFavorite = profile.isFavorite,
+                                        onSelect = { viewModel.selectProfile(profile.id) },
+                                        onFavoriteToggle = { viewModel.toggleFavorite(profile.id) },
+                                        onMenuClick = { showSubItemMenu = true },
+                                        onPingClick = { viewModel.pingSingleProfile(profile.id) },
+                                        isInsecure = profile.tls.insecure,
+                                        hasTls = profile.tls.enabled
+                                    )
+
+                                    DropdownMenu(
+                                        expanded = showSubItemMenu,
+                                        onDismissRequest = { showSubItemMenu = false },
+                                        modifier = Modifier.background(colors.surfaceElevated)
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.ping_testing), color = colors.textPrimary) },
+                                            leadingIcon = { Icon(Icons.Default.Speed, contentDescription = null, tint = colors.primary) },
+                                            onClick = {
+                                                showSubItemMenu = false
+                                                viewModel.pingSingleProfile(profile.id)
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.delete_selected), color = colors.statusError) },
+                                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = colors.statusError) },
+                                            onClick = {
+                                                showSubItemMenu = false
+                                                viewModel.deleteProfile(profile.id)
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // 2. Standalone / Custom Servers (no subscriptionId)
@@ -649,22 +702,15 @@ fun ServersScreen(
 }
 
 @Composable
-private fun SubscriptionAccordion(
+private fun SubscriptionHeaderCard(
     subscription: SubscriptionEntity,
-    profiles: List<ProxyProfile>,
-    selectedId: String?,
+    profileCount: Int,
     isExpanded: Boolean,
     isPinging: Boolean = false,
-    pingingProfileId: String? = null,
-    serverStates: Map<String, ServerTestState> = emptyMap(),
     onToggleExpand: () -> Unit,
     onPingSubscription: () -> Unit,
-    onPingProfile: (String) -> Unit,
     onRefresh: () -> Unit,
-    onDelete: () -> Unit,
-    onSelectProfile: (String) -> Unit,
-    onToggleFavorite: (String) -> Unit,
-    onDeleteProfile: (String) -> Unit
+    onDelete: () -> Unit
 ) {
     val colors = NebulaTheme.colors
     val spacing = NebulaTheme.spacing
@@ -685,7 +731,7 @@ private fun SubscriptionAccordion(
             },
             text = {
                 Text(
-                    text = stringResource(R.string.servers_delete_sub_message, profiles.size, subscription.title),
+                    text = stringResource(R.string.servers_delete_sub_message, profileCount, subscription.title),
                     style = typography.bodyMedium,
                     color = colors.textSecondary
                 )
@@ -766,7 +812,7 @@ private fun SubscriptionAccordion(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "${profiles.size}",
+                                    text = "$profileCount",
                                     style = typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                     color = colors.primary
                                 )
@@ -887,67 +933,6 @@ private fun SubscriptionAccordion(
                         trackColor = colors.surfaceElevated,
                         strokeCap = StrokeCap.Round
                     )
-                }
-            }
-
-            // Inner Profiles List
-            AnimatedVisibility(visible = isExpanded) {
-                Column(
-                    modifier = Modifier.padding(top = spacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(spacing.xs)
-                ) {
-                    profiles.forEach { profile ->
-                        val isSelected = profile.id == selectedId
-                        val testState = serverStates[profile.id]
-                        val isTesting = (pingingProfileId == profile.id || testState is ServerTestState.Testing)
-                        val effectivePing = when (testState) {
-                            is ServerTestState.Ok -> testState.latencyMs.toLong()
-                            is ServerTestState.Timeout, is ServerTestState.Error -> 9999L
-                            else -> profile.lastPingMs
-                        }
-
-                        var showSubItemMenu by remember { mutableStateOf(false) }
-
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            NebulaServerCard(
-                                name = profile.name,
-                                protocol = profile.protocol.name,
-                                pingMs = effectivePing,
-                                isTesting = isTesting,
-                                isSelected = isSelected,
-                                isFavorite = profile.isFavorite,
-                                onSelect = { onSelectProfile(profile.id) },
-                                onFavoriteToggle = { onToggleFavorite(profile.id) },
-                                onMenuClick = { showSubItemMenu = true },
-                                onPingClick = { onPingProfile(profile.id) },
-                                isInsecure = profile.tls.insecure,
-                                hasTls = profile.tls.enabled
-                            )
-
-                            DropdownMenu(
-                                expanded = showSubItemMenu,
-                                onDismissRequest = { showSubItemMenu = false },
-                                modifier = Modifier.background(colors.surfaceElevated)
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.ping_testing), color = colors.textPrimary) },
-                                    leadingIcon = { Icon(Icons.Default.Speed, contentDescription = null, tint = colors.primary) },
-                                    onClick = {
-                                        showSubItemMenu = false
-                                        onPingProfile(profile.id)
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.delete_selected), color = colors.statusError) },
-                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = colors.statusError) },
-                                    onClick = {
-                                        showSubItemMenu = false
-                                        onDeleteProfile(profile.id)
-                                    }
-                                )
-                            }
-                        }
-                    }
                 }
             }
         }

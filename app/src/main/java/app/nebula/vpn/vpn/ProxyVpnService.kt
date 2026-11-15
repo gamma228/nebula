@@ -172,6 +172,12 @@ class ProxyVpnService : VpnService(), TunProvider {
         val profileId = intent?.getStringExtra(EXTRA_PROFILE_ID)
         android.util.Log.i("ProxyVpnService", "onStartCommand: action=$action, profileId=$profileId, currentState=${vpnRepository.connectionState.value}")
 
+        if (action == ACTION_START || action == ACTION_SWITCH) {
+            val title = currentProfileName?.let { "Connected: $it" } ?: "Connecting…"
+            val content = if (currentProfileName != null) "Protected via Nebula" else "Initializing tunnel"
+            startForegroundNotification(title, content)
+        }
+
         when (action) {
             ACTION_START -> {
                 if (vpnRepository.connectionState.value is ConnectionState.Connected && tunInterface != null) {
@@ -819,9 +825,10 @@ class ProxyVpnService : VpnService(), TunProvider {
                 vpnRepository.updateStats(stats)
 
                 // Update notification ONLY when screen is interactive AND user enabled speed in notification.
-                // When screen is off, zero notification IPC occurs.
+                // When screen is off, zero notification IPC occurs. Throttled to >= 2500ms to eliminate Binder storms.
                 if (isCurrentInteractive && showSpeed && currentProfileName != null && vpnRepository.connectionState.value is ConnectionState.Connected) {
-                    if (now - lastNotifUpdateTime >= profileEnum.interactiveIntervalMs) {
+                    val minInterval = maxOf(2500L, profileEnum.interactiveIntervalMs)
+                    if (now - lastNotifUpdateTime >= minInterval) {
                         lastNotifUpdateTime = now
                         val notifTitle = "Connected: $currentProfileName"
                         val notifContent = "⬇ ${formatSpeed(finalRxSpeed)}   ⬆ ${formatSpeed(finalTxSpeed)}"

@@ -583,9 +583,9 @@ object SingBoxConfigBuilder {
                     if (transport.authority.isNotEmpty()) {
                         put("authority", transport.authority)
                     }
-                    put("idle_timeout", "15s")
-                    put("ping_timeout", "15s")
-                    put("permit_without_stream", true)
+                    put("idle_timeout", "60s")
+                    put("ping_timeout", "30s")
+                    put("permit_without_stream", false)
                 }
                 TransportType.HTTP_UPGRADE -> {
                     put("type", "httpupgrade")
